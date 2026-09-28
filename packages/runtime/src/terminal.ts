@@ -32,9 +32,9 @@ export class TerminalLog {
   private readonly maxBytes: number;
   private file: fs.WriteStream | null = null;
 
-  constructor(options: { maxBytes?: number; dir?: string; sessionId?: string } = {}) {
+  constructor(options: { maxBytes?: number | undefined; dir?: string | undefined; sessionId?: string | undefined } = {}) {
     this.maxBytes = options.maxBytes ?? 2 * 1024 * 1024;
-    if (options.dir !== undefined && options.sessionId !== undefined) {
+    if (typeof options.dir === 'string' && typeof options.sessionId === 'string') {
       const file = path.join(options.dir, options.sessionId, 'terminal.log');
       fs.mkdirSync(path.dirname(file), { recursive: true });
       this.file = fs.createWriteStream(file, { flags: 'a', encoding: 'utf8' });

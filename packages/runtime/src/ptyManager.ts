@@ -65,18 +65,18 @@ function defaultSpawn(
 export class PtyManager {
   private readonly sessions = new Map<string, { handle: PtyHandle; record: ManagedPty }>();
   private readonly spawnFn: SpawnFn;
-  private readonly dataDir?: string;
+  private readonly dataDir: string | undefined;
   private readonly maxBytes: number;
-  private readonly onOutput?: (sessionId: string, data: string) => void;
-  private readonly onExit?: (sessionId: string, exit: PtyExit) => void;
+  private readonly onOutput: ((sessionId: string, data: string) => void) | undefined;
+  private readonly onExit: ((sessionId: string, exit: PtyExit) => void) | undefined;
 
   constructor(
     options: {
-      spawnFn?: SpawnFn;
-      dataDir?: string;
-      maxBytes?: number;
-      onOutput?: (sessionId: string, data: string) => void;
-      onExit?: (sessionId: string, exit: PtyExit) => void;
+      spawnFn?: SpawnFn | undefined;
+      dataDir?: string | undefined;
+      maxBytes?: number | undefined;
+      onOutput?: ((sessionId: string, data: string) => void) | undefined;
+      onExit?: ((sessionId: string, exit: PtyExit) => void) | undefined;
     } = {}
   ) {
     this.spawnFn = options.spawnFn ?? defaultSpawn;
@@ -104,10 +104,17 @@ export class PtyManager {
       rows: spec.rows,
       name: 'xterm-256color'
     });
+    const logOptions: { maxBytes: number; dir?: string | undefined; sessionId?: string | undefined } = {
+      maxBytes: this.maxBytes
+    };
+    if (typeof this.dataDir === 'string') {
+      logOptions.dir = this.dataDir;
+      logOptions.sessionId = spec.sessionId;
+    }
     const record: ManagedPty = {
       sessionId: spec.sessionId,
       pid: handle.pid,
-      log: new TerminalLog({ maxBytes: this.maxBytes, dir: this.dataDir, sessionId: spec.sessionId }),
+      log: new TerminalLog(logOptions),
       exit: null
     };
     handle.onData((data: string) => {
