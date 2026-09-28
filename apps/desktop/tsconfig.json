@@ -1,0 +1,9 @@
+{
+  "extends": "../../packages/config/tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "jsx": "react-jsx",
+    "types": ["node"]
+  },
+  "include": ["electron", "src", "electron.vite.config.ts"]
+}

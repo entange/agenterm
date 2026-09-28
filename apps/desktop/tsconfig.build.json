@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": true,
+    "noEmit": false,
+    "jsx": "react-jsx",
+    "types": ["node"]
+  },
+  "include": ["electron", "src"],
+  "exclude": ["**/*.test.ts", "**/*.test.tsx", "dist"]
+}

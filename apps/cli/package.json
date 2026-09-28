@@ -1,0 +1,25 @@
+{
+  "name": "agenterm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agenterm": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agenterm/core": "workspace:*",
+    "commander": "15.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.3",
+    "typescript": "6.0.3",
+    "vitest": "5.0.2"
+  }
+}
