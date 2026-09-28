@@ -1,22 +1,40 @@
 import crypto from 'node:crypto';
-import type { ListSessionsQuery, SessionRecord } from '@agenterm/core';
+import fs from 'node:fs';
+import path from 'node:path';
+import type { AgentProvider, ListSessionsQuery, SessionRecord } from '@agenterm/core';
 
 /**
- * Early session store.
+ * Session store.
  *
- * In-memory index plus per-session metadata.json files under the data dir.
- * The full relational design with drizzle-orm arrives with the spawn change;
- * this interface already matches the SessionRecord contract so callers do
- * not break when storage moves.
+ * In-memory index with per-session metadata.json files under the data dir.
+ * Writes the metadata file on every mutation so a daemon restart can
+ * replay rows and mark live sessions crashed. Attached rows and spawned
+ * rows share the SessionRecord contract.
  */
 export class SessionStore {
   private readonly sessions = new Map<string, SessionRecord>();
+  private readonly dataDir: string | undefined;
+
+  constructor(options: { dataDir?: string | undefined } = {}) {
+    this.dataDir = options.dataDir;
+  }
+
+  private persist(record: SessionRecord): void {
+    if (this.dataDir === undefined) return;
+    try {
+      const dir = path.join(this.dataDir, 'sessions', record.id);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'metadata.json'), JSON.stringify(record, null, 2), 'utf8');
+    } catch {
+      // Persistence is best effort; memory stays authoritative.
+    }
+  }
 
   createAttached(input: {
     pid: number;
     commandLine: string;
     cwd: string;
-    title?: string;
+    title?: string | undefined;
     worktreeRoot?: string | null;
     branch?: string | null;
   }): SessionRecord {
@@ -49,6 +67,95 @@ export class SessionStore {
       exitSignal: null
     };
     this.sessions.set(id, record);
+    this.persist(record);
+    return record;
+  }
+
+  createSpawned(input: {
+    id?: string | undefined;
+    provider: AgentProvider;
+    agentId: string;
+    title: string;
+    cwd: string;
+    worktreeRoot: string | null;
+    branch: string | null;
+    commandLine: string[];
+    resolvedBinaryPath: string | null;
+    pid: number;
+    cols: number;
+    rows: number;
+  }): SessionRecord {
+    const now = Date.now();
+    const record: SessionRecord = {
+      id: input.id ?? crypto.randomUUID(),
+      agentId: input.agentId,
+      provider: input.provider,
+      title: input.title,
+      cwd: input.cwd,
+      worktreeRoot: input.worktreeRoot,
+      branch: input.branch,
+      origin: 'spawned',
+      commandLine: input.commandLine,
+      resolvedBinaryPath: input.resolvedBinaryPath,
+      pid: input.pid,
+      lifecycle: 'running',
+      overlay: 'unknown',
+      overlaySource: 'pty',
+      cols: input.cols,
+      rows: input.rows,
+      startedAtMs: now,
+      endedAtMs: null,
+      exitCode: null,
+      exitSignal: null
+    };
+    this.sessions.set(record.id, record);
+    this.persist(record);
+    return record;
+  }
+
+  markExited(id: string, exitCode: number | null, exitSignal: string | null): SessionRecord | null {
+    const record = this.sessions.get(id);
+    if (record === undefined) return null;
+    if (record.lifecycle === 'exited' || record.lifecycle === 'killed') return record;
+    const updated: SessionRecord = {
+      ...record,
+      lifecycle: 'exited',
+      endedAtMs: Date.now(),
+      exitCode,
+      exitSignal
+    };
+    this.sessions.set(id, updated);
+    this.persist(updated);
+    return updated;
+  }
+
+  markKilled(id: string): SessionRecord | null {
+    const record = this.sessions.get(id);
+    if (record === undefined) return null;
+    const updated: SessionRecord = {
+      ...record,
+      lifecycle: 'killed',
+      endedAtMs: Date.now()
+    };
+    this.sessions.set(id, updated);
+    this.persist(updated);
+    return updated;
+  }
+
+  setDims(id: string, cols: number, rows: number): SessionRecord | null {
+    const record = this.sessions.get(id);
+    if (record === undefined) return null;
+    const updated: SessionRecord = { ...record, cols, rows };
+    this.sessions.set(id, updated);
+    this.persist(updated);
+    return updated;
+  }
+
+  /** Remove a row after detach or kill-tree. Returns the removed row. */
+  remove(id: string): SessionRecord | null {
+    const record = this.sessions.get(id);
+    if (record === undefined) return null;
+    this.sessions.delete(id);
     return record;
   }
 

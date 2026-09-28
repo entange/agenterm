@@ -4,11 +4,11 @@ import type { SessionOutputChunk } from '@agenterm/core';
 
 export interface ReadOutputOptions {
   /** Return chunks with seq greater than this value. Defaults to 0. */
-  sinceSeq?: number;
+  sinceSeq?: number | undefined;
   /** Cap on bytes returned from the tail. Defaults to 65536. */
-  tailBytes?: number;
+  tailBytes?: number | undefined;
   /** Cap on chunk count. Defaults to 200. */
-  limit?: number;
+  limit?: number | undefined;
 }
 
 export interface ReadOutputResult {

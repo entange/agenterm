@@ -67,8 +67,8 @@ export class PtyManager {
   private readonly spawnFn: SpawnFn;
   private readonly dataDir: string | undefined;
   private readonly maxBytes: number;
-  private readonly onOutput: ((sessionId: string, data: string) => void) | undefined;
-  private readonly onExit: ((sessionId: string, exit: PtyExit) => void) | undefined;
+  onOutput: ((sessionId: string, data: string) => void) | undefined;
+  onExit: ((sessionId: string, exit: PtyExit) => void) | undefined;
 
   constructor(
     options: {
