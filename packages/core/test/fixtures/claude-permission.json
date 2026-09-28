@@ -1,0 +1,5 @@
+{
+  "version": "1",
+  "kind": "permission_prompt",
+  "text": "Tool needs approval to edit src/auth.ts"
+}
