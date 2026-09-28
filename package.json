@@ -13,7 +13,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "turbo run dev",
+    "postinstall": "node scripts/ensure-pty-helper.mjs",    "dev": "turbo run dev",
     "dev:daemon": "turbo run dev --filter=@agenterm/runtime",
     "dev:desktop": "turbo run dev --filter=agenterm-desktop",
     "dev:cli": "turbo run dev --filter=agenterm",
