@@ -1,11 +1,25 @@
 import type {
   AttachSessionRequest,
   AttachSessionResponse,
+  DeleteSessionRequest,
+  DeleteSessionResponse,
   DiscoverResponse,
   HealthResponse,
   ListSessionsQuery,
   ListSessionsResponse,
   SessionDetailResponse,
+  SessionInputRequest,
+  SessionInputResponse,
+  SessionOutputQuery,
+  SessionOutputResponse,
+  SessionPortsResponse,
+  SessionProcessesResponse,
+  SessionResizeRequest,
+  SessionResizeResponse,
+  SessionSignalRequest,
+  SessionSignalResponse,
+  SpawnSessionRequest,
+  SpawnSessionResponse
 } from './api.js';
 
 /** Client options. Token is read from the agenterm data dir by the caller. */
@@ -106,6 +120,93 @@ export class AgentermClient {
     const body = await readJson(response);
     ensureOk(response, body);
     return body as SessionDetailResponse;
+  }
+
+  async spawn(request: SpawnSessionRequest): Promise<SpawnSessionResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/sessions`, {
+      method: 'POST',
+      headers: authHeaders(this.token),
+      body: JSON.stringify(request)
+    });
+    const body = await readJson(response);
+    ensureOk(response, body);
+    return body as SpawnSessionResponse;
+  }
+
+  async deleteSession(id: string, request: DeleteSessionRequest): Promise<DeleteSessionResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: authHeaders(this.token),
+      body: JSON.stringify(request)
+    });
+    const body = await readJson(response);
+    ensureOk(response, body);
+    return body as DeleteSessionResponse;
+  }
+
+  async sendInput(id: string, request: SessionInputRequest): Promise<SessionInputResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/input`, {
+      method: 'POST',
+      headers: authHeaders(this.token),
+      body: JSON.stringify(request)
+    });
+    const body = await readJson(response);
+    ensureOk(response, body);
+    return body as SessionInputResponse;
+  }
+
+  async resize(id: string, request: SessionResizeRequest): Promise<SessionResizeResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/resize`, {
+      method: 'POST',
+      headers: authHeaders(this.token),
+      body: JSON.stringify(request)
+    });
+    const body = await readJson(response);
+    ensureOk(response, body);
+    return body as SessionResizeResponse;
+  }
+
+  async signal(id: string, request: SessionSignalRequest): Promise<SessionSignalResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/signal`, {
+      method: 'POST',
+      headers: authHeaders(this.token),
+      body: JSON.stringify(request)
+    });
+    const body = await readJson(response);
+    ensureOk(response, body);
+    return body as SessionSignalResponse;
+  }
+
+  async output(id: string, query: SessionOutputQuery = {}): Promise<SessionOutputResponse> {
+    const params = new URLSearchParams();
+    if (query.tailBytes !== undefined) params.set('tailBytes', String(query.tailBytes));
+    if (query.sinceSeq !== undefined) params.set('sinceSeq', String(query.sinceSeq));
+    if (query.limit !== undefined) params.set('limit', String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/output${suffix}`, {
+      headers: { Authorization: `Bearer ${this.token}` }
+    });
+    const body = await readJson(response);
+    ensureOk(response, body);
+    return body as SessionOutputResponse;
+  }
+
+  async processes(id: string): Promise<SessionProcessesResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/processes`, {
+      headers: { Authorization: `Bearer ${this.token}` }
+    });
+    const body = await readJson(response);
+    ensureOk(response, body);
+    return body as SessionProcessesResponse;
+  }
+
+  async ports(id: string): Promise<SessionPortsResponse> {
+    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/ports`, {
+      headers: { Authorization: `Bearer ${this.token}` }
+    });
+    const body = await readJson(response);
+    ensureOk(response, body);
+    return body as SessionPortsResponse;
   }
 }
 
