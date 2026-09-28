@@ -1,0 +1,34 @@
+# deps
+node_modules/
+bun.lockb
+.pnp.*
+
+# build output
+dist/
+build/
+out/
+.turbo/
+*.tsbuildinfo
+
+# electron packaging
+release/
+*.dmg
+*.exe
+*.msi
+*.AppImage
+
+# logs / local daemon state (never commit live agent data)
+*.log
+.agenterm/
+sessions/
+
+# secrets / local tokens (never commit)
+.token
+agentermd.lock
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
