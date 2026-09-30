@@ -20,6 +20,7 @@ import { effectiveCommand, PROVIDER_INSTALL_HINTS, resolveBinary } from './binar
 import { discoverAgents, type ProcessLister } from './discover.js';
 import { EventBus } from './events.js';
 import { readGitInfo, sharedCwdSessions, type GitInfo } from './gitInfo.js';
+import { HarnessWatch, harnessWatchEnabled } from './harnessWatch.js';
 import { DAEMON_VERSION } from './paths.js';
 import { PtyManager } from './ptyManager.js';
 import { SessionStore } from './sessionStore.js';
@@ -38,6 +39,7 @@ export interface CreateAppOptions {
   dataDir?: string | undefined;
   probes?: SupervisorProbes | undefined;
   gitReader?: ((cwd: string) => Promise<GitInfo>) | undefined;
+  watch?: HarnessWatch | undefined;
 }
 
 function unauthorized(): { error: { code: string; message: string } } {
@@ -137,6 +139,9 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       }
     });
   const inputSeq = new Map<string, number>();
+  const watch =
+    options.watch ??
+    new HarnessWatch({ enabled: harnessWatchEnabled(), dataDir, store, bus });
   const pty = options.pty ?? new PtyManager({ dataDir });
   pty.onOutput = (sessionId, data) => {
     const managed = pty.get(sessionId);
@@ -291,6 +296,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       rows
     });
     supervisor.track(id, pid);
+    watch.track(id);
     bus.publish({
       id: '',
       sessionId: id,
@@ -350,6 +356,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       attachInput.title = parsed.value.title;
     }
     const session = store.createAttached(attachInput);
+    watch.track(session.id);
     bus.publish({
       id: '',
       sessionId: session.id,
@@ -447,6 +454,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     }
     pty.forget(session.id);
     supervisor.untrack(session.id);
+    watch.untrack(session.id);
     inputSeq.delete(session.id);
     store.remove(session.id);
     bus.publish({

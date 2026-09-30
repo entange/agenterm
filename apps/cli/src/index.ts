@@ -273,4 +273,82 @@ program
     }
   });
 
+const HARNESS_PROVIDERS = ['claude', 'codex', 'opencode', 'gemini'] as const;
+
+function grantsPath(): string {
+  return path.join(dataDir(), 'harness-grants.json');
+}
+
+function readGrants(): Array<{ provider: string; path: string; grantedAtMs: number }> {
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(grantsPath(), 'utf8'));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (entry): entry is { provider: string; path: string; grantedAtMs: number } =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof (entry as Record<string, unknown>)['provider'] === 'string' &&
+        typeof (entry as Record<string, unknown>)['path'] === 'string'
+    );
+  } catch {
+    return [];
+  }
+}
+
+const harness = program.command('harness').description('Approve and inspect harness overlay access');
+
+harness
+  .command('grant')
+  .description('Approve read-only harness log access for one provider root')
+  .requiredOption('--provider <provider>', 'one of claude, codex, opencode, gemini')
+  .requiredOption('--path <dir>', 'absolute root the daemon may list and tail')
+  .action((opts: { provider: string; path: string }) => {
+    if (!(HARNESS_PROVIDERS as readonly string[]).includes(opts.provider)) {
+      console.error(`Invalid provider: ${opts.provider}`);
+      process.exit(1);
+    }
+    if (!path.isAbsolute(opts.path)) {
+      console.error('Grant path must be absolute.');
+      process.exit(1);
+    }
+    const grants = readGrants();
+    if (!grants.some((entry) => entry.provider === opts.provider && entry.path === opts.path)) {
+      grants.push({ provider: opts.provider, path: opts.path, grantedAtMs: Date.now() });
+      fs.mkdirSync(dataDir(), { recursive: true });
+      fs.writeFileSync(grantsPath(), JSON.stringify(grants, null, 2), 'utf8');
+    }
+    console.log(`granted ${opts.provider} ${opts.path}`);
+    console.log('Reads start when the daemon runs with AGENTERM_HARNESS_WATCH=1.');
+  });
+
+harness
+  .command('list')
+  .description('List harness overlay approvals')
+  .action(() => {
+    const grants = readGrants();
+    if (grants.length === 0) {
+      console.log('No harness approvals.');
+      return;
+    }
+    for (const entry of grants) {
+      console.log(`${entry.provider} ${entry.path}`);
+    }
+  });
+
+harness
+  .command('revoke')
+  .description('Remove one harness overlay approval')
+  .requiredOption('--provider <provider>', 'provider of the approval')
+  .requiredOption('--path <dir>', 'absolute root of the approval')
+  .action((opts: { provider: string; path: string }) => {
+    const grants = readGrants();
+    const kept = grants.filter((entry) => !(entry.provider === opts.provider && entry.path === opts.path));
+    if (kept.length === grants.length) {
+      console.error('No matching approval.');
+      process.exit(1);
+    }
+    fs.writeFileSync(grantsPath(), JSON.stringify(kept, null, 2), 'utf8');
+    console.log(`revoked ${opts.provider} ${opts.path}`);
+  });
+
 await program.parseAsync(process.argv);

@@ -10,6 +10,7 @@ import { PtyManager } from './ptyManager.js';
 import { Supervisor } from './supervisor.js';
 import { EventBus } from './events.js';
 import { databaseFile, openDatabase, SqliteEvents, SqliteSessions } from './database.js';
+import { HarnessWatch, harnessWatchEnabled } from './harnessWatch.js';
 
 function authorized(header: string | undefined, token: string): boolean {
   if (typeof header !== 'string') return false;
@@ -60,6 +61,7 @@ async function main(): Promise<void> {
   const bus = new EventBus({ dataDir: dir, table: eventsTable });
   const pty = new PtyManager({ dataDir: dir });
   const supervisor = new Supervisor();
+  const watch = new HarnessWatch({ enabled: harnessWatchEnabled(), dataDir: dir, store, bus });
   const app = createApp({
     token,
     port: lock.port,
@@ -68,6 +70,7 @@ async function main(): Promise<void> {
     pty,
     supervisor,
     bus,
+    watch,
     dataDir: dir
   });
   await app.listen({ host: '127.0.0.1', port: lock.port });
@@ -140,8 +143,10 @@ async function main(): Promise<void> {
     }
   });
   supervisor.start();
+  watch.start();
   const shutdown = async (): Promise<void> => {
     supervisor.stop();
+    watch.stop();
     wss.close();
     await app.close();
     process.exit(0);
