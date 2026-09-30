@@ -2,24 +2,42 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AgentProvider, ListSessionsQuery, SessionRecord } from '@agenterm/core';
+import type { SqliteSessions } from './database.js';
 
 /**
  * Session store.
  *
- * In-memory index with per-session metadata.json files under the data dir.
- * Writes the metadata file on every mutation so a daemon restart can
- * replay rows and mark live sessions crashed. Attached rows and spawned
- * rows share the SessionRecord contract.
+ * In-memory index with write-through to metadata.json files plus the
+ * SQLite sessions table when adapters are present. Metadata files keep
+ * per-session debug truth; SQLite is the queryable record. On open with
+ * an adapter, existing rows load into memory and rows left live are
+ * marked crashed. Attached rows and spawned rows share the contract.
  */
 export class SessionStore {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly dataDir: string | undefined;
+  private readonly table: SqliteSessions | undefined;
 
-  constructor(options: { dataDir?: string | undefined } = {}) {
+  constructor(options: { dataDir?: string | undefined; table?: SqliteSessions | undefined } = {}) {
     this.dataDir = options.dataDir;
+    this.table = options.table;
+    if (this.table !== undefined) {
+      const crashed = this.table.replayCrashes(Date.now());
+      void crashed;
+      for (const record of this.table.all()) {
+        this.sessions.set(record.id, record);
+      }
+    }
   }
 
   private persist(record: SessionRecord): void {
+    if (this.table !== undefined) {
+      try {
+        this.table.save(record);
+      } catch {
+        // SQLite stays best effort; memory is authoritative.
+      }
+    }
     if (this.dataDir === undefined) return;
     try {
       const dir = path.join(this.dataDir, 'sessions', record.id);
@@ -156,6 +174,13 @@ export class SessionStore {
     const record = this.sessions.get(id);
     if (record === undefined) return null;
     this.sessions.delete(id);
+    if (this.table !== undefined) {
+      try {
+        this.table.remove(id);
+      } catch {
+        // Best effort.
+      }
+    }
     return record;
   }
 

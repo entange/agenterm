@@ -9,6 +9,7 @@ import { SessionStore } from './sessionStore.js';
 import { PtyManager } from './ptyManager.js';
 import { Supervisor } from './supervisor.js';
 import { EventBus } from './events.js';
+import { databaseFile, openDatabase, SqliteEvents, SqliteSessions } from './database.js';
 
 function authorized(header: string | undefined, token: string): boolean {
   if (typeof header !== 'string') return false;
@@ -47,8 +48,16 @@ async function main(): Promise<void> {
     console.log(`daemon already running on port ${lock.port} (pid ${lock.pid})`);
     return;
   }
-  const store = new SessionStore({ dataDir: dir });
-  const bus = new EventBus({ dataDir: dir });
+  const { db } = openDatabase(databaseFile(dir));
+  const sessionsTable = new SqliteSessions(db);
+  const eventsTable = new SqliteEvents(db);
+  try {
+    eventsTable.prune();
+  } catch {
+    // Prune is best effort at startup.
+  }
+  const store = new SessionStore({ dataDir: dir, table: sessionsTable });
+  const bus = new EventBus({ dataDir: dir, table: eventsTable });
   const pty = new PtyManager({ dataDir: dir });
   const supervisor = new Supervisor();
   const app = createApp({

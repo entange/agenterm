@@ -4,6 +4,7 @@ import path from 'node:path';
 import mitt, { type Emitter } from 'mitt';
 import type { AgentermEvent } from '@agenterm/core';
 import { redactText } from '@agenterm/core';
+import type { SqliteEvents } from './database.js';
 
 export type BusEventMap = {
   event: AgentermEvent;
@@ -24,9 +25,11 @@ export class EventBus {
   private readonly emitter: Emitter<BusEventMap> = mitt<BusEventMap>();
   private readonly recent: AgentermEvent[] = [];
   private readonly dataDir: string | undefined;
+  private readonly table: SqliteEvents | undefined;
 
-  constructor(options: { dataDir?: string | undefined } = {}) {
+  constructor(options: { dataDir?: string | undefined; table?: SqliteEvents | undefined } = {}) {
     this.dataDir = options.dataDir;
+    this.table = options.table;
   }
 
   onEvent(handler: (event: AgentermEvent) => void): () => void {
@@ -39,6 +42,13 @@ export class EventBus {
     this.recent.push(clean);
     while (this.recent.length > MAX_EVENTS) {
       this.recent.shift();
+    }
+    if (this.table !== undefined) {
+      try {
+        this.table.append(clean);
+      } catch {
+        // SQLite mirror is best effort.
+      }
     }
     if (this.dataDir !== undefined) {
       try {
