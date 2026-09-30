@@ -4,7 +4,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { asc, desc, eq, sql } from 'drizzle-orm';
-import type { AgentermEvent, EventRow, SessionRecord } from '@agenterm/core';
+import type { AgentermEvent, CommandRecord, EventRow, SessionRecord } from '@agenterm/core';
 import { redactText } from '@agenterm/core';
 import * as schema from './schema.js';
 
@@ -303,6 +303,68 @@ export class SqliteEvents {
       .all();
     for (const row of oldest) {
       this.db.delete(schema.events).where(eq(schema.events.id, row.id)).run();
+    }
+    return oldest.length;
+  }
+}
+
+/** Cap for the commands table. Oldest rows prune first. */
+export const COMMANDS_CAP = 10000;
+
+/** Upsert command rows keyed by id. Newest start time first on read. */
+export class SqliteCommands {
+  constructor(private readonly db: RuntimeDatabase) {}
+
+  save(record: CommandRecord): void {
+    const row = {
+      id: record.id,
+      sessionId: record.sessionId,
+      text: record.text,
+      cwd: record.cwd,
+      pid: record.pid,
+      startedAtMs: record.startedAtMs,
+      durationMs: record.durationMs,
+      exitCode: record.exitCode,
+      outputLineCount: record.outputLineCount
+    };
+    this.db.insert(schema.commands).values(row).onConflictDoUpdate({ target: schema.commands.id, set: row }).run();
+  }
+
+  forSession(sessionId: string, limit = 100): CommandRecord[] {
+    return this.db
+      .select()
+      .from(schema.commands)
+      .where(eq(schema.commands.sessionId, sessionId))
+      .orderBy(desc(schema.commands.startedAtMs))
+      .limit(limit)
+      .all()
+      .map((row) => ({
+        id: row.id,
+        sessionId: row.sessionId,
+        text: row.text,
+        cwd: row.cwd,
+        pid: row.pid,
+        startedAtMs: row.startedAtMs,
+        durationMs: row.durationMs,
+        exitCode: row.exitCode,
+        outputLineCount: row.outputLineCount
+      }));
+  }
+
+  /** Drop oldest rows past the cap. Returns the removed count. */
+  prune(cap = COMMANDS_CAP): number {
+    const total = this.db.select({ count: sql<number>`count(*)` }).from(schema.commands).get();
+    const count = total?.count ?? 0;
+    if (count <= cap) return 0;
+    const drop = count - cap;
+    const oldest = this.db
+      .select({ id: schema.commands.id })
+      .from(schema.commands)
+      .orderBy(asc(schema.commands.startedAtMs))
+      .limit(drop)
+      .all();
+    for (const row of oldest) {
+      this.db.delete(schema.commands).where(eq(schema.commands.id, row.id)).run();
     }
     return oldest.length;
   }

@@ -8,7 +8,8 @@ import type {
   ListSessionsQuery,
   ListSessionsResponse,
   SessionDetailResponse,
-  SessionInputRequest,
+  SessionCommandsQuery,
+  SessionCommandsResponse,  SessionInputRequest,
   SessionInputResponse,
   SessionOutputQuery,
   SessionOutputResponse,
@@ -207,6 +208,21 @@ export class AgentermClient {
     const body = await readJson(response);
     ensureOk(response, body);
     return body as SessionPortsResponse;
+  }
+
+  async commands(id: string, query: SessionCommandsQuery = {}): Promise<SessionCommandsResponse> {
+    const params = new URLSearchParams();
+    if (query.limit !== undefined) params.set('limit', String(query.limit));
+    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+    const response = await this.fetchImpl(
+      `${this.baseUrl}/sessions/${encodeURIComponent(id)}/commands${suffix}`,
+      {
+        headers: { Authorization: `Bearer ${this.token}` }
+      }
+    );
+    const body = await readJson(response);
+    ensureOk(response, body);
+    return body as SessionCommandsResponse;
   }
 }
 

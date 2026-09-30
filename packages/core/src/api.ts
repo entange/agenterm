@@ -203,6 +203,18 @@ export interface SessionPortsResponse {
   sampledAtMs: number;
 }
 
+/** GET /sessions/:id/commands query. All fields optional. */
+export interface SessionCommandsQuery {
+  /** Max rows, newest first. Integer, 1-500. Defaults to 100. */
+  limit?: number;
+}
+
+/** GET /sessions/:id/commands response. Newest first. */
+export interface SessionCommandsResponse {
+  sessionId: string;
+  commands: import('./command.js').CommandRecord[];
+}
+
 /** Socket message sent from client to daemon on the event stream. */
 export type ClientSocketMessage =
   | { kind: 'subscribe'; sessionId: string; sinceSeq?: number }
