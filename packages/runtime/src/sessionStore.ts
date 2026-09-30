@@ -169,6 +169,21 @@ export class SessionStore {
     return updated;
   }
 
+  setOverlay(
+    id: string,
+    overlay: SessionRecord['overlay'],
+    source: SessionRecord['overlaySource']
+  ): SessionRecord | null {
+    const record = this.sessions.get(id);
+    if (record === undefined) return null;
+    if (record.lifecycle === 'exited' || record.lifecycle === 'killed') return record;
+    if (record.overlay === overlay && record.overlaySource === source) return record;
+    const updated: SessionRecord = { ...record, overlay, overlaySource: source };
+    this.sessions.set(id, updated);
+    this.persist(updated);
+    return updated;
+  }
+
   /** Remove a row after detach or kill-tree. Returns the removed row. */
   remove(id: string): SessionRecord | null {
     const record = this.sessions.get(id);
