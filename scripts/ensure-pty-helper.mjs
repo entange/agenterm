@@ -8,7 +8,7 @@ import path from 'node:path';
  * PTY spawn fail. This runs at install time, stays silent on success, and
  * never fails the install when the helper layout differs.
  */
-function main(): void {
+function main() {
   try {
     const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'node_modules', '.bun');
     let entries = [];

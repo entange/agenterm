@@ -1,7 +1,14 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AgentermClient, daemonBaseUrl, parseAgentProvider, type AttachSessionRequest, type ListSessionsQuery } from '@agenterm/core';
+import {
+  AgentermClient,
+  daemonBaseUrl,
+  parseAgentProvider,
+  type AttachSessionRequest,
+  type ListSessionsQuery,
+  type SpawnSessionRequest
+} from '@agenterm/core';
 import { Command } from 'commander';
 
 function dataDir(): string {
@@ -118,33 +125,152 @@ program
   });
 
 program
-  .command('daemon')
-  .description('Daemon helpers')
-  .option('--start', 'note that the desktop shell starts the daemon on demand')
-  .action((opts: { start?: boolean }) => {
-    if (opts.start === true) {
-      console.log('Start the daemon via the desktop shell or run the runtime entry directly.');
-      return;
+  .command('spawn')
+  .description('Spawn a new owned session in a PTY')
+  .option('--provider <provider>', 'agent provider', 'generic')
+  .option('--command <command>', 'binary override')
+  .option('--args <args...>', 'argument list')
+  .option('--cwd <cwd>', 'working directory')
+  .option('--title <title>', 'human title')
+  .option('--cols <cols>', 'terminal width', '80')
+  .option('--rows <rows>', 'terminal height', '24')
+  .option('--env <entry...>', 'environment override as KEY=VALUE')
+  .action(
+    async (opts: {
+      provider?: string;
+      command?: string;
+      args?: string[];
+      cwd?: string;
+      title?: string;
+      cols?: string;
+      rows?: string;
+      env?: string[];
+    }) => {
+      const providerParsed = parseAgentProvider(opts.provider ?? 'generic');
+      if (!providerParsed.ok) {
+        console.error(`Invalid provider: ${providerParsed.message}`);
+        process.exit(1);
+      }
+      const env: Record<string, string> = {};
+      for (const entry of opts.env ?? []) {
+        const cut = entry.indexOf('=');
+        if (cut <= 0) {
+          console.error(`Invalid env entry (want KEY=VALUE): ${entry}`);
+          process.exit(1);
+        }
+        env[entry.slice(0, cut)] = entry.slice(cut + 1);
+      }
+      const req: SpawnSessionRequest = {
+        provider: providerParsed.value,
+        cwd: opts.cwd ?? process.cwd(),
+        args: opts.args ?? [],
+        env
+      };
+      if (typeof opts.command === 'string') req.command = opts.command;
+      if (typeof opts.title === 'string') req.title = opts.title;
+      const cols = Number(opts.cols ?? '80');
+      const rows = Number(opts.rows ?? '24');
+      if (Number.isInteger(cols)) req.cols = cols;
+      if (Number.isInteger(rows)) req.rows = rows;
+      const client = makeClient();
+      const out = await client.spawn(req);
+      console.log(`spawned ${out.session.id} pid=${out.session.pid} ${out.session.title}`);
     }
-    console.log('Use status, list, discover, attach. Shutdown arrives with the spawn change.');
+  );
+
+program
+  .command('logs <id>')
+  .description('Print session scrollback with an optional resume cursor')
+  .option('--tail <bytes>', 'tail length in bytes', '65536')
+  .option('--since <seq>', 'resume cursor: only chunks past this sequence')
+  .action(async (id: string, opts: { tail?: string; since?: string }) => {
+    const client = makeClient();
+    const query: { tailBytes?: number; sinceSeq?: number } = {};
+    const tail = Number(opts.tail ?? '65536');
+    if (Number.isInteger(tail)) query.tailBytes = tail;
+    if (opts.since !== undefined) {
+      const since = Number(opts.since);
+      if (Number.isInteger(since)) query.sinceSeq = since;
+    }
+    const out = await client.output(id, query);
+    for (const chunk of out.chunks) {
+      process.stdout.write(chunk.data);
+    }
+    if (out.resumeAfterSeq !== null) {
+      console.error(`resumeAfterSeq=${out.resumeAfterSeq} hasMore=${out.hasMore}`);
+    }
   });
 
 program
-  .command('spawn')
-  .description('Spawn is wired in the following change; this entry reserves the name')
-  .action(() => {
-    console.error('Spawn arrives with the PTY change. Use attach for existing PIDs for now.');
-    process.exit(1);
+  .command('input <id> [text...]')
+  .description('Write bytes to owned PTY stdin')
+  .action(async (id: string, text: string[]) => {
+    const client = makeClient();
+    const data = text.join(' ') + '\n';
+    const out = await client.sendInput(id, { data });
+    console.log(`accepted ${out.acceptedBytes} bytes`);
   });
 
-for (const name of ['detach', 'kill', 'logs', 'input', 'shutdown'] as const) {
-  program
-    .command(name)
-    .description(`Reserved for the spawn and terminal change: ${name}`)
-    .action(() => {
-      console.error(`${name} arrives with the spawn and terminal change.`);
+program
+  .command('kill <id>')
+  .description('End a session with kill-tree and remove its row')
+  .action(async (id: string) => {
+    const client = makeClient();
+    const out = await client.deleteSession(id, { killTree: true });
+    console.log(`ended pid=${out.pid} killed=${out.killed}`);
+  });
+
+program
+  .command('detach <id>')
+  .description('Detach a session without killing its tree')
+  .action(async (id: string) => {
+    const client = makeClient();
+    const out = await client.deleteSession(id, { killTree: false });
+    console.log(`detached pid=${out.pid}`);
+  });
+
+program
+  .command('shutdown')
+  .description('Stop the daemon process')
+  .option('--confirm', 'required explicit approval naming this action')
+  .action((opts: { confirm?: boolean }) => {
+    if (opts.confirm !== true) {
+      console.error('Refusing: pass --confirm to stop the daemon.');
       process.exit(1);
-    });
-}
+    }
+    let lock: { pid?: number };
+    try {
+      lock = JSON.parse(fs.readFileSync(path.join(dataDir(), 'agentermd.lock'), 'utf8')) as { pid?: number };
+    } catch {
+      console.error('No daemon lock file found.');
+      process.exit(1);
+    }
+    if (typeof lock.pid !== 'number') {
+      console.error('Daemon lock has no pid.');
+      process.exit(1);
+    }
+    try {
+      process.kill(lock.pid, 'SIGTERM');
+      console.log(`signaled daemon pid=${lock.pid}`);
+    } catch {
+      console.error(`Daemon pid=${lock.pid} is not running.`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('daemon')
+  .description('Show daemon lock status')
+  .action(() => {
+    try {
+      const lock = JSON.parse(fs.readFileSync(path.join(dataDir(), 'agentermd.lock'), 'utf8')) as {
+        pid?: number;
+        port?: number;
+      };
+      console.log(`daemon pid=${lock.pid ?? '?'} port=${lock.port ?? '?'}`);
+    } catch {
+      console.log('daemon not running (no lock file).');
+    }
+  });
 
 await program.parseAsync(process.argv);

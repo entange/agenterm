@@ -2,22 +2,33 @@ import { existsSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { app, BrowserWindow, Tray, Menu, nativeImage } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } from 'electron';
+import WebSocket from 'ws';
 
 let tray: Tray | null = null;
+let stream: WebSocket | null = null;
+let streamTimer: ReturnType<typeof setTimeout> | null = null;
 
 function dataDir(): string {
   return process.env['AGENTERM_DATA_DIR'] ?? join(homedir(), '.agenterm');
 }
 
-function readLockPort(): number | null {
+function readLock(): { port?: number; pid?: number } {
   try {
-    const raw = readFileSync(join(dataDir(), 'agentermd.lock'), 'utf8');
-    const parsed = JSON.parse(raw) as { port?: number; pid?: number };
-    if (typeof parsed.port === 'number') return parsed.port;
-    return null;
+    return JSON.parse(readFileSync(join(dataDir(), 'agentermd.lock'), 'utf8')) as {
+      port?: number;
+      pid?: number;
+    };
   } catch {
-    return null;
+    return {};
+  }
+}
+
+function readToken(): string {
+  try {
+    return readFileSync(join(dataDir(), 'token'), 'utf8').trim();
+  } catch {
+    return '';
   }
 }
 
@@ -28,8 +39,8 @@ function readLockPort(): number | null {
  * The daemon stays alive when the window closes; explicit shutdown only.
  */
 function ensureDaemon(): void {
-  const port = readLockPort();
-  if (port !== null) return;
+  const lock = readLock();
+  if (typeof lock.port === 'number') return;
   const entry = join(app.getAppPath(), '..', 'agentermd', 'index.js');
   if (!existsSync(entry)) return;
   const child = spawn(process.execPath, [entry], {
@@ -38,6 +49,125 @@ function ensureDaemon(): void {
     env: { ...process.env, AGENTERM_PORT: '37241' }
   });
   child.unref();
+}
+
+async function daemonCall(pathname: string, init?: RequestInit): Promise<unknown> {
+  const lock = readLock();
+  if (typeof lock.port !== 'number') {
+    throw new Error('daemon is not running');
+  }
+  const response = await fetch(`http://127.0.0.1:${lock.port}${pathname}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${readToken()}`,
+      ['Content-Type']: 'application/json',
+      ...(init?.headers ?? {})
+    }
+  });
+  const text = await response.text();
+  const body: unknown = text.length > 0 ? (JSON.parse(text) as unknown) : null;
+  if (!response.ok) {
+    const nested = (body as { error?: { message?: string } } | null)?.error;
+    throw new Error(typeof nested?.message === 'string' ? nested.message : `daemon call failed: ${pathname}`);
+  }
+  return body;
+}
+
+function broadcast(event: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    try {
+      win.webContents.send('agenterm:event', event);
+    } catch {
+      // Closed windows are skipped.
+    }
+  }
+}
+
+/** Keep one localhost stream open and forward every event to renderers. */
+function openStream(): void {
+  if (stream !== null || streamTimer !== null) return;
+  const lock = readLock();
+  if (typeof lock.port !== 'number') {
+    streamTimer = setTimeout(() => {
+      streamTimer = null;
+      openStream();
+    }, 2000);
+    return;
+  }
+  const socket = new WebSocket(`ws://127.0.0.1:${lock.port}/events/stream`, {
+    headers: { Authorization: `Bearer ${readToken()}` }
+  });
+  stream = socket;
+  socket.on('message', (raw) => {
+    try {
+      const parsed = JSON.parse(String(raw)) as { kind?: string; event?: unknown };
+      if (parsed.kind === 'event') {
+        broadcast(parsed.event);
+      }
+    } catch {
+      // Malformed frames are ignored; HTTP stays authoritative.
+    }
+  });
+  const retry = (): void => {
+    stream = null;
+    if (streamTimer === null) {
+      streamTimer = setTimeout(() => {
+        streamTimer = null;
+        openStream();
+      }, 2000);
+    }
+  };
+  socket.on('close', retry);
+  socket.on('error', () => {
+    try {
+      socket.close();
+    } catch {
+      // Already closing.
+    }
+  });
+}
+
+function registerIpc(): void {
+  ipcMain.handle('agenterm:health', () => daemonCall('/health'));
+  ipcMain.handle('agenterm:discover', () => daemonCall('/discover'));
+  ipcMain.handle('agenterm:list', () => daemonCall('/sessions'));
+  ipcMain.handle('agenterm:spawn', (_event, body: unknown) =>
+    daemonCall('/sessions', { method: 'POST', body: JSON.stringify(body) })
+  );
+  ipcMain.handle('agenterm:attach', (_event, body: unknown) =>
+    daemonCall('/sessions/attach', { method: 'POST', body: JSON.stringify(body) })
+  );
+  ipcMain.handle('agenterm:detail', (_event, id: string) =>
+    daemonCall(`/sessions/${encodeURIComponent(id)}`)
+  );
+  ipcMain.handle('agenterm:output', (_event, id: string, sinceSeq?: number) => {
+    const suffix = typeof sinceSeq === 'number' ? `?sinceSeq=${sinceSeq}` : '';
+    return daemonCall(`/sessions/${encodeURIComponent(id)}/output${suffix}`);
+  });
+  ipcMain.handle('agenterm:input', (_event, id: string, data: string) =>
+    daemonCall(`/sessions/${encodeURIComponent(id)}/input`, {
+      method: 'POST',
+      body: JSON.stringify({ data })
+    })
+  );
+  ipcMain.handle('agenterm:resize', (_event, id: string, cols: number, rows: number) =>
+    daemonCall(`/sessions/${encodeURIComponent(id)}/resize`, {
+      method: 'POST',
+      body: JSON.stringify({ cols, rows })
+    })
+  );
+  ipcMain.handle('agenterm:signal', (_event, id: string, signal: string) =>
+    daemonCall(`/sessions/${encodeURIComponent(id)}/signal`, {
+      method: 'POST',
+      body: JSON.stringify({ signal })
+    })
+  );
+  ipcMain.handle('agenterm:kill', (_event, id: string, killTree: boolean) =>
+    daemonCall(`/sessions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ killTree })
+    })
+  );
 }
 
 function createWindow(): void {
@@ -71,6 +201,8 @@ function createTray(): void {
 
 await app.whenReady();
 ensureDaemon();
+registerIpc();
+openStream();
 createTray();
 createWindow();
 
