@@ -202,6 +202,24 @@ program
   });
 
 program
+  .command('commands <id>')
+  .description('List prompt-anchored command rows, newest first')
+  .option('--limit <n>', 'max rows', '100')
+  .action(async (id: string, opts: { limit?: string }) => {
+    const client = makeClient();
+    const limit = Number(opts.limit ?? '100');
+    const out = await client.commands(id, Number.isInteger(limit) ? { limit } : {});
+    if (out.commands.length === 0) {
+      console.log('No commands recorded yet.');
+      return;
+    }
+    for (const row of out.commands) {
+      const duration = row.durationMs === null ? 'running' : `${row.durationMs}ms`;
+      console.log(`${duration} ${row.outputLineCount ?? 0} lines exit=${row.exitCode ?? '?'} ${row.text}`);
+    }
+  });
+
+program
   .command('input <id> [text...]')
   .description('Write bytes to owned PTY stdin')
   .action(async (id: string, text: string[]) => {

@@ -13,7 +13,7 @@ export function App(): React.JSX.Element {
   const { sessions, selectedId, select, setSessions, setCandidates } = useUiState();
   const queryClient = useQueryClient();
   const [showSpawn, setShowSpawn] = useState(false);
-  const [tab, setTab] = useState<'terminal' | 'processes' | 'ports'>('terminal');
+  const [tab, setTab] = useState<'terminal' | 'processes' | 'ports' | 'commands'>('terminal');
   const [provider, setProvider] = useState<AgentProvider>('claude');
   const [command, setCommand] = useState('');
   const [cwd, setCwd] = useState('');
@@ -70,6 +70,17 @@ export function App(): React.JSX.Element {
       const bridge = getBridge();
       if (bridge === null || selectedId === null) return null;
       return bridge.detail(selectedId);
+    }
+  });
+
+  const commandsQuery = useQuery({
+    queryKey: ['commands', selectedId, tab],
+    enabled: selectedId !== null && tab === 'commands',
+    refetchInterval: 3000,
+    queryFn: async () => {
+      const bridge = getBridge();
+      if (bridge === null || selectedId === null) return null;
+      return bridge.commands(selectedId);
     }
   });
 
@@ -206,7 +217,7 @@ export function App(): React.JSX.Element {
               {selected.provider} pid={selected.pid} cwd={selected.cwd} branch={selected.branch ?? '-'}
             </div>
             <div className="flex gap-2 text-xs">
-              {(['terminal', 'processes', 'ports'] as const).map((name) => (
+              {(['terminal', 'processes', 'ports', 'commands'] as const).map((name) => (
                 <button
                   key={name}
                   onClick={() => setTab(name)}
@@ -272,6 +283,25 @@ export function App(): React.JSX.Element {
                     >
                       Open
                     </a>
+                  </div>
+                ))}
+              </div>
+            )}
+            {tab === 'commands' && (
+              <div className="space-y-2 text-xs">
+                {(commandsQuery.data?.commands ?? []).length === 0 && (
+                  <EmptyState title="No commands" detail="Prompt-anchored commands appear here as the session runs." />
+                )}
+                {(commandsQuery.data?.commands ?? []).map((row) => (
+                  <div
+                    key={row.id}
+                    className="rounded-md border border-zinc-200 p-2 dark:border-zinc-800"
+                  >
+                    <div className="truncate font-mono font-semibold">{row.text}</div>
+                    <div className="mt-1 text-zinc-500">
+                      {row.durationMs === null ? 'running' : `${row.durationMs}ms`} ·{' '}
+                      {row.outputLineCount ?? 0} lines · exit {row.exitCode ?? 'unknown'}
+                    </div>
                   </div>
                 ))}
               </div>

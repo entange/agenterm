@@ -2,6 +2,7 @@ import type {
   AgentermEvent,
   DiscoverResponse,
   ListSessionsResponse,
+  SessionCommandsResponse,
   SessionDetailResponse,
   SessionOutputResponse
 } from '@agenterm/core';
@@ -15,6 +16,7 @@ export interface RendererBridge {
   attach: (body: Record<string, unknown>) => Promise<{ session: { id: string } }>;
   detail: (id: string) => Promise<SessionDetailResponse>;
   output: (id: string, sinceSeq?: number) => Promise<SessionOutputResponse>;
+  commands: (id: string) => Promise<SessionCommandsResponse>;
   input: (id: string, data: string) => Promise<unknown>;
   resize: (id: string, cols: number, rows: number) => Promise<unknown>;
   signal: (id: string, signal: string) => Promise<unknown>;

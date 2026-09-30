@@ -16,6 +16,7 @@ export interface AgentermBridge {
   attach: (body: unknown) => Promise<unknown>;
   detail: (id: string) => Promise<unknown>;
   output: (id: string, sinceSeq?: number) => Promise<unknown>;
+  commands: (id: string) => Promise<unknown>;
   input: (id: string, data: string) => Promise<unknown>;
   resize: (id: string, cols: number, rows: number) => Promise<unknown>;
   signal: (id: string, signal: string) => Promise<unknown>;
@@ -31,6 +32,7 @@ const bridge: AgentermBridge = {
   attach: (body: unknown) => ipcRenderer.invoke('agenterm:attach', body),
   detail: (id: string) => ipcRenderer.invoke('agenterm:detail', id),
   output: (id: string, sinceSeq?: number) => ipcRenderer.invoke('agenterm:output', id, sinceSeq),
+  commands: (id: string) => ipcRenderer.invoke('agenterm:commands', id),
   input: (id: string, data: string) => ipcRenderer.invoke('agenterm:input', id, data),
   resize: (id: string, cols: number, rows: number) => ipcRenderer.invoke('agenterm:resize', id, cols, rows),
   signal: (id: string, signal: string) => ipcRenderer.invoke('agenterm:signal', id, signal),

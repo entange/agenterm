@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { AgentermEvent } from '@agenterm/core';
+import { openDatabase, SqliteCommands } from '../src/database.js';
 import { EventBus } from '../src/events.js';
 import type { PtyHandle } from '../src/ptyManager.js';
 import { PtyManager } from '../src/ptyManager.js';
@@ -63,6 +67,9 @@ function riggedApp() {
   const supervisor = new Supervisor({
     probes: { processes: async () => [], sockets: async () => [] }
   });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agenterm-spawn-'));
+  const opened = openDatabase(path.join(dir, 'test.db'));
+  const commandsDb = new SqliteCommands(opened.db);
   const app = createApp({
     token: TOKEN,
     port: 37241,
@@ -71,6 +78,7 @@ function riggedApp() {
     pty,
     supervisor,
     bus,
+    commandsDb,
     gitReader: async () => ({ branch: null, worktreeRoot: null })
   });
   return {
@@ -79,6 +87,7 @@ function riggedApp() {
     store,
     bus,
     seen,
+    commandsDb,
     lastFake: () => last as FakePty | null
   };
 }
@@ -257,5 +266,35 @@ describe('POST /sessions spawn flow', () => {
       payload: { provider: 'generic', command: '/bin/echo', cwd: '/tmp/agenterm-no-such-dir', env: {} }
     });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('GET /sessions/:id/commands', () => {
+  it('clusters prompt-anchored output into command rows', async () => {
+    const { app, lastFake, commandsDb } = riggedApp();
+    const spawnRes = await app.inject({
+      method: 'POST',
+      url: '/sessions',
+      headers,
+      payload: { provider: 'generic', command: '/bin/sh', cwd: '/tmp', env: {} }
+    });
+    expect(spawnRes.statusCode).toBe(201);
+    const id = (spawnRes.json() as { session: { id: string } }).session.id;
+    lastFake()?.emitData('sh-3.2$ bun test\nok 12 pass\nsh-3.2$ echo done\n');
+    const res = await app.inject({ method: 'GET', url: `/sessions/${id}/commands`, headers });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { sessionId: string; commands: Array<{ text: string; durationMs: number | null; exitCode: number | null }> };
+    expect(body.sessionId).toBe(id);
+    expect(body.commands.map((row) => row.text)).toEqual(['echo done', 'bun test']);
+    expect(body.commands[1]?.exitCode).toBe(null);
+    expect(commandsDb.forSession(id).length).toBeGreaterThan(0);
+  });
+
+  it('rejects bad limits and unknown sessions', async () => {
+    const { app } = riggedApp();
+    const bad = await app.inject({ method: 'GET', url: '/sessions/00000000-0000-0000-0000-000000000000/commands?limit=9999', headers });
+    expect([400, 404].includes(bad.statusCode)).toBe(true);
+    const missing = await app.inject({ method: 'GET', url: '/sessions/00000000-0000-0000-0000-000000000000/commands', headers });
+    expect(missing.statusCode).toBe(404);
   });
 });

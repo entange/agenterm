@@ -9,7 +9,7 @@ import { SessionStore } from './sessionStore.js';
 import { PtyManager } from './ptyManager.js';
 import { Supervisor } from './supervisor.js';
 import { EventBus } from './events.js';
-import { databaseFile, openDatabase, SqliteEvents, SqliteSessions } from './database.js';
+import { databaseFile, openDatabase, SqliteCommands, SqliteEvents, SqliteSessions } from './database.js';
 import { HarnessWatch, harnessWatchEnabled } from './harnessWatch.js';
 
 function authorized(header: string | undefined, token: string): boolean {
@@ -52,8 +52,14 @@ async function main(): Promise<void> {
   const { db } = openDatabase(databaseFile(dir));
   const sessionsTable = new SqliteSessions(db);
   const eventsTable = new SqliteEvents(db);
+  const commandsTable = new SqliteCommands(db);
   try {
     eventsTable.prune();
+  } catch {
+    // Prune is best effort at startup.
+  }
+  try {
+    commandsTable.prune();
   } catch {
     // Prune is best effort at startup.
   }
@@ -71,6 +77,7 @@ async function main(): Promise<void> {
     supervisor,
     bus,
     watch,
+    commandsDb: commandsTable,
     dataDir: dir
   });
   await app.listen({ host: '127.0.0.1', port: lock.port });

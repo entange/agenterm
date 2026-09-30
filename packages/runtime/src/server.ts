@@ -21,6 +21,8 @@ import { discoverAgents, type ProcessLister } from './discover.js';
 import { EventBus } from './events.js';
 import { readGitInfo, sharedCwdSessions, type GitInfo } from './gitInfo.js';
 import { HarnessWatch, harnessWatchEnabled } from './harnessWatch.js';
+import { CommandTracker } from './commands.js';
+import { SqliteCommands } from './database.js';
 import { DAEMON_VERSION } from './paths.js';
 import { PtyManager } from './ptyManager.js';
 import { SessionStore } from './sessionStore.js';
@@ -40,6 +42,7 @@ export interface CreateAppOptions {
   probes?: SupervisorProbes | undefined;
   gitReader?: ((cwd: string) => Promise<GitInfo>) | undefined;
   watch?: HarnessWatch | undefined;
+  commandsDb?: SqliteCommands | undefined;
 }
 
 function unauthorized(): { error: { code: string; message: string } } {
@@ -139,6 +142,8 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       }
     });
   const inputSeq = new Map<string, number>();
+  const trackers = new Map<string, CommandTracker>();
+  const commandsDb = options.commandsDb;
   const watch =
     options.watch ??
     new HarnessWatch({ enabled: harnessWatchEnabled(), dataDir, store, bus });
@@ -155,11 +160,21 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       data
     };
     bus.publish(event);
+    try {
+      trackers.get(sessionId)?.feed(data);
+    } catch {
+      // Heuristic input never breaks the stream.
+    }
   };
   pty.onExit = (sessionId, exit) => {
     const record = store.get(sessionId);
     if (record === null) return;
     store.markExited(sessionId, exit.exitCode, exit.signal);
+    try {
+      trackers.get(sessionId)?.closeAll();
+    } catch {
+      // Heuristic input never breaks the stream.
+    }
     bus.publish({
       id: '',
       sessionId,
@@ -297,6 +312,15 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     });
     supervisor.track(id, pid);
     watch.track(id);
+    trackers.set(
+      id,
+      new CommandTracker({
+        sessionId: id,
+        cwd: session.cwd,
+        pid,
+        save: commandsDb === undefined ? undefined : (record) => commandsDb.save(record)
+      })
+    );
     bus.publish({
       id: '',
       sessionId: id,
@@ -455,6 +479,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     pty.forget(session.id);
     supervisor.untrack(session.id);
     watch.untrack(session.id);
+    trackers.delete(session.id);
     inputSeq.delete(session.id);
     store.remove(session.id);
     bus.publish({
@@ -649,6 +674,40 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     }
     await supervisor.poll().catch(() => undefined);
     return { sessionId: session.id, ports: supervisor.portsFor(session.id), sampledAtMs: Date.now() };
+  });
+
+  app.get('/sessions/:id/commands', async (request, reply) => {
+    const params = request.params as Record<string, unknown>;
+    const idParsed = parseSessionIdParam(params['id']);
+    if (!idParsed.ok) {
+      await reply.code(400).send({ error: { code: idParsed.code, message: idParsed.message } });
+      return;
+    }
+    const session = store.get(idParsed.value);
+    if (session === null) {
+      await reply.code(404).send({ error: { code: 'unknown_session', message: 'session id not found' } });
+      return;
+    }
+    const rawQuery = (request.query ?? {}) as Record<string, unknown>;
+    const rawLimit = rawQuery['limit'];
+    let limit = 100;
+    if (rawLimit !== undefined) {
+      const parsed = typeof rawLimit === 'number' ? rawLimit : Number(rawLimit);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 500) {
+        await reply.code(400).send({ error: { code: 'invalid_limit', message: 'limit must be an integer 1-500' } });
+        return;
+      }
+      limit = parsed;
+    }
+    const tracker = trackers.get(session.id);
+    if (tracker !== undefined) {
+      const rows = tracker.rows().reverse().slice(0, limit);
+      return { sessionId: session.id, commands: rows };
+    }
+    if (commandsDb === undefined) {
+      return { sessionId: session.id, commands: [] };
+    }
+    return { sessionId: session.id, commands: commandsDb.forSession(session.id, limit) };
   });
 
   return app;

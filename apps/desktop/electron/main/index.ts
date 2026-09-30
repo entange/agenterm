@@ -144,6 +144,9 @@ function registerIpc(): void {
     const suffix = typeof sinceSeq === 'number' ? `?sinceSeq=${sinceSeq}` : '';
     return daemonCall(`/sessions/${encodeURIComponent(id)}/output${suffix}`);
   });
+  ipcMain.handle('agenterm:commands', (_event, id: string) =>
+    daemonCall(`/sessions/${encodeURIComponent(id)}/commands`)
+  );
   ipcMain.handle('agenterm:input', (_event, id: string, data: string) =>
     daemonCall(`/sessions/${encodeURIComponent(id)}/input`, {
       method: 'POST',
