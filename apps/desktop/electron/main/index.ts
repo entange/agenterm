@@ -89,8 +89,23 @@ function showWindow(): BrowserWindow {
 }
 
 function isTrustedUrl(url: string): boolean {
-  if (devUrl !== undefined && url.startsWith(devUrl)) return true;
-  return url.startsWith('file://') && fileURLToPath(url).startsWith(path.join(here, '..', 'renderer'));
+  try {
+    const parsed = new URL(url);
+    if (devUrl !== undefined && parsed.origin === new URL(devUrl).origin) return true;
+    if (parsed.protocol !== 'file:' || parsed.host !== '') return false;
+    const file = fileURLToPath(parsed);
+    return file.startsWith(path.join(here, '..', 'renderer') + path.sep);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * App shortcut for a key. macOS uses Cmd; elsewhere Ctrl+Shift, because
+ * plain Ctrl+K, Ctrl+N, Ctrl+J, Ctrl+[ belong to the program in the terminal.
+ */
+function accel(key: string): string {
+  return isMac ? `Cmd+${key}` : `Ctrl+Shift+${key}`;
 }
 
 function createWindow(): BrowserWindow {
@@ -281,7 +296,7 @@ async function confirmAndStopDaemon(): Promise<boolean> {
 function buildAppMenu(): void {
   const jump: MenuItemConstructorOptions[] = Array.from({ length: 9 }, (_, i) => ({
     label: `Session ${i + 1}`,
-    accelerator: `CmdOrCtrl+${i + 1}`,
+    accelerator: isMac ? `Cmd+${i + 1}` : `Alt+${i + 1}`,
     click: () => sendCommand({ kind: 'jump-session', index: i })
   }));
   const template: MenuItemConstructorOptions[] = [
@@ -289,7 +304,7 @@ function buildAppMenu(): void {
     {
       label: 'File',
       submenu: [
-        { label: 'New Session…', accelerator: 'CmdOrCtrl+N', click: () => sendCommand({ kind: 'new-session' }) },
+        { label: 'New Session…', accelerator: accel('N'), click: () => sendCommand({ kind: 'new-session' }) },
         { type: 'separator' },
         { label: 'Open Data Folder', click: () => void shell.openPath(dataDir()) },
         { type: 'separator' },
@@ -300,18 +315,22 @@ function buildAppMenu(): void {
     {
       label: 'View',
       submenu: [
-        { label: 'Command Palette', accelerator: 'CmdOrCtrl+K', click: () => sendCommand({ kind: 'palette' }) },
-        { label: 'Control Room', accelerator: 'CmdOrCtrl+Shift+H', click: () => sendCommand({ kind: 'home' }) },
-        { label: 'Activity', accelerator: 'CmdOrCtrl+J', click: () => sendCommand({ kind: 'toggle-activity' }) },
+        { label: 'Command Palette', accelerator: accel('K'), click: () => sendCommand({ kind: 'palette' }) },
+        {
+          label: 'Control Room',
+          accelerator: isMac ? 'Cmd+Shift+H' : 'Ctrl+Shift+H',
+          click: () => sendCommand({ kind: 'home' })
+        },
+        { label: 'Activity', accelerator: accel('J'), click: () => sendCommand({ kind: 'toggle-activity' }) },
         { type: 'separator' },
         {
           label: 'Previous Session',
-          accelerator: 'CmdOrCtrl+[',
+          accelerator: accel('['),
           click: () => sendCommand({ kind: 'cycle-session', delta: -1 })
         },
         {
           label: 'Next Session',
-          accelerator: 'CmdOrCtrl+]',
+          accelerator: accel(']'),
           click: () => sendCommand({ kind: 'cycle-session', delta: 1 })
         },
         { label: 'Go to Session', submenu: jump },

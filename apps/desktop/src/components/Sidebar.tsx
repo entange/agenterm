@@ -9,6 +9,7 @@ import { folderName, formatAge } from '../lib/format.js';
 import { EMPTY_TRACE, useLive } from '../lib/live.js';
 import { useUi, type ThemePreference } from '../lib/ui.js';
 import { Trace } from './Trace.js';
+import { shortcut } from '../lib/shortcuts.js';
 
 const GROUP_LABELS: Record<AttentionGroup, string> = {
   'needs-you': 'Needs you',
@@ -101,7 +102,12 @@ export function Sidebar({
           />
           <Kbd className="absolute top-1/2 right-1.5 -translate-y-1/2">/</Kbd>
         </label>
-        <IconButton label="New session" shortcut="⌘N" onClick={onNewSession} className="border border-line bg-raised">
+        <IconButton
+          label="New session"
+          shortcut={shortcut('N')}
+          onClick={onNewSession}
+          className="border border-line bg-raised"
+        >
           <Plus className="size-4" />
         </IconButton>
       </div>
@@ -117,7 +123,7 @@ export function Sidebar({
       >
         <LayoutGrid className="size-3.5" />
         Control room
-        <Kbd className="ml-auto">⇧⌘H</Kbd>
+        <Kbd className="ml-auto">{shortcut('H', { shift: true })}</Kbd>
       </button>
 
       <nav

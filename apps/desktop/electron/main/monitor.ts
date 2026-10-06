@@ -48,6 +48,11 @@ export class AttentionMonitor {
     this.scheduleRefresh(300);
     const session = this.find(event.sessionId);
     const name = session === undefined ? 'An agent' : `${callsign(session)} · ${session.title}`;
+    if (event.kind === 'agent.status' && event.overlay === 'working') {
+      // Back at work: the next wait is a new moment worth announcing.
+      this.lastNotified.delete(event.sessionId);
+      return;
+    }
     if (event.kind === 'agent.status') {
       const messages: Partial<Record<typeof event.overlay, string>> = {
         waiting_permission: 'Waiting for your approval',

@@ -28,6 +28,15 @@ function listen<T>(channel: string, handler: (payload: T) => void): () => void {
   };
 }
 
+// Menu, tray, and notification commands can arrive before React subscribes
+// (a fresh window right after load); hold them until a handler exists.
+const commandHandlers = new Set<(command: AppCommand) => void>();
+const pendingCommands: AppCommand[] = [];
+ipcRenderer.on(IPC.command, (_event: IpcRendererEvent, command: AppCommand) => {
+  if (commandHandlers.size === 0) pendingCommands.push(command);
+  else for (const handler of commandHandlers) handler(command);
+});
+
 const bridge: AgentermBridge = {
   platform: process.platform,
   call: <M extends ApiMethod>(method: M, ...args: ApiArgs<M>) =>
@@ -38,7 +47,13 @@ const bridge: AgentermBridge = {
   onEvent: (handler) => listen<AgentermEvent>(IPC.event, handler),
   onActivity: (handler) => listen<ActivityTick>(IPC.activity, handler),
   onConnection: (handler) => listen<ConnectionInfo>(IPC.connection, handler),
-  onCommand: (handler) => listen<AppCommand>(IPC.command, handler),
+  onCommand: (handler) => {
+    commandHandlers.add(handler);
+    for (const command of pendingCommands.splice(0)) handler(command);
+    return () => {
+      commandHandlers.delete(handler);
+    };
+  },
   connection: () => ipcRenderer.invoke(IPC.getConnection) as Promise<ConnectionInfo>,
   startDaemon: () => ipcRenderer.invoke(IPC.startDaemon) as Promise<ConnectionInfo>,
   stopDaemon: () => ipcRenderer.invoke(IPC.stopDaemon) as Promise<boolean>,

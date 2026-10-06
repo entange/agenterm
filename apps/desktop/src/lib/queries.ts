@@ -115,6 +115,17 @@ export function useAttention(sessions: SessionRecord[] | undefined): Map<string,
   return out;
 }
 
+/**
+ * Put a just-created session into the cached list so selecting it does not
+ * race the refetch (the list would briefly not contain it).
+ */
+export function seedSession(client: QueryClient, session: SessionRecord): void {
+  client.setQueryData<SessionRecord[]>(keys.sessions, (current) => [
+    session,
+    ...(current ?? []).filter((entry) => entry.id !== session.id)
+  ]);
+}
+
 /** Refresh everything after reconnecting or a bulk change. */
 export function refreshAll(client: QueryClient): void {
   void client.invalidateQueries();

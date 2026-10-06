@@ -88,6 +88,9 @@ describe('MCP bridge', () => {
       null
     );
     expect(await handleMcpMessage(client([]), 'not json', '0.1.0')).toContain('-32700');
+    for (const line of ['null', '123', '[]', '{"id":1}']) {
+      expect(await handleMcpMessage(client([]), line, '0.1.0')).toContain('-32600');
+    }
   });
 
   it('reads output as plain redacted text with a resume cursor', async () => {

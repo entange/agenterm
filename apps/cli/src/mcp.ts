@@ -241,12 +241,21 @@ function failure(id: string | number | null, code: number, message: string): str
 
 /** Handle one JSON-RPC line. Returns the response line, or null for notifications. */
 export async function handleMcpMessage(client: AgentermClient, line: string, version: string): Promise<string | null> {
-  let request: Request;
+  let parsed: unknown;
   try {
-    request = JSON.parse(line) as Request;
+    parsed = JSON.parse(line);
   } catch {
     return failure(null, -32700, 'parse error');
   }
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    Array.isArray(parsed) ||
+    typeof (parsed as Request).method !== 'string'
+  ) {
+    return failure(null, -32600, 'invalid request: expected one JSON-RPC request object');
+  }
+  const request = parsed as Request;
   const id = request.id ?? null;
   const isNotification = request.id === undefined;
   switch (request.method) {

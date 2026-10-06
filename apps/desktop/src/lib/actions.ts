@@ -3,7 +3,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { callsign } from '../../shared/callsign.js';
 import { api } from './bridge.js';
-import { keys } from './queries.js';
+import { keys, seedSession } from './queries.js';
 import { toast, toastError } from './toast.js';
 import { useUi } from './ui.js';
 
@@ -22,6 +22,7 @@ export function actions(client: QueryClient) {
     async spawn(request: SpawnSessionRequest): Promise<SessionRecord | null> {
       try {
         const { session } = await api('spawn', request);
+        seedSession(client, session);
         refresh();
         useUi.getState().rememberCwd(request.cwd);
         useUi.getState().select(session.id, 'terminal');
@@ -84,6 +85,7 @@ export function actions(client: QueryClient) {
     async restart(session: SessionRecord): Promise<void> {
       try {
         const { session: fresh } = await api('restart', session.id);
+        seedSession(client, fresh);
         refresh();
         useUi.getState().select(fresh.id, 'terminal');
         toast('success', `Restarted as ${callsign(fresh)}`);

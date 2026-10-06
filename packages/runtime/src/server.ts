@@ -215,7 +215,10 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
   const noteInput = (sessionId: string, data: string): void => {
     const session = store.get(sessionId);
     if (session === null || !hooks.hasHooks(sessionId)) return;
-    const answeredPrompt = session.overlay === 'waiting_permission';
+    // Enter, a single key like "1" or "y", or Escape answers a prompt. Terminal
+    // reports (focus, cursor position) and arrow keys while choosing do not.
+    const answer = data.includes('\r') || /^[\x20-\x7e]$/.test(data) || data === '\x1b';
+    const answeredPrompt = session.overlay === 'waiting_permission' && answer;
     const submittedReply = session.overlay === 'waiting_input' && data.includes('\r');
     if (answeredPrompt || submittedReply) applyOverlay(sessionId, 'working', 'pty', null);
   };
@@ -389,7 +392,8 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       sessionId: id,
       provider: input.provider,
       args: input.args,
-      requested: input.statusHooks
+      requested: input.statusHooks,
+      env
     });
     let pid: number;
     try {
@@ -746,10 +750,20 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       });
       return;
     }
+    if (session.commandLine.some((part) => part.includes('[REDACTED]'))) {
+      await fail(reply, {
+        status: 409,
+        code: 'restart_unsafe',
+        message: 'this command line held a secret that was redacted, so it cannot be replayed',
+        hint: 'Start a new session with the full command instead.'
+      });
+      return;
+    }
     const [command, ...args] = session.commandLine;
     const result = await spawnSession({
       provider: session.provider,
-      command: session.provider === 'generic' ? command : undefined,
+      // Keep a custom binary for agents too (for example a pinned claude path).
+      command: command !== undefined && command !== effectiveCommand(session.provider) ? command : undefined,
       args,
       cwd: session.cwd,
       title: session.title,

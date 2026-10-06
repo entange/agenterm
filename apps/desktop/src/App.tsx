@@ -90,10 +90,15 @@ export function App(): React.JSX.Element {
   };
   useDaemonWiring(onCommand);
 
-  // A selected session that was closed elsewhere falls back to the control room.
+  // A selected session that was closed elsewhere falls back to the control
+  // room, but only once the list has shown it and then lost it.
+  const seenIds = React.useRef(new Set<string>());
   React.useEffect(() => {
-    if (selectedId !== null && sessionsQuery.isSuccess && selected === null) useUi.getState().select(null);
-  }, [selected, selectedId, sessionsQuery.isSuccess]);
+    for (const session of sessions) seenIds.current.add(session.id);
+    if (selectedId !== null && selected === null && seenIds.current.has(selectedId) && !sessionsQuery.isFetching) {
+      useUi.getState().select(null);
+    }
+  }, [sessions, selected, selectedId, sessionsQuery.isFetching]);
 
   if (getBridge() === null) {
     return (

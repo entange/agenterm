@@ -5,6 +5,7 @@ import { getBridge } from '../lib/bridge.js';
 import { useLive } from '../lib/live.js';
 import { useToasts } from '../lib/toast.js';
 import { useUi } from '../lib/ui.js';
+import { shortcut } from '../lib/shortcuts.js';
 
 /** Inset title bar: drag region, palette trigger, activity toggle. */
 export function TitleBar(): React.JSX.Element {
@@ -27,12 +28,12 @@ export function TitleBar(): React.JSX.Element {
       >
         <Search className="size-3.5" />
         Jump to a session or run an action
-        <Kbd className="ml-auto">⌘K</Kbd>
+        <Kbd className="ml-auto">{shortcut('K')}</Kbd>
       </button>
       <div className="no-drag">
         <IconButton
           label={railOpen ? 'Hide activity' : 'Show activity'}
-          shortcut="⌘J"
+          shortcut={shortcut('J')}
           onClick={toggleRail}
           className={railOpen ? 'text-ink' : undefined}
         >

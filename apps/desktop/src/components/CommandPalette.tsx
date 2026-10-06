@@ -9,6 +9,7 @@ import { callsign } from '../../shared/callsign.js';
 import { getBridge } from '../lib/bridge.js';
 import { isLive, shortPath } from '../lib/format.js';
 import { useUi } from '../lib/ui.js';
+import { shortcut } from '../lib/shortcuts.js';
 
 const itemClass =
   'flex h-9 cursor-default items-center gap-2.5 rounded-md px-2.5 text-[13px] text-ink data-[selected=true]:bg-accent-soft data-[selected=true]:text-ink';
@@ -82,7 +83,8 @@ export function CommandPalette({
                 className="[&_[cmdk-group-heading]]:eyebrow [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-ink-faint"
               >
                 <Command.Item value="new session start agent" onSelect={() => run(onNewSession)} className={itemClass}>
-                  <Plus className="size-3.5 text-ink-faint" /> New session <Kbd className="ml-auto">⌘N</Kbd>
+                  <Plus className="size-3.5 text-ink-faint" /> New session{' '}
+                  <Kbd className="ml-auto">{shortcut('N')}</Kbd>
                 </Command.Item>
                 <Command.Item
                   value="control room home overview"
@@ -90,11 +92,11 @@ export function CommandPalette({
                   className={itemClass}
                 >
                   <LayoutGrid className="size-3.5 text-ink-faint" /> Go to control room{' '}
-                  <Kbd className="ml-auto">⇧⌘H</Kbd>
+                  <Kbd className="ml-auto">{shortcut('H', { shift: true })}</Kbd>
                 </Command.Item>
                 <Command.Item value="toggle activity rail feed" onSelect={() => run(toggleRail)} className={itemClass}>
                   <Activity className="size-3.5 text-ink-faint" /> Show or hide activity{' '}
-                  <Kbd className="ml-auto">⌘J</Kbd>
+                  <Kbd className="ml-auto">{shortcut('J')}</Kbd>
                 </Command.Item>
                 {selected !== undefined && isLive(selected) ? (
                   <Command.Item

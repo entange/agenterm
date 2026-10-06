@@ -197,9 +197,16 @@ export class DaemonLink {
   /** Stop the daemon on explicit user request. Ends every spawned session. */
   async stop(): Promise<boolean> {
     const lock = readLock();
+    // Only signal a pid the daemon itself confirms; a stale lock's pid may be reused.
+    const health =
+      lock === null
+        ? null
+        : await this.client()
+            .health()
+            .catch(() => null);
     this.userStopped = true;
     this.closeSocket();
-    if (lock === null || !pidAlive(lock.pid)) {
+    if (lock === null || !pidAlive(lock.pid) || health?.pid !== lock.pid) {
       this.setInfo({ state: 'stopped', version: null, detail: 'The daemon is stopped.' });
       return false;
     }

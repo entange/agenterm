@@ -85,6 +85,14 @@ export async function acquireLock(options: {
       return { lock: existing, isOwner: false };
     }
     if (existing !== null || fs.existsSync(file)) {
+      // Remove the stale lock only if it is still the one judged stale.
+      const again = readLockFile(file);
+      if (
+        again !== null &&
+        existing !== null &&
+        (again.pid !== existing.pid || again.startedAtMs !== existing.startedAtMs)
+      )
+        continue;
       fs.rmSync(file, { force: true });
     }
     const port = await getPort({ port: desired });
@@ -94,12 +102,18 @@ export async function acquireLock(options: {
       tokenHash: tokenHash(options.token),
       startedAtMs: Date.now()
     };
+    // Write the full lock beside the target, then hard-link it into place: the link
+    // fails if another starter got there first, and readers never see a partial file.
+    const temp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify(lock, null, 2), { mode: 0o600 });
     try {
-      fs.writeFileSync(file, JSON.stringify(lock, null, 2), { flag: 'wx', mode: 0o600 });
+      fs.linkSync(temp, file);
       return { lock, isOwner: true };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
       // Another starter won the race; loop to read its lock.
+    } finally {
+      fs.rmSync(temp, { force: true });
     }
   }
   const winner = readLockFile(file);

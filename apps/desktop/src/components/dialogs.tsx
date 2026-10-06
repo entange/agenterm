@@ -9,7 +9,7 @@ import { folderName, isLive, PROVIDER_NAMES, shortPath, splitArgs } from '../lib
 import { useUi } from '../lib/ui.js';
 import { toast } from '../lib/toast.js';
 import { useQueryClient } from '@tanstack/react-query';
-import { keys } from '../lib/queries.js';
+import { keys, seedSession } from '../lib/queries.js';
 
 const PROVIDERS: AgentProvider[] = ['claude', 'codex', 'gemini', 'opencode', 'generic'];
 
@@ -108,6 +108,7 @@ function NewSessionForm({
     try {
       const { session } = await api('spawn', request);
       useUi.getState().rememberCwd(request.cwd);
+      seedSession(client, session);
       void client.invalidateQueries({ queryKey: keys.sessions });
       useUi.getState().select(session.id, 'terminal');
       toast('success', `Started ${callsign(session)}`, session.title);

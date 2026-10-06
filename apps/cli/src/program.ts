@@ -133,6 +133,22 @@ export function buildProgram(deps: CliDeps): Command {
       }
     };
 
+  /**
+   * The lock's pid only counts when the daemon on the lock's port answers
+   * with that same pid. A crash leaves a lock behind, and the pid may since
+   * belong to an unrelated process that must never be signaled.
+   */
+  const runningDaemon = async (): Promise<{ pid: number; port: number; version: string } | null> => {
+    const lock = readLock();
+    if (lock === null || !pidAlive(lock.pid)) return null;
+    const health = await deps
+      .client()
+      .health()
+      .catch(() => null);
+    if (health === null || health.pid !== lock.pid) return null;
+    return { pid: lock.pid, port: lock.port, version: health.version };
+  };
+
   const confirm = async (question: string): Promise<boolean> => {
     const answer = (await deps.ask(`${question} [y/N] `)).toLowerCase();
     return answer === 'y' || answer === 'yes';
@@ -177,9 +193,9 @@ export function buildProgram(deps: CliDeps): Command {
     .description('Start the daemon in the background if it is not running')
     .action(
       run(async () => {
-        const lock = readLock();
-        if (lock !== null && pidAlive(lock.pid)) {
-          deps.out(`daemon already running (pid ${lock.pid}, port ${lock.port}).`);
+        const running = await runningDaemon();
+        if (running !== null) {
+          deps.out(`daemon already running (pid ${running.pid}, port ${running.port}).`);
           return;
         }
         const entry = daemonEntry();
@@ -206,8 +222,8 @@ export function buildProgram(deps: CliDeps): Command {
     );
 
   const stopDaemon = async (opts: { yes?: boolean }): Promise<void> => {
-    const lock = readLock();
-    if (lock === null || !pidAlive(lock.pid)) {
+    const lock = await runningDaemon();
+    if (lock === null) {
       deps.out('daemon not running.');
       return;
     }

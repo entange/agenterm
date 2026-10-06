@@ -172,7 +172,11 @@ export function isTerminalEventKind(kind: AgentermEvent['kind']): boolean {
   return kind === 'terminal.output' || kind === 'terminal.input';
 }
 
-/** Events delivered live only: terminal bytes and high-frequency counters. */
+/**
+ * Events delivered live only: terminal bytes and high-frequency signals.
+ * File edits can arrive by the thousand during a checkout or build, so they
+ * stay out of SQLite; the daemon keeps a per-session summary for the Files view.
+ */
 export function isLiveOnlyEventKind(kind: AgentermEvent['kind']): boolean {
-  return isTerminalEventKind(kind) || kind === 'session.usage';
+  return isTerminalEventKind(kind) || kind === 'session.usage' || kind === 'file.changed';
 }

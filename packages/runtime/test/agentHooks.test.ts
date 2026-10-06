@@ -75,8 +75,7 @@ describe('AgentHooks.prepare', () => {
       'PostToolUseFailure',
       'Notification',
       'Stop',
-      'StopFailure',
-      'SessionEnd'
+      'StopFailure'
     ]);
     expect(claude.args.slice(2)).toEqual(['--model', 'opus']);
     const codex = hooks.prepare({ sessionId: SESSION, provider: 'codex', args: [], requested: true });

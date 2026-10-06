@@ -37,6 +37,8 @@ const NEEDS_REPLY: ReadonlySet<string> = new Set([
  * PermissionRequest (or a permission_prompt notification) means it waits
  * for approval; idle and input notifications mean it waits for a reply;
  * Stop means it finished its turn; StopFailure means the turn failed.
+ * SessionEnd also fires on /clear and /resume, so it is ignored; the
+ * process exit is the truth for an ended session.
  * Other notification types (auth, quota, ...) and unknown events change
  * nothing.
  */
@@ -66,8 +68,6 @@ export function claudeHookStatus(payload: unknown): HookStatus | null {
       return { overlay: 'waiting_input', summary: clip(record['last_assistant_message']) ?? 'Finished its turn' };
     case 'StopFailure':
       return { overlay: 'failed', summary: clip(record['error']) ?? 'The turn ended with an error' };
-    case 'SessionEnd':
-      return { overlay: 'completed', summary: null };
     default:
       return null;
   }
@@ -98,8 +98,7 @@ const CLAUDE_EVENTS = [
   'PostToolUseFailure',
   'Notification',
   'Stop',
-  'StopFailure',
-  'SessionEnd'
+  'StopFailure'
 ] as const;
 const TOOL_EVENTS: ReadonlySet<string> = new Set(['PermissionRequest', 'PostToolUse', 'PostToolUseFailure']);
 

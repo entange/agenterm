@@ -242,10 +242,12 @@ export class Supervisor {
       this.byPid = new Map();
       return;
     }
-    [procs, socks] = await Promise.all([
-      this.probes.processes().catch(() => []),
-      this.probes.sockets().catch(() => [])
-    ]);
+    try {
+      [procs, socks] = await Promise.all([this.probes.processes(), this.probes.sockets()]);
+    } catch {
+      // A failed probe keeps the previous snapshot; an empty one would fake closed ports.
+      return;
+    }
     const kids = new Map<number, number[]>();
     const byPid = new Map<number, ProcEntry>();
     for (const entry of procs) {
@@ -321,7 +323,15 @@ export class Supervisor {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const survivors = targets.filter((pid) => pidAlive(pid));
     if (survivors.length > 0) {
-      await treeKillAsync(leaderPid, 'SIGKILL');
+      // Signal survivors by pid: children of a dead leader are reparented and
+      // a tree walk from the leader would no longer find them.
+      for (const pid of survivors) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // Exited in between.
+        }
+      }
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
     return targets;

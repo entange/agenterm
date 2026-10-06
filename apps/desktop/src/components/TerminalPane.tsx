@@ -61,11 +61,23 @@ function currentTheme(): ITheme {
   return document.documentElement.classList.contains('dark') ? DARK : LIGHT;
 }
 
-/** Keys that belong to the app, not the program running in the terminal. */
+const MAC = navigator.platform.startsWith('Mac');
+
+/**
+ * App shortcuts go to the menu, everything else to the program. macOS app
+ * keys use Cmd; elsewhere they use Ctrl+Shift (or Alt+digit), so readline
+ * keys like Ctrl+K, Ctrl+N, Ctrl+F, and Ctrl+[ always reach the terminal.
+ */
 function isAppShortcut(event: KeyboardEvent): boolean {
-  if (!(event.metaKey || event.ctrlKey) || event.altKey) return false;
-  if (!event.metaKey && navigator.platform.startsWith('Mac')) return false;
-  return /^[knj[\]1-9f]$/i.test(event.key) || (event.shiftKey && event.key.toLowerCase() === 'h');
+  const key = event.key.toLowerCase();
+  if (MAC) return event.metaKey && !event.ctrlKey && (/^[knjf[\]1-9]$/.test(key) || (event.shiftKey && key === 'h'));
+  if (event.altKey && !event.ctrlKey && /^[1-9]$/.test(key)) return true;
+  return event.ctrlKey && event.shiftKey && !event.altKey && /^[knjfh[\]{}]$/.test(key);
+}
+
+function isFindShortcut(event: KeyboardEvent): boolean {
+  if (event.type !== 'keydown' || event.key.toLowerCase() !== 'f') return false;
+  return MAC ? event.metaKey && !event.ctrlKey : event.ctrlKey && event.shiftKey;
 }
 
 const TAIL_BYTES = 512 * 1024;
@@ -127,7 +139,7 @@ export function TerminalPane({
     );
     term.open(host);
     term.attachCustomKeyEventHandler((event) => {
-      if (event.type === 'keydown' && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+      if (isFindShortcut(event)) {
         setSearchOpen(true);
         return false;
       }
@@ -175,11 +187,14 @@ export function TerminalPane({
     });
     bridge.subscribeOutput(sessionId);
 
+    let retry: ReturnType<typeof setTimeout> | null = null;
     const catchUp = async (): Promise<void> => {
       try {
         await pageFrom(lastSeq);
       } catch {
-        // Reconnect will retry.
+        // Keep buffering and try again: flushing now would skip the missing range for good.
+        if (!disposed) retry = setTimeout(() => void catchUp(), 1000);
+        return;
       }
       if (disposed) return;
       buffered.sort((a, b) => a.seq - b.seq).forEach(write);
@@ -232,6 +247,7 @@ export function TerminalPane({
 
     return () => {
       disposed = true;
+      if (retry !== null) clearTimeout(retry);
       offEvent();
       offConnection();
       bridge.unsubscribeOutput(sessionId);
