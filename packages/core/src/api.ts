@@ -67,6 +67,11 @@ export interface SpawnSessionRequest {
   rows?: number;
   /** Environment overrides. Secrets-blocklist keys are rejected. */
   env?: Record<string, string>;
+  /**
+   * Let the agent push its own status (Claude Code hooks, Codex notify)
+   * to this session. Defaults to true; ignored for generic commands.
+   */
+  statusHooks?: boolean;
 }
 
 /** POST /sessions spawn response. */

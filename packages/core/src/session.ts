@@ -35,8 +35,12 @@ export type SessionLifecycleStatus = 'created' | 'starting' | 'running' | 'exite
 export type SessionOverlayStatus =
   'unknown' | 'working' | 'waiting_input' | 'waiting_permission' | 'completed' | 'failed';
 
-/** Source of the overlay value. pty is local truth, others are overlays. */
-export type OverlaySource = 'pty' | 'harness' | 'otel';
+/**
+ * Source of the overlay value. pty is local truth (including typing into
+ * the terminal), hooks are status pushes from the agent itself, harness
+ * is the opt-in transcript watcher, otel the telemetry sink.
+ */
+export type OverlaySource = 'pty' | 'hooks' | 'harness' | 'otel';
 
 /**
  * Session row. Central record.

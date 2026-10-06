@@ -134,6 +134,10 @@ export function parseSpawnSessionRequest(body: unknown): ValidationResult<SpawnS
       return { ok: false, code: 'invalid_env', message: 'env key or value out of range' };
     }
   }
+  const statusHooks = body['statusHooks'];
+  if (statusHooks !== undefined && typeof statusHooks !== 'boolean') {
+    return { ok: false, code: 'invalid_statusHooks', message: 'statusHooks must be a boolean' };
+  }
   const spawnValue: SpawnSessionRequest = {
     provider: provider.value,
     args: args as string[],
@@ -147,6 +151,9 @@ export function parseSpawnSessionRequest(body: unknown): ValidationResult<SpawnS
   }
   if (typeof title === 'string') {
     spawnValue.title = title;
+  }
+  if (typeof statusHooks === 'boolean') {
+    spawnValue.statusHooks = statusHooks;
   }
   return {
     ok: true,

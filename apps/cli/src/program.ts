@@ -338,6 +338,7 @@ export function buildProgram(deps: CliDeps): Command {
     .option('--cols <cols>', 'terminal width', '120')
     .option('--rows <rows>', 'terminal height', '32')
     .option('--env <entry...>', 'environment override as KEY=VALUE')
+    .option('--no-status-hooks', 'do not let Claude Code or Codex push their status to agenterm')
     .action(
       run(
         async (opts: {
@@ -349,6 +350,7 @@ export function buildProgram(deps: CliDeps): Command {
           cols?: string;
           rows?: string;
           env?: string[];
+          statusHooks: boolean;
         }) => {
           const providerParsed = parseAgentProvider(opts.provider ?? 'generic');
           if (!providerParsed.ok) throw new CliError(providerParsed.message);
@@ -362,7 +364,8 @@ export function buildProgram(deps: CliDeps): Command {
             provider: providerParsed.value,
             cwd: path.resolve(opts.cwd ?? process.cwd()),
             args: opts.args ?? [],
-            env
+            env,
+            statusHooks: opts.statusHooks
           };
           if (typeof opts.command === 'string') req.command = opts.command;
           if (typeof opts.title === 'string') req.title = opts.title;

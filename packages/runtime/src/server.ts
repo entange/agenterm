@@ -19,10 +19,13 @@ import {
   redactText,
   type AgentProvider,
   type FileChangeRecord,
+  type OverlaySource,
+  type SessionOverlayStatus,
   type SessionRecord,
   type SessionSignalName
 } from '@agenterm/core';
 import { ActivityMeter } from './activity.js';
+import { AgentHooks, agentHooksEnabled, claudeHookStatus, codexNotifyStatus } from './agentHooks.js';
 import { checkBearer } from './auth.js';
 import { effectiveCommand, PROVIDER_INSTALL_HINTS, resolveBinary } from './binary.js';
 import { CommandTracker } from './commands.js';
@@ -65,6 +68,18 @@ export interface CreateAppOptions {
   pidAlive?: ((pid: number) => boolean) | undefined;
   /** Attached-leader liveness poll. Defaults to 2000 ms. */
   livenessIntervalMs?: number | undefined;
+  /** Agent status hooks. Defaults to on unless AGENTERM_AGENT_HOOKS=0. */
+  hooks?: AgentHooks | undefined;
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** Daemon helpers shared with the event stream. */
+    agenterm: {
+      /** Typing into a waiting agent means the user answered it. */
+      noteInput: (sessionId: string, data: string) => void;
+    };
+  }
 }
 
 type Failure = { status: number; code: string; message: string; hint?: string | undefined };
@@ -141,6 +156,7 @@ interface SpawnInput {
   cols: number;
   rows: number;
   env: Record<string, string>;
+  statusHooks: boolean;
 }
 
 /** Build the Fastify app. Localhost binding happens in index. */
@@ -178,6 +194,30 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
   const fileWatch = options.fileWatch ?? new FileWatch();
   const pty = options.pty ?? new PtyManager({ dataDir });
   const activity = new ActivityMeter();
+  const hooks = options.hooks ?? new AgentHooks({ port: options.port, enabled: agentHooksEnabled() });
+
+  /** Set the overlay and publish agent.status when it actually changes. */
+  const applyOverlay = (
+    sessionId: string,
+    overlay: SessionOverlayStatus,
+    source: OverlaySource,
+    summary: string | null
+  ): void => {
+    const before = store.get(sessionId);
+    if (before === null || before.overlay === overlay) return;
+    const updated = store.setOverlay(sessionId, overlay, source);
+    if (updated === null || updated.overlay !== overlay) return;
+    bus.publish({ id: '', sessionId, createdAtMs: Date.now(), kind: 'agent.status', overlay, source, summary });
+  };
+
+  const noteInput = (sessionId: string, data: string): void => {
+    const session = store.get(sessionId);
+    if (session === null || !hooks.hasHooks(sessionId)) return;
+    const answeredPrompt = session.overlay === 'waiting_permission';
+    const submittedReply = session.overlay === 'waiting_input' && data.includes('\r');
+    if (answeredPrompt || submittedReply) applyOverlay(sessionId, 'working', 'pty', null);
+  };
+  app.decorate('agenterm', { noteInput });
 
   fileWatch.onChange = (change) => {
     const session = store.get(change.sessionId);
@@ -244,6 +284,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
   pty.onExit = (sessionId, exit) => {
     const record = store.get(sessionId);
     void pty.get(sessionId)?.log.close();
+    hooks.forget(sessionId);
     stopTracking(sessionId);
     try {
       trackers.get(sessionId)?.closeAll();
@@ -342,12 +383,18 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       typeof input.title === 'string' && input.title.trim().length > 0
         ? input.title.trim().slice(0, 200)
         : `${input.provider === 'generic' ? path.basename(command) : input.provider} · ${path.basename(input.cwd) || input.cwd}`;
+    const launch = hooks.prepare({
+      sessionId: id,
+      provider: input.provider,
+      args: input.args,
+      requested: input.statusHooks
+    });
     let pid: number;
     try {
       const managed = pty.spawn({
         sessionId: id,
         file: resolved,
-        args: input.args,
+        args: launch.args,
         cwd: input.cwd,
         env,
         cols: input.cols,
@@ -355,6 +402,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       });
       pid = managed.pid;
     } catch (error) {
+      hooks.forget(id);
       return {
         status: 500,
         code: 'spawn_failed',
@@ -414,11 +462,14 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     inputSeq.delete(session.id);
     fileChanges.delete(session.id);
     activity.forget(session.id);
+    hooks.forget(session.id);
     store.remove(session.id);
   };
 
   app.addHook('onRequest', async (request, reply) => {
     if (request.method === 'GET' && request.url === '/health') return;
+    // Agent status pushes carry their own per-session token, checked in the route.
+    if (request.method === 'POST' && request.url.startsWith('/ingest/')) return;
     if (!checkBearer(authOf(request), options.token)) {
       await fail(reply, { status: 401, code: 'unauthorized', message: 'missing or invalid bearer token' });
     }
@@ -500,7 +551,8 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       title: body.title,
       cols: body.cols ?? 80,
       rows: body.rows ?? 24,
-      env
+      env,
+      statusHooks: body.statusHooks ?? true
     });
     if ('status' in result) {
       await fail(reply, result);
@@ -672,7 +724,8 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       title: session.title,
       cols: session.cols,
       rows: session.rows,
-      env: {}
+      env: {},
+      statusHooks: true
     });
     if ('status' in result) {
       await fail(reply, result);
@@ -706,6 +759,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       await fail(reply, { status: 409, code: 'exited', message: 'session already exited' });
       return;
     }
+    noteInput(session.id, parsed.value.data);
     const seq = (inputSeq.get(session.id) ?? 0) + 1;
     inputSeq.set(session.id, seq);
     bus.publish({
@@ -871,6 +925,23 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       return { sessionId: session.id, commands: tracker.rows().reverse().slice(0, limit) };
     }
     return { sessionId: session.id, commands: commandsDb?.forSession(session.id, limit) ?? [] };
+  });
+
+  app.post('/ingest/:provider/:id', async (request, reply) => {
+    const params = request.params as Record<string, unknown>;
+    const idParsed = parseSessionIdParam(params['id']);
+    const provider = params['provider'];
+    if (!idParsed.ok || (provider !== 'claude' && provider !== 'codex')) {
+      await fail(reply, { status: 404, code: 'unknown_ingest', message: 'no such ingest endpoint' });
+      return;
+    }
+    if (!hooks.verify(idParsed.value, authOf(request))) {
+      await fail(reply, { status: 401, code: 'unauthorized', message: 'invalid ingest token' });
+      return;
+    }
+    const status = provider === 'claude' ? claudeHookStatus(request.body) : codexNotifyStatus(request.body);
+    if (status !== null) applyOverlay(idParsed.value, status.overlay, 'hooks', status.summary);
+    await reply.code(204).send();
   });
 
   app.get('/sessions/:id/git', async (request, reply) => {

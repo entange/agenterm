@@ -114,7 +114,13 @@ async function main(): Promise<void> {
     dataDir: dir
   });
   await app.listen({ host: '127.0.0.1', port: lock.port });
-  const stream = new EventStream({ server: app.server, token, bus, pty });
+  const stream = new EventStream({
+    server: app.server,
+    token,
+    bus,
+    pty,
+    onInput: (sessionId, data) => app.agenterm.noteInput(sessionId, data)
+  });
   supervisor.start();
   watch.start();
   log.info({ port: lock.port, harnessWatch: watch.isEnabled() }, 'daemon listening');

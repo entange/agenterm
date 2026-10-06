@@ -17,6 +17,7 @@ export const headers = { authorization: `Bearer ${TOKEN}` };
 export interface FakePty extends PtyHandle {
   written: string[];
   signals: string[];
+  spawnArgs: string[];
   spawnEnv: Record<string, string>;
   emitData: (data: string) => void;
   emitExit: (code: number, signal?: number) => void;
@@ -29,13 +30,14 @@ export function rig(overrides: Partial<CreateAppOptions> = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agenterm-rig-'));
   const pty = new PtyManager({
     dataDir,
-    spawnFn: (_file, _args, opts) => {
+    spawnFn: (_file, args, opts) => {
       let dataCb: ((data: string) => void) | null = null;
       let exitCb: ((event: { exitCode: number; signal?: number }) => void) | null = null;
       const fake: FakePty = {
         pid: pid++,
         written: [],
         signals: [],
+        spawnArgs: args,
         spawnEnv: opts.env,
         onData: (cb) => {
           dataCb = cb;
