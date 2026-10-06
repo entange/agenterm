@@ -170,10 +170,11 @@ export class PtyManager {
     entry.handle.kill(signal);
   }
 
-  forget(sessionId: string): void {
+  /** Drop the session's PTY record. Resolves after its log file is closed. */
+  forget(sessionId: string): Promise<void> {
     const entry = this.sessions.get(sessionId);
-    if (entry === undefined) return;
-    entry.record.log.close();
+    if (entry === undefined) return Promise.resolve();
     this.sessions.delete(sessionId);
+    return entry.record.log.close();
   }
 }

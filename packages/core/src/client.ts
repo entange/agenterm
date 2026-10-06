@@ -1,4 +1,5 @@
 import type {
+  ActivityResponse,
   AttachSessionRequest,
   AttachSessionResponse,
   DeleteSessionRequest,
@@ -211,6 +212,10 @@ export class AgentermClient {
 
   files(id: string): Promise<FileChangesResponse> {
     return this.request('GET', this.sessionPath(id, '/files'));
+  }
+
+  activity(): Promise<ActivityResponse> {
+    return this.request('GET', '/activity');
   }
 
   events(query: EventsQuery = {}): Promise<EventsResponse> {

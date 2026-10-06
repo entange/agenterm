@@ -144,7 +144,7 @@ async function main(): Promise<void> {
       } catch {
         // Already gone.
       }
-      managed.log.close();
+      void managed.log.close();
     }
     try {
       await app.close();

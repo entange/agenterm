@@ -264,6 +264,23 @@ export interface EventsResponse {
   events: import('./event.js').AgentermEvent[];
 }
 
+/** Output heartbeat for one session over the recent window. */
+export interface SessionActivity {
+  /** Output bytes per second, oldest first. Length is the window in seconds. */
+  samples: number[];
+  /** Last visible line of output, escape codes removed, or null. */
+  lastLine: string | null;
+  /** Time of the most recent output, or null when none was seen. */
+  lastOutputAtMs: number | null;
+}
+
+/** GET /activity response. Sessions with no recorded output are omitted. */
+export interface ActivityResponse {
+  /** End of the window; the last sample covers the second before this. */
+  atMs: number;
+  sessions: Record<string, SessionActivity>;
+}
+
 /** One changed path in a git working tree. Letters follow git porcelain. */
 export interface GitFileState {
   /** Path relative to the worktree root. */

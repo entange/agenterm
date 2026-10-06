@@ -117,7 +117,7 @@ describe('rename, restart, and history', () => {
     last()?.emitExit(0);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(fs.existsSync(path.join(dataDir, 'sessions', session.id, 'terminal.log'))).toBe(true);
-    pty.forget(session.id);
+    await pty.forget(session.id);
     const res = await app.inject({ method: 'GET', url: `/sessions/${session.id}/output`, headers });
     const body = res.json() as { chunks: Array<{ data: string }>; live: boolean };
     expect(body.live).toBe(false);

@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import si from 'systeminformation';
 import treeKill from 'tree-kill';
 import type { PortRecord, ProcessSnapshot } from '@agenterm/core';
@@ -24,7 +26,42 @@ export interface SupervisorProbes {
   sockets: () => Promise<SockEntry[]>;
 }
 
+const execFileAsync = promisify(execFile);
+
+/** Parse `ps -o pid=,ppid=,pcpu=,rss=,args=`. RSS is in KiB. Exported for tests. */
+export function parsePsProcesses(stdout: string): ProcEntry[] {
+  const out: ProcEntry[] = [];
+  for (const line of stdout.split('\n')) {
+    const match = /^\s*(\d+)\s+(\d+)\s+([\d.]+)\s+(\d+)\s+(.*)$/.exec(line);
+    if (match === null) continue;
+    out.push({
+      pid: Number(match[1]),
+      ppid: Number(match[2]),
+      cpuPercent: Number(match[3]),
+      rssBytes: Number(match[4]) * 1024,
+      command: (match[5] ?? '').trim()
+    });
+  }
+  return out;
+}
+
+/**
+ * Process table with full argv. One `ps` call on POSIX is far cheaper than
+ * systeminformation's scan and reports real command lines instead of
+ * display names; Windows falls back to systeminformation.
+ */
 async function defaultProcesses(): Promise<ProcEntry[]> {
+  if (process.platform !== 'win32') {
+    try {
+      const { stdout } = await execFileAsync('ps', ['-axww', '-o', 'pid=,ppid=,pcpu=,rss=,args='], {
+        timeout: 5000,
+        maxBuffer: 32 * 1024 * 1024
+      });
+      return parsePsProcesses(stdout);
+    } catch {
+      // Fall through to the portable scan.
+    }
+  }
   const result = await si.processes();
   const out: ProcEntry[] = [];
   for (const entry of result.list ?? []) {
@@ -40,7 +77,49 @@ async function defaultProcesses(): Promise<ProcEntry[]> {
   return out;
 }
 
+/** Parse `lsof -nP -iTCP -sTCP:LISTEN -Fpn` field output. Exported for tests. */
+export function parseLsofListeners(stdout: string): SockEntry[] {
+  const out: SockEntry[] = [];
+  const seen = new Set<string>();
+  let pid = 0;
+  for (const line of stdout.split('\n')) {
+    if (line.startsWith('p')) {
+      pid = Number(line.slice(1));
+      continue;
+    }
+    if (!line.startsWith('n') || pid <= 0) continue;
+    const name = line.slice(1);
+    const cut = name.lastIndexOf(':');
+    const port = Number(name.slice(cut + 1));
+    if (cut === -1 || !Number.isInteger(port) || port < 1 || port > 65535) continue;
+    const rawAddress = name.slice(0, cut).replace(/^\[|\]$/g, '');
+    const address = rawAddress === '*' ? '0.0.0.0' : rawAddress;
+    const key = `${pid}:${port}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ port, pid, address });
+  }
+  return out;
+}
+
+/**
+ * Listening TCP sockets. POSIX asks lsof for listeners only, which is a
+ * fraction of the cost of a full connection scan.
+ */
 async function defaultSockets(): Promise<SockEntry[]> {
+  if (process.platform !== 'win32') {
+    try {
+      const { stdout } = await execFileAsync('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'], {
+        timeout: 5000,
+        maxBuffer: 16 * 1024 * 1024
+      });
+      return parseLsofListeners(stdout);
+    } catch (error) {
+      // lsof exits 1 when nothing is listening.
+      const stdout = (error as { stdout?: string }).stdout;
+      if (typeof stdout === 'string') return parseLsofListeners(stdout);
+    }
+  }
   const result = await si.networkConnections();
   const out: SockEntry[] = [];
   for (const entry of result ?? []) {
@@ -143,20 +222,30 @@ export class Supervisor {
     return out;
   }
 
-  /** Run one poll cycle. Scoped reads; never throws. */
-  async poll(): Promise<void> {
+  private inFlight: Promise<void> | null = null;
+
+  /** Run one poll cycle. Concurrent callers share the cycle in flight; never throws. */
+  poll(): Promise<void> {
+    if (this.inFlight !== null) return this.inFlight;
+    this.inFlight = this.pollOnce().finally(() => {
+      this.inFlight = null;
+    });
+    return this.inFlight;
+  }
+
+  private async pollOnce(): Promise<void> {
     let procs: ProcEntry[] = [];
     let socks: SockEntry[] = [];
-    try {
-      procs = await this.probes.processes();
-    } catch {
-      procs = [];
+    // Skip the system scan entirely while nothing is tracked.
+    if (this.leaders.size === 0) {
+      this.children = new Map();
+      this.byPid = new Map();
+      return;
     }
-    try {
-      socks = await this.probes.sockets();
-    } catch {
-      socks = [];
-    }
+    [procs, socks] = await Promise.all([
+      this.probes.processes().catch(() => []),
+      this.probes.sockets().catch(() => [])
+    ]);
     const kids = new Map<number, number[]>();
     const byPid = new Map<number, ProcEntry>();
     for (const entry of procs) {

@@ -92,3 +92,23 @@ describe('Supervisor killTree with a live sleeper', () => {
     expect(gone).toEqual([]);
   });
 });
+
+describe('parsePsProcesses', () => {
+  it('reads pid, ppid, cpu, rss, and full argv', async () => {
+    const { parsePsProcesses } = await import('../src/supervisor.js');
+    expect(parsePsProcesses('  42     1  12.5  2048 /usr/bin/python3 -m http.server 8765\nbad line\n')).toEqual([
+      { pid: 42, ppid: 1, cpuPercent: 12.5, rssBytes: 2048 * 1024, command: '/usr/bin/python3 -m http.server 8765' }
+    ]);
+  });
+});
+
+describe('parseLsofListeners', () => {
+  it('joins pid records with listening names and dedupes v4/v6', async () => {
+    const { parseLsofListeners } = await import('../src/supervisor.js');
+    expect(parseLsofListeners('p603\nf9\nn*:7000\nf10\nn*:7000\np653\nf10\nn127.0.0.1:60384\nn[::1]:5432\n')).toEqual([
+      { port: 7000, pid: 603, address: '0.0.0.0' },
+      { port: 60384, pid: 653, address: '127.0.0.1' },
+      { port: 5432, pid: 653, address: '::1' }
+    ]);
+  });
+});

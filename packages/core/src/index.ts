@@ -9,6 +9,8 @@ export type {
   DiscoverCandidate,
   DiscoverResponse,
   ErrorEnvelope,
+  ActivityResponse,
+  SessionActivity,
   EventsQuery,
   EventsResponse,
   FileChangeRecord,
@@ -91,3 +93,4 @@ export {
   parseUpdateSessionRequest
 } from './validation.js';
 export type { WorkspaceRecord } from './workspace.js';
+export { lastVisibleLine } from './terminalText.js';

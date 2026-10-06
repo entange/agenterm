@@ -22,6 +22,7 @@ import {
   type SessionRecord,
   type SessionSignalName
 } from '@agenterm/core';
+import { ActivityMeter } from './activity.js';
 import { checkBearer } from './auth.js';
 import { effectiveCommand, PROVIDER_INSTALL_HINTS, resolveBinary } from './binary.js';
 import { CommandTracker } from './commands.js';
@@ -176,6 +177,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
   const watch = options.watch ?? new HarnessWatch({ enabled: harnessWatchEnabled(), dataDir, store, bus });
   const fileWatch = options.fileWatch ?? new FileWatch();
   const pty = options.pty ?? new PtyManager({ dataDir });
+  const activity = new ActivityMeter();
 
   fileWatch.onChange = (change) => {
     const session = store.get(change.sessionId);
@@ -224,6 +226,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     const managed = pty.get(sessionId);
     const seq = managed?.log.latestSeq() ?? 0;
     bus.publish({ id: '', sessionId, createdAtMs: Date.now(), kind: 'terminal.output', seq, data });
+    activity.record(sessionId, data);
     try {
       trackers.get(sessionId)?.feed(data);
     } catch {
@@ -233,7 +236,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
 
   pty.onExit = (sessionId, exit) => {
     const record = store.get(sessionId);
-    pty.get(sessionId)?.log.close();
+    void pty.get(sessionId)?.log.close();
     stopTracking(sessionId);
     try {
       trackers.get(sessionId)?.closeAll();
@@ -396,12 +399,14 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
   };
 
   /** Drop every in-memory trace of a session and remove its row and files. */
-  const forgetSession = (session: SessionRecord): void => {
-    pty.forget(session.id);
+  const forgetSession = async (session: SessionRecord): Promise<void> => {
+    // Wait for the terminal mirror to close so deleting the folder cannot race its last write.
+    await pty.forget(session.id);
     stopTracking(session.id);
     trackers.delete(session.id);
     inputSeq.delete(session.id);
     fileChanges.delete(session.id);
+    activity.forget(session.id);
     store.remove(session.id);
   };
 
@@ -436,11 +441,17 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
         .filter((session) => isLiveSession(session))
         .map((session) => [session.pid, session.id] as const)
     );
-    return {
-      candidates: candidates.map((candidate) => ({ ...candidate, sessionId: byPid.get(candidate.pid) ?? null })),
-      scannedAtMs: Date.now()
-    };
+    const resolved = await Promise.all(
+      candidates.map(async (candidate) => ({
+        ...candidate,
+        cwd: candidate.cwd ?? (await cwdResolver(candidate.pid)),
+        sessionId: byPid.get(candidate.pid) ?? null
+      }))
+    );
+    return { candidates: resolved, scannedAtMs: Date.now() };
   });
+
+  app.get('/activity', async () => activity.snapshot());
 
   app.get('/events', async (request, reply) => {
     const parsed = parseEventsQuery(request.query ?? {});
@@ -619,7 +630,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     }
     // Publish before removal so the event's jsonl mirror does not recreate the deleted folder.
     bus.publish({ id: '', sessionId: session.id, createdAtMs: Date.now(), kind: 'session.detached', pid: session.pid });
-    forgetSession(session);
+    await forgetSession(session);
     return { detached: true, killed: false, pid: session.pid };
   });
 
@@ -655,7 +666,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       return;
     }
     bus.publish({ id: '', sessionId: session.id, createdAtMs: Date.now(), kind: 'session.detached', pid: session.pid });
-    forgetSession(session);
+    await forgetSession(session);
     await reply.code(201).send(result);
   });
 

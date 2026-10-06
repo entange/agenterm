@@ -116,9 +116,16 @@ export class TerminalLog {
     };
   }
 
-  close(): void {
-    this.file?.end();
+  /** Stop mirroring. Resolves once buffered bytes are flushed and the file is closed. */
+  close(): Promise<void> {
+    const file = this.file;
     this.file = null;
+    if (file === null || file.closed) return Promise.resolve();
+    return new Promise((resolve) => {
+      file.once('close', () => resolve());
+      file.once('error', () => resolve());
+      file.end();
+    });
   }
 }
 
