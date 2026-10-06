@@ -25,7 +25,8 @@ Done and verified:
 Not done yet:
 
 - Windows: paths validate and binaries resolve, but signals and the supervisor are POSIX-first and untested on Windows.
-- Full supervisor history (stored CPU/memory snapshots, full-text output search).
+- Full supervisor history (stored CPU/memory snapshots). Output search covers retained output only (ring and the last
+  2 MB of each terminal.log), not an index.
 - ACP client.
 - Gemini and opencode status (no documented hook mechanism yet; output heartbeat only).
 - Signed and notarized release builds need credentials.

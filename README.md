@@ -32,6 +32,7 @@ which ports they opened, and what they cost.
   happen.
 - **Attach read-only** to agents you started in another terminal, with their real working directory, ports, and changes.
 - **Native notifications** and a dock badge when an agent waits on you, plus a tray menu.
+- **Search every agent's output** from the command palette, the CLI, or MCP.
 - **CLI and MCP server**, so you (or another agent) can do everything from a terminal.
 
 ## Quick start
@@ -71,6 +72,7 @@ Session ids accept unique prefixes, like git hashes.
 | `rename`, `restart`                        | Rename, or start an ended session again with the same command                |
 | `discover`, `attach <pid>`                 | Find agents started elsewhere and watch one read-only                        |
 | `git <id>`, `diff <id> <file>`, `files <id>` | Workspace changes                                                          |
+| `grep <text>`                              | Search every session's output                                                |
 | `commands <id>`, `events`, `usage`         | Inferred command history, activity feed, model spend                         |
 | `mcp`                                      | Serve the Model Context Protocol on stdio                                    |
 
@@ -81,7 +83,8 @@ claude mcp add agenterm -- agenterm mcp
 codex mcp add agenterm -- agenterm mcp
 ```
 
-Tools: `list_sessions`, `get_session`, `read_output` (plain text, secrets redacted, resumable), `send_input`,
+Tools: `list_sessions`, `get_session`, `read_output` (plain text, secrets redacted, resumable), `search_output`,
+`send_input`,
 `interrupt`, `kill_session` (requires the exact pid), and `recent_activity`.
 
 ## Agent integration and privacy
