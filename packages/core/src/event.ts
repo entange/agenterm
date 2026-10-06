@@ -103,6 +103,14 @@ export interface WorkspaceConflictEvent extends EventBase {
   involvedSessionIds: string[];
 }
 
+/** File changed inside a watched session cwd. Debounced by the watcher. */
+export interface FileChangedEvent extends EventBase {
+  kind: 'file.changed';
+  /** Workspace-relative path where resolvable, else the absolute path. */
+  path: string;
+  change: 'added' | 'modified' | 'deleted';
+}
+
 /**
  * Full event union.
  *
@@ -122,7 +130,8 @@ export type AgentermEvent =
   | AgentStatusEvent
   | PortOpenedEvent
   | PortClosedEvent
-  | WorkspaceConflictEvent;
+  | WorkspaceConflictEvent
+  | FileChangedEvent;
 
 /** Stored event row backing the Activity views. Append-only. */
 export interface EventRow {
