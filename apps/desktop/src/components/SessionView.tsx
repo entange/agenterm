@@ -1,5 +1,16 @@
 import type { SessionRecord } from '@agenterm/core';
-import { Button, cn, IconButton, signalBg, signalText, Tabs, TabsContent, TabsList, TabsTrigger, Tooltip } from '@agenterm/ui';
+import {
+  Button,
+  cn,
+  IconButton,
+  signalBg,
+  signalText,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  Tooltip
+} from '@agenterm/ui';
 import { Eye, FolderOpen, GitBranch, Octagon, RotateCcw, Square, X } from 'lucide-react';
 import * as React from 'react';
 import { acknowledgementKey, type Attention } from '../../shared/attention.js';
@@ -15,7 +26,13 @@ import { TerminalPane } from './TerminalPane.js';
 import { Trace } from './Trace.js';
 
 /** One session: identity and controls on top, the work below in tabs. */
-export function SessionView({ session, attention }: { session: SessionRecord; attention: Attention | undefined }): React.JSX.Element {
+export function SessionView({
+  session,
+  attention
+}: {
+  session: SessionRecord;
+  attention: Attention | undefined;
+}): React.JSX.Element {
   const tab = useUi((state) => state.tab);
   const setTab = useUi((state) => state.setTab);
   const acknowledge = useUi((state) => state.acknowledge);
@@ -97,7 +114,13 @@ export function SessionView({ session, attention }: { session: SessionRecord; at
   );
 }
 
-function SessionHeader({ session, attention }: { session: SessionRecord; attention: Attention | undefined }): React.JSX.Element {
+function SessionHeader({
+  session,
+  attention
+}: {
+  session: SessionRecord;
+  attention: Attention | undefined;
+}): React.JSX.Element {
   const act = useActions();
   const openDialog = useUi((state) => state.openDialog);
   const samples = useLive((state) => state.traces[session.id]);
@@ -154,8 +177,20 @@ function SessionHeader({ session, attention }: { session: SessionRecord; attenti
             </h1>
           </Tooltip>
         )}
-        <span className={cn('flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11.5px]', 'border-line', signalText[signal])}>
-          <span className={cn('size-1.5 rounded-full', signalBg[signal], attention?.group === 'needs-you' && 'attn-breathe')} />
+        <span
+          className={cn(
+            'flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11.5px]',
+            'border-line',
+            signalText[signal]
+          )}
+        >
+          <span
+            className={cn(
+              'size-1.5 rounded-full',
+              signalBg[signal],
+              attention?.group === 'needs-you' && 'attn-breathe'
+            )}
+          />
           {attention?.reason ?? session.lifecycle}
         </span>
         {live && session.origin === 'spawned' ? (
@@ -163,7 +198,12 @@ function SessionHeader({ session, attention }: { session: SessionRecord; attenti
         ) : null}
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {live && session.origin === 'spawned' ? (
-            <Button size="sm" tone="quiet" onClick={() => void act.interrupt(session)} title="Send Ctrl+C to the running program">
+            <Button
+              size="sm"
+              tone="quiet"
+              onClick={() => void act.interrupt(session)}
+              title="Send Ctrl+C to the running program"
+            >
               <Octagon className="size-3.5" /> Ctrl+C
             </Button>
           ) : null}
@@ -190,7 +230,10 @@ function SessionHeader({ session, attention }: { session: SessionRecord; attenti
         </div>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 pl-[1px] text-[12px] text-ink-muted">
-        <span>{PROVIDER_NAMES[session.provider]}{session.origin === 'attached' ? ' · attached read-only' : ''}</span>
+        <span>
+          {PROVIDER_NAMES[session.provider]}
+          {session.origin === 'attached' ? ' · attached read-only' : ''}
+        </span>
         {session.branch === null ? null : (
           <span className="flex items-center gap-1">
             <GitBranch className="size-3" /> {session.branch}
@@ -207,9 +250,14 @@ function SessionHeader({ session, attention }: { session: SessionRecord; attenti
         </button>
         <span className="font-mono text-[11.5px]">pid {session.pid}</span>
         <span>
-          {live ? `started ${formatAge(session.startedAtMs)} ago` : `ended ${formatAge(session.endedAtMs ?? session.startedAtMs)} ago`}
+          {live
+            ? `started ${formatAge(session.startedAtMs)} ago`
+            : `ended ${formatAge(session.endedAtMs ?? session.startedAtMs)} ago`}
         </span>
-        <span className="selectable truncate font-mono text-[11px] text-ink-faint" title={session.commandLine.join(' ')}>
+        <span
+          className="selectable truncate font-mono text-[11px] text-ink-faint"
+          title={session.commandLine.join(' ')}
+        >
           $ {session.commandLine.join(' ')}
         </span>
       </div>
@@ -249,10 +297,12 @@ function AttachedPanel({ session }: { session: SessionRecord }): React.JSX.Eleme
       <div className="max-w-md rounded-xl border border-line bg-panel p-6">
         <div className="eyebrow mb-2 text-ink-faint">Attached read-only</div>
         <p className="text-[13.5px] text-ink">
-          agenterm is watching pid {session.pid}, but it did not start this process, so there is no terminal to show or type into.
+          agenterm is watching pid {session.pid}, but it did not start this process, so there is no terminal to show or
+          type into.
         </p>
         <p className="mt-2 text-[12.5px] text-ink-muted">
-          Its process tree, open ports, git changes, and file edits are tracked here. Use the terminal you started it in to talk to it.
+          Its process tree, open ports, git changes, and file edits are tracked here. Use the terminal you started it in
+          to talk to it.
         </p>
         <div className="mt-4 flex gap-2">
           <Button size="sm" tone="secondary" onClick={() => setTab('processes')}>

@@ -11,14 +11,7 @@ import {
   type SpawnSessionRequest
 } from '@agenterm/core';
 import { Command } from 'commander';
-import {
-  daemonEntry,
-  daemonLogTail,
-  dataDir,
-  pidAlive,
-  readLock,
-  startDaemonProcess
-} from './local.js';
+import { daemonEntry, daemonLogTail, dataDir, pidAlive, readLock, startDaemonProcess } from './local.js';
 
 /** Side effects the program needs. Tests inject stubs. */
 export interface CliDeps {
@@ -58,7 +51,10 @@ export function table(rows: string[][]): string[] {
     });
   }
   return rows.map((row) =>
-    row.map((cell, i) => (i === row.length - 1 ? cell : cell.padEnd(widths[i] ?? 0))).join('  ').trimEnd()
+    row
+      .map((cell, i) => (i === row.length - 1 ? cell : cell.padEnd(widths[i] ?? 0)))
+      .join('  ')
+      .trimEnd()
   );
 }
 
@@ -169,7 +165,9 @@ export function buildProgram(deps: CliDeps): Command {
           .client()
           .health()
           .catch(() => null);
-        deps.out(`daemon pid=${lock.pid} port=${lock.port} ${health === null ? 'not answering' : `healthy (${health.version})`}`);
+        deps.out(
+          `daemon pid=${lock.pid} port=${lock.port} ${health === null ? 'not answering' : `healthy (${health.version})`}`
+        );
       })
     );
 
@@ -496,7 +494,10 @@ export function buildProgram(deps: CliDeps): Command {
             confirmPid = Number(typed);
           }
           if (confirmPid !== session.pid) throw new CliError('pid did not match; nothing was killed');
-        } else if (opts.yes !== true && !(await confirm(`Kill "${session.title}" (pid ${session.pid}) and its children?`))) {
+        } else if (
+          opts.yes !== true &&
+          !(await confirm(`Kill "${session.title}" (pid ${session.pid}) and its children?`))
+        ) {
           deps.out('cancelled.');
           return;
         }
@@ -562,7 +563,12 @@ export function buildProgram(deps: CliDeps): Command {
         );
         for (const file of status.files) {
           const index = file.staged === null ? ' ' : (file.staged[0] ?? ' ').toUpperCase();
-          const work = file.unstaged === null ? ' ' : file.unstaged === 'untracked' ? '?' : (file.unstaged[0] ?? ' ').toUpperCase();
+          const work =
+            file.unstaged === null
+              ? ' '
+              : file.unstaged === 'untracked'
+                ? '?'
+                : (file.unstaged[0] ?? ' ').toUpperCase();
           deps.out(`${index}${work} ${file.path}`);
         }
       })

@@ -33,7 +33,11 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
-const link = new DaemonLink({ loginEnv: loadLoginEnv(), isPackaged: app.isPackaged, resourcesPath: process.resourcesPath });
+const link = new DaemonLink({
+  loginEnv: loadLoginEnv(),
+  isPackaged: app.isPackaged,
+  resourcesPath: process.resourcesPath
+});
 /** Terminal output subscriptions per renderer, keyed by webContents id. */
 const outputSubscriptions = new Map<number, Set<string>>();
 let tray: Tray | null = null;
@@ -49,7 +53,10 @@ function preferencesFile(): string {
 
 function readPreferences(): Preferences {
   try {
-    return { ...DEFAULT_PREFERENCES, ...(JSON.parse(fs.readFileSync(preferencesFile(), 'utf8')) as Partial<Preferences>) };
+    return {
+      ...DEFAULT_PREFERENCES,
+      ...(JSON.parse(fs.readFileSync(preferencesFile(), 'utf8')) as Partial<Preferences>)
+    };
   } catch {
     return { ...DEFAULT_PREFERENCES };
   }
@@ -125,7 +132,8 @@ function createWindow(): BrowserWindow {
   });
   if (devUrl !== undefined) void win.loadURL(devUrl);
   else void win.loadFile(path.join(here, '..', 'renderer', 'index.html'));
-  if (!app.isPackaged && process.env['AGENTERM_CAPTURE'] !== undefined) captureForDevelopment(win, process.env['AGENTERM_CAPTURE']);
+  if (!app.isPackaged && process.env['AGENTERM_CAPTURE'] !== undefined)
+    captureForDevelopment(win, process.env['AGENTERM_CAPTURE']);
   return win;
 }
 
@@ -141,7 +149,9 @@ function captureForDevelopment(win: BrowserWindow, file: string): void {
       await wait(Number(process.env['AGENTERM_CAPTURE_DELAY'] ?? '4000'));
       const script = process.env['AGENTERM_CAPTURE_SCRIPT'];
       if (script !== undefined) {
-        await win.webContents.executeJavaScript(script).catch((error: unknown) => console.error('capture script failed', error));
+        await win.webContents
+          .executeJavaScript(script)
+          .catch((error: unknown) => console.error('capture script failed', error));
         await wait(Number(process.env['AGENTERM_CAPTURE_SETTLE'] ?? '1500'));
       }
       const image = await win.webContents.capturePage();
@@ -170,7 +180,12 @@ function failure(error: unknown): ApiFailure {
   }
   const message = error instanceof Error ? error.message : String(error);
   if (/ECONNREFUSED|fetch failed/.test(message)) {
-    return { status: 0, code: 'daemon_offline', message: 'The daemon is not reachable.', hint: 'It restarts automatically; try again in a moment.' };
+    return {
+      status: 0,
+      code: 'daemon_offline',
+      message: 'The daemon is not reachable.',
+      hint: 'It restarts automatically; try again in a moment.'
+    };
   }
   return { status: 0, code: 'internal', message };
 }
@@ -240,7 +255,9 @@ function registerIpc(): void {
 }
 
 async function confirmAndStopDaemon(): Promise<boolean> {
-  const running = monitor.list().filter((session) => session.lifecycle === 'running' && session.origin === 'spawned').length;
+  const running = monitor
+    .list()
+    .filter((session) => session.lifecycle === 'running' && session.origin === 'spawned').length;
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     buttons: ['Stop daemon', 'Cancel'],
@@ -286,11 +303,21 @@ function buildAppMenu(): void {
         { label: 'Control Room', accelerator: 'CmdOrCtrl+Shift+H', click: () => sendCommand({ kind: 'home' }) },
         { label: 'Activity', accelerator: 'CmdOrCtrl+J', click: () => sendCommand({ kind: 'toggle-activity' }) },
         { type: 'separator' },
-        { label: 'Previous Session', accelerator: 'CmdOrCtrl+[', click: () => sendCommand({ kind: 'cycle-session', delta: -1 }) },
-        { label: 'Next Session', accelerator: 'CmdOrCtrl+]', click: () => sendCommand({ kind: 'cycle-session', delta: 1 }) },
+        {
+          label: 'Previous Session',
+          accelerator: 'CmdOrCtrl+[',
+          click: () => sendCommand({ kind: 'cycle-session', delta: -1 })
+        },
+        {
+          label: 'Next Session',
+          accelerator: 'CmdOrCtrl+]',
+          click: () => sendCommand({ kind: 'cycle-session', delta: 1 })
+        },
         { label: 'Go to Session', submenu: jump },
         { type: 'separator' },
-        ...(app.isPackaged ? [] : [{ role: 'reload' as const }, { role: 'toggleDevTools' as const }, { type: 'separator' as const }]),
+        ...(app.isPackaged
+          ? []
+          : [{ role: 'reload' as const }, { role: 'toggleDevTools' as const }, { type: 'separator' as const }]),
         { role: 'resetZoom' },
         { role: 'zoomIn' },
         { role: 'zoomOut' },
@@ -313,7 +340,9 @@ function buildAppMenu(): void {
 function buildTrayMenu(sessions: SessionRecord[]): void {
   if (tray === null) return;
   const live = sessions.filter((session) => session.lifecycle === 'running');
-  const waiting = live.filter((session) => session.overlay === 'waiting_permission' || session.overlay === 'waiting_input');
+  const waiting = live.filter(
+    (session) => session.overlay === 'waiting_permission' || session.overlay === 'waiting_input'
+  );
   const summary =
     live.length === 0
       ? 'No agents running'

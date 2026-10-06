@@ -108,10 +108,7 @@ export const processes = sqliteTable(
     exitCode: integer('exit_code'),
     sampledAtMs: integer('sampled_at_ms').notNull()
   },
-  (table) => [
-    index('processes_session_idx').on(table.sessionId),
-    index('processes_sampled_idx').on(table.sampledAtMs)
-  ]
+  (table) => [index('processes_session_idx').on(table.sessionId), index('processes_sampled_idx').on(table.sampledAtMs)]
 );
 
 export const commands = sqliteTable(
@@ -127,10 +124,7 @@ export const commands = sqliteTable(
     exitCode: integer('exit_code'),
     outputLineCount: integer('output_line_count')
   },
-  (table) => [
-    index('commands_session_idx').on(table.sessionId),
-    index('commands_started_idx').on(table.startedAtMs)
-  ]
+  (table) => [index('commands_session_idx').on(table.sessionId), index('commands_started_idx').on(table.startedAtMs)]
 );
 
 export const events = sqliteTable(
@@ -142,10 +136,7 @@ export const events = sqliteTable(
     payloadJson: text('payload_json').notNull(),
     createdAtMs: integer('created_at_ms').notNull()
   },
-  (table) => [
-    index('events_session_idx').on(table.sessionId),
-    index('events_time_idx').on(table.createdAtMs)
-  ]
+  (table) => [index('events_session_idx').on(table.sessionId), index('events_time_idx').on(table.createdAtMs)]
 );
 
 /** All tables in dependency order for schema creation. */

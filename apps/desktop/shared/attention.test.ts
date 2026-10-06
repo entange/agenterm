@@ -47,7 +47,9 @@ describe('attentionOf', () => {
     expect(attentionOf(failed, { nowMs: NOW }).group).toBe('needs-you');
     expect(attentionOf(failed, { nowMs: NOW, acknowledged: true }).group).toBe('ended');
     expect(attentionOf(row({ lifecycle: 'exited', exitCode: 0 }), { nowMs: NOW }).group).toBe('ended');
-    expect(attentionOf(row({ lifecycle: 'killed', exitSignal: 'SIGTERM' }), { nowMs: NOW }).reason).toBe('Killed (SIGTERM)');
+    expect(attentionOf(row({ lifecycle: 'killed', exitSignal: 'SIGTERM' }), { nowMs: NOW }).reason).toBe(
+      'Killed (SIGTERM)'
+    );
     expect(attentionOf(row({ lifecycle: 'crashed' }), { nowMs: NOW }).group).toBe('needs-you');
   });
 });

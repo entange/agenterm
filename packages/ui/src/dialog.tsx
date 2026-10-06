@@ -36,7 +36,9 @@ export function Dialog({
             {description === undefined ? (
               <DialogPrimitive.Description className="sr-only">{title}</DialogPrimitive.Description>
             ) : (
-              <DialogPrimitive.Description className="mt-1 text-[12.5px] text-ink-muted">{description}</DialogPrimitive.Description>
+              <DialogPrimitive.Description className="mt-1 text-[12.5px] text-ink-muted">
+                {description}
+              </DialogPrimitive.Description>
             )}
           </div>
           {children}
@@ -47,7 +49,13 @@ export function Dialog({
 }
 
 /** Dialog body padding. */
-export function DialogBody({ children, className }: { children: React.ReactNode; className?: string }): React.JSX.Element {
+export function DialogBody({
+  children,
+  className
+}: {
+  children: React.ReactNode;
+  className?: string;
+}): React.JSX.Element {
   return <div className={cn('px-5 py-4', className)}>{children}</div>;
 }
 

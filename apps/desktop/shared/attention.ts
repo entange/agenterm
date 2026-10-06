@@ -41,16 +41,20 @@ export function attentionOf(
 ): Attention {
   const live = session.lifecycle === 'running' || session.lifecycle === 'starting' || session.lifecycle === 'created';
   if (live) {
-    if (session.overlay === 'waiting_permission') return { group: 'needs-you', reason: 'Waiting for your approval', signal: 'attn' };
-    if (session.overlay === 'waiting_input') return { group: 'needs-you', reason: 'Waiting for your reply', signal: 'attn' };
+    if (session.overlay === 'waiting_permission')
+      return { group: 'needs-you', reason: 'Waiting for your approval', signal: 'attn' };
+    if (session.overlay === 'waiting_input')
+      return { group: 'needs-you', reason: 'Waiting for your reply', signal: 'attn' };
     if (session.overlay === 'failed') return { group: 'needs-you', reason: 'Reported a failure', signal: 'fail' };
     if (session.origin === 'attached') {
       return session.overlay === 'working'
         ? { group: 'working', reason: 'Working (attached)', signal: 'work' }
         : { group: 'quiet', reason: `Watching pid ${session.pid}`, signal: 'idle' };
     }
-    const since = context.lastOutputAtMs === undefined ? Number.POSITIVE_INFINITY : context.nowMs - context.lastOutputAtMs;
-    if (session.overlay === 'working' || since <= WORKING_WINDOW_MS) return { group: 'working', reason: 'Working', signal: 'work' };
+    const since =
+      context.lastOutputAtMs === undefined ? Number.POSITIVE_INFINITY : context.nowMs - context.lastOutputAtMs;
+    if (session.overlay === 'working' || since <= WORKING_WINDOW_MS)
+      return { group: 'working', reason: 'Working', signal: 'work' };
     if (session.overlay === 'completed') return { group: 'quiet', reason: 'Finished its task', signal: 'ok' };
     const quietMs = Number.isFinite(since) ? since : context.nowMs - session.startedAtMs;
     return { group: 'quiet', reason: quietFor(quietMs), signal: 'idle' };
@@ -60,13 +64,21 @@ export function attentionOf(
     return { group: acknowledged ? 'ended' : 'needs-you', reason: 'Lost when the daemon stopped', signal: 'fail' };
   }
   if (session.lifecycle === 'killed') {
-    return { group: 'ended', reason: `Killed${session.exitSignal === null ? '' : ` (${session.exitSignal})`}`, signal: 'idle' };
+    return {
+      group: 'ended',
+      reason: `Killed${session.exitSignal === null ? '' : ` (${session.exitSignal})`}`,
+      signal: 'idle'
+    };
   }
   if (session.exitSignal !== null) {
     return { group: acknowledged ? 'ended' : 'needs-you', reason: `Ended by ${session.exitSignal}`, signal: 'fail' };
   }
   if (session.exitCode !== null && session.exitCode !== 0) {
-    return { group: acknowledged ? 'ended' : 'needs-you', reason: `Exited with code ${session.exitCode}`, signal: 'fail' };
+    return {
+      group: acknowledged ? 'ended' : 'needs-you',
+      reason: `Exited with code ${session.exitCode}`,
+      signal: 'fail'
+    };
   }
   return { group: 'ended', reason: 'Finished', signal: 'ok' };
 }

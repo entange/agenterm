@@ -58,10 +58,7 @@ export function newestFiles(dir: string, suffix: string, cap: number): string[] 
  * Tries each line newest-first as JSON, then falls back to the raw blob.
  * Never throws: unparseable input yields unknown via the core parser.
  */
-export function parseTail(
-  text: string | null,
-  parse: (payload: unknown) => HarnessParseOutcome
-): HarnessParseOutcome {
+export function parseTail(text: string | null, parse: (payload: unknown) => HarnessParseOutcome): HarnessParseOutcome {
   if (text === null || text.trim().length === 0) {
     return parse(null);
   }

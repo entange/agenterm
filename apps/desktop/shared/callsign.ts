@@ -17,7 +17,10 @@ export function callsign(session: { id: string; provider: AgentProvider; command
   let code = PROVIDER_CODES[session.provider];
   if (session.provider === 'generic') {
     const binary = (session.commandLine[0] ?? '').split(/[\\/]/).pop() ?? '';
-    const letters = binary.replace(/[^a-z0-9]/gi, '').slice(0, 3).toUpperCase();
+    const letters = binary
+      .replace(/[^a-z0-9]/gi, '')
+      .slice(0, 3)
+      .toUpperCase();
     if (letters.length > 0) code = letters;
   }
   return `${code}-${session.id.slice(0, 4).toUpperCase()}`;

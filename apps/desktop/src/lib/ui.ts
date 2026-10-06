@@ -2,9 +2,7 @@ import type { DiscoverCandidate, SessionRecord } from '@agenterm/core';
 import { create } from 'zustand';
 
 /** Confirmations that name exactly what will happen before it happens. */
-export type PendingDialog =
-  | { kind: 'kill'; session: SessionRecord }
-  | { kind: 'attach'; candidate: DiscoverCandidate };
+export type PendingDialog = { kind: 'kill'; session: SessionRecord } | { kind: 'attach'; candidate: DiscoverCandidate };
 
 export type SessionTab = 'terminal' | 'commands' | 'git' | 'files' | 'processes' | 'activity';
 export type ThemePreference = 'system' | 'dark' | 'light';
@@ -72,7 +70,8 @@ export const useUi = create<UiState>((set, get) => {
     newSessionOpen: false,
     dialog: null,
     openDialog: (dialog) => set({ dialog }),
-    select: (selectedId, tab) => set((state) => ({ selectedId, tab: tab ?? (selectedId === state.selectedId ? state.tab : 'terminal') })),
+    select: (selectedId, tab) =>
+      set((state) => ({ selectedId, tab: tab ?? (selectedId === state.selectedId ? state.tab : 'terminal') })),
     setTab: (tab) => set({ tab }),
     setFilter: (filter) => set({ filter }),
     setPaletteOpen: (paletteOpen) => set({ paletteOpen }),

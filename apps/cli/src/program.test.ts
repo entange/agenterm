@@ -37,11 +37,17 @@ function harness(routes: Record<string, unknown>, answers: string[] = []) {
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input));
     const method = init?.method ?? 'GET';
-    calls.push({ method, path: url.pathname + url.search, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) });
+    calls.push({
+      method,
+      path: url.pathname + url.search,
+      body: init?.body === undefined ? undefined : JSON.parse(String(init.body))
+    });
     const key = `${method} ${url.pathname}`;
     const body = routes[key];
     if (body === undefined) {
-      return new Response(JSON.stringify({ error: { code: 'not_found', message: `no route ${key}` } }), { status: 404 });
+      return new Response(JSON.stringify({ error: { code: 'not_found', message: `no route ${key}` } }), {
+        status: 404
+      });
     }
     if (body instanceof Response) return body;
     return new Response(JSON.stringify(body), { status: 200 });
@@ -68,7 +74,12 @@ describe('helpers', () => {
   it('formats ages, tables, and status labels', () => {
     expect(formatAge(0, 45_000)).toBe('45s');
     expect(formatAge(0, 3 * 3600_000)).toBe('3h');
-    expect(table([['A', 'BB'], ['CCC', 'D']])).toEqual(['A    BB', 'CCC  D']);
+    expect(
+      table([
+        ['A', 'BB'],
+        ['CCC', 'D']
+      ])
+    ).toEqual(['A    BB', 'CCC  D']);
     expect(statusLabel(session({ overlay: 'waiting_permission' }))).toBe('waiting permission');
     expect(statusLabel(session({ lifecycle: 'exited', exitCode: 2 }))).toBe('exited (2)');
     expect(statusLabel(session({ lifecycle: 'killed', exitCode: 0, exitSignal: 'SIGTERM' }))).toBe('killed (SIGTERM)');
@@ -99,7 +110,10 @@ describe('commands', () => {
     await declined.run('kill', '1111');
     expect(declined.calls.some((call) => call.method === 'DELETE')).toBe(false);
     const accepted = harness(
-      { 'GET /sessions': { sessions: [live] }, [`DELETE /sessions/${live.id}`]: { detached: false, killed: true, pid: 4321 } },
+      {
+        'GET /sessions': { sessions: [live] },
+        [`DELETE /sessions/${live.id}`]: { detached: false, killed: true, pid: 4321 }
+      },
       ['y']
     );
     await accepted.run('kill', '1111');
@@ -113,7 +127,10 @@ describe('commands', () => {
     await wrong.run('kill', '1111');
     expect(wrong.err.join('\n')).toContain('pid did not match');
     const right = harness(
-      { 'GET /sessions': { sessions: [attached] }, [`DELETE /sessions/${attached.id}`]: { detached: false, killed: true, pid: 4321 } },
+      {
+        'GET /sessions': { sessions: [attached] },
+        [`DELETE /sessions/${attached.id}`]: { detached: false, killed: true, pid: 4321 }
+      },
       ['4321']
     );
     await right.run('kill', '1111');
@@ -125,7 +142,9 @@ describe('commands', () => {
     const { run, err } = harness({
       'GET /sessions': { sessions: [live] },
       [`DELETE /sessions/${live.id}`]: new Response(
-        JSON.stringify({ error: { code: 'session_running', message: 'session is still running', hint: 'Kill it first.' } }),
+        JSON.stringify({
+          error: { code: 'session_running', message: 'session is still running', hint: 'Kill it first.' }
+        }),
         { status: 409 }
       )
     });

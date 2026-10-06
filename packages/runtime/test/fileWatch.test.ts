@@ -56,10 +56,12 @@ describe('FileWatch', () => {
       await waitFor(() => seen.some((entry) => entry.path.endsWith('real.txt')));
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(seen.every((entry) => !entry.path.includes('node_modules'))).toBe(true);
-      expect(seen.filter((entry) => entry.path.endsWith('real.txt')).map((entry) => entry.sessionId).sort()).toEqual([
-        's1',
-        's2'
-      ]);
+      expect(
+        seen
+          .filter((entry) => entry.path.endsWith('real.txt'))
+          .map((entry) => entry.sessionId)
+          .sort()
+      ).toEqual(['s1', 's2']);
       watch.untrack('s1');
       expect(watch.watcherCount()).toBe(1);
       watch.untrack('s2');

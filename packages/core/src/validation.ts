@@ -9,7 +9,7 @@ import type {
   SessionResizeRequest,
   SessionSignalRequest,
   SpawnSessionRequest,
-  UpdateSessionRequest,
+  UpdateSessionRequest
 } from './api.js';
 import type { SessionLifecycleStatus, SessionOverlayStatus } from './session.js';
 
@@ -20,12 +20,9 @@ import type { SessionLifecycleStatus, SessionOverlayStatus } from './session.js'
  * code plus a redacted human message. Validators never throw for malformed
  * input; they return the failure shape so routes can map to status codes.
  */
-export type ValidationResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; code: string; message: string };
+export type ValidationResult<T> = { ok: true; value: T } | { ok: false; code: string; message: string };
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const LIFECYCLES: readonly SessionLifecycleStatus[] = [
   'created',
@@ -64,12 +61,7 @@ function isUuid(value: unknown): value is string {
 }
 
 function isPid(value: unknown): value is number {
-  return (
-    typeof value === 'number' &&
-    Number.isInteger(value) &&
-    value > 0 &&
-    value <= 4_194_304
-  );
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 4_194_304;
 }
 
 function isPort(value: unknown): value is number {
@@ -87,7 +79,11 @@ export function parseAgentProvider(value: unknown): ValidationResult<AgentProvid
   }
   const found = (AGENT_PROVIDERS as readonly string[]).includes(value);
   if (!found) {
-    return { ok: false, code: 'invalid_provider', message: 'provider must be one of claude, codex, gemini, opencode, generic' };
+    return {
+      ok: false,
+      code: 'invalid_provider',
+      message: 'provider must be one of claude, codex, gemini, opencode, generic'
+    };
   }
   return { ok: true, value: value as AgentProvider };
 }

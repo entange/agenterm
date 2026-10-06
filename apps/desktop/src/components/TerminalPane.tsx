@@ -78,7 +78,13 @@ const TAIL_BYTES = 512 * 1024;
  * newer than what was written. After a reconnect, catch up from the last
  * written seq and say so if the ring already dropped some of it.
  */
-export function TerminalPane({ session, interactive }: { session: SessionRecord; interactive: boolean }): React.JSX.Element {
+export function TerminalPane({
+  session,
+  interactive
+}: {
+  session: SessionRecord;
+  interactive: boolean;
+}): React.JSX.Element {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const searchRef = React.useRef<SearchAddon | null>(null);
   const termRef = React.useRef<Terminal | null>(null);
@@ -281,7 +287,11 @@ function TerminalSearch({ search, onClose }: { search: SearchAddon | null; onClo
         value={query}
         onChange={(event) => {
           setQuery(event.target.value);
-          setFound(event.target.value.length === 0 ? null : (search?.findNext(event.target.value, { ...options, incremental: true }) ?? null));
+          setFound(
+            event.target.value.length === 0
+              ? null
+              : (search?.findNext(event.target.value, { ...options, incremental: true }) ?? null)
+          );
         }}
         onKeyDown={(event) => {
           if (event.key === 'Enter') run(event.shiftKey ? 'previous' : 'next');

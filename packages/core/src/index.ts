@@ -46,10 +46,7 @@ export { AgentermApiError, AgentermClient, daemonBaseUrl } from './client.js';
 export type { CommandRecord } from './command.js';
 export type { AgentermEvent, EventBase, EventRow } from './event.js';
 export { isTerminalEventKind } from './event.js';
-export type {
-  HarnessParseOutcome,
-  HarnessProvider
-} from './harness.js';
+export type { HarnessParseOutcome, HarnessProvider } from './harness.js';
 export {
   HARNESS_SUPPORTED_VERSIONS,
   parseClaudeHarnessPayload,
@@ -61,12 +58,7 @@ export {
 export type { MachineRecord, RegisterMachineInput } from './machine.js';
 export type { DiscoveredProcess, PortRecord, ProcessSnapshot } from './process.js';
 export type { CreateProjectInput, ProjectRecord } from './project.js';
-export {
-  isSecretEnvKey,
-  redactEnvForLog,
-  redactText,
-  stripSecretEnv
-} from './redaction.js';
+export { isSecretEnvKey, redactEnvForLog, redactText, stripSecretEnv } from './redaction.js';
 export type {
   OverlaySource,
   SessionLifecycleStatus,

@@ -44,7 +44,12 @@ describe('agentOf', () => {
 
   it('redacts tokens in candidate command lines', () => {
     const [found] = matchAgentCandidates([
-      { pid: 9, ppid: 1, command: 'claude --mcp-config {"headers":{"Authorization":"Bearer abcdefghijklmnop"}}', cwd: null }
+      {
+        pid: 9,
+        ppid: 1,
+        command: 'claude --mcp-config {"headers":{"Authorization":"Bearer abcdefghijklmnop"}}',
+        cwd: null
+      }
     ]);
     expect(found?.commandLine).not.toContain('abcdefghijklmnop');
   });

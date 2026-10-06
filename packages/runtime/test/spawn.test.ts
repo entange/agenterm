@@ -125,7 +125,11 @@ describe('POST /sessions spawn flow', () => {
     lastFake()?.emitData('hello-pty-bytes');
     const page = await app.inject({ method: 'GET', url: `/sessions/${id}/output`, headers });
     expect(page.statusCode).toBe(200);
-    const pageBody = page.json() as { chunks: Array<{ seq: number; data: string }>; resumeAfterSeq: number | null; hasMore: boolean };
+    const pageBody = page.json() as {
+      chunks: Array<{ seq: number; data: string }>;
+      resumeAfterSeq: number | null;
+      hasMore: boolean;
+    };
     expect(pageBody.chunks).toHaveLength(1);
     expect(pageBody.chunks[0]?.data).toBe('hello-pty-bytes');
     expect(pageBody.resumeAfterSeq).toBe(1);
@@ -293,7 +297,10 @@ describe('GET /sessions/:id/commands', () => {
     lastFake()?.emitData('sh-3.2$ bun test\nok 12 pass\nsh-3.2$ echo done\n');
     const res = await app.inject({ method: 'GET', url: `/sessions/${id}/commands`, headers });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { sessionId: string; commands: Array<{ text: string; durationMs: number | null; exitCode: number | null }> };
+    const body = res.json() as {
+      sessionId: string;
+      commands: Array<{ text: string; durationMs: number | null; exitCode: number | null }>;
+    };
     expect(body.sessionId).toBe(id);
     expect(body.commands.map((row) => row.text)).toEqual(['echo done', 'bun test']);
     expect(body.commands[1]?.exitCode).toBe(null);
@@ -302,9 +309,17 @@ describe('GET /sessions/:id/commands', () => {
 
   it('rejects bad limits and unknown sessions', async () => {
     const { app } = riggedApp();
-    const bad = await app.inject({ method: 'GET', url: '/sessions/00000000-0000-0000-0000-000000000000/commands?limit=9999', headers });
+    const bad = await app.inject({
+      method: 'GET',
+      url: '/sessions/00000000-0000-0000-0000-000000000000/commands?limit=9999',
+      headers
+    });
     expect([400, 404].includes(bad.statusCode)).toBe(true);
-    const missing = await app.inject({ method: 'GET', url: '/sessions/00000000-0000-0000-0000-000000000000/commands', headers });
+    const missing = await app.inject({
+      method: 'GET',
+      url: '/sessions/00000000-0000-0000-0000-000000000000/commands',
+      headers
+    });
     expect(missing.statusCode).toBe(404);
   });
 });

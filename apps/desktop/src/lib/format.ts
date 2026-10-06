@@ -63,7 +63,11 @@ export function describeEvent(event: AgentermEvent): string {
       return `Started ${event.commandLine.join(' ')}`;
     case 'session.exited':
       if (event.exitSignal !== null) return `Ended by ${event.exitSignal}`;
-      return event.exitCode === null ? 'Ended' : event.exitCode === 0 ? 'Finished cleanly' : `Exited with code ${event.exitCode}`;
+      return event.exitCode === null
+        ? 'Ended'
+        : event.exitCode === 0
+          ? 'Finished cleanly'
+          : `Exited with code ${event.exitCode}`;
     case 'session.attached':
       return `Attached to pid ${event.pid}`;
     case 'session.detached':

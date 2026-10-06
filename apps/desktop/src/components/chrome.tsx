@@ -13,7 +13,12 @@ export function TitleBar(): React.JSX.Element {
   const toggleRail = useUi((state) => state.toggleRail);
   const mac = getBridge()?.platform === 'darwin';
   return (
-    <div className={cn('drag flex h-11 shrink-0 items-center border-b border-line bg-panel pr-3', mac ? 'pl-[88px]' : 'pl-3')}>
+    <div
+      className={cn(
+        'drag flex h-11 shrink-0 items-center border-b border-line bg-panel pr-3',
+        mac ? 'pl-[88px]' : 'pl-3'
+      )}
+    >
       <span className="callsign text-[12px] text-ink-muted">agenterm</span>
       <button
         type="button"
@@ -25,7 +30,12 @@ export function TitleBar(): React.JSX.Element {
         <Kbd className="ml-auto">⌘K</Kbd>
       </button>
       <div className="no-drag">
-        <IconButton label={railOpen ? 'Hide activity' : 'Show activity'} shortcut="⌘J" onClick={toggleRail} className={railOpen ? 'text-ink' : undefined}>
+        <IconButton
+          label={railOpen ? 'Hide activity' : 'Show activity'}
+          shortcut="⌘J"
+          onClick={toggleRail}
+          className={railOpen ? 'text-ink' : undefined}
+        >
           <PanelRight className="size-4" />
         </IconButton>
       </div>
@@ -48,7 +58,9 @@ export function ConnectionBanner(): React.JSX.Element | null {
       )}
     >
       <span className={cn('size-1.5 rounded-full', starting ? 'bg-attn attn-breathe' : 'bg-fail')} />
-      <span className="flex-1">{connection.detail ?? (starting ? 'Connecting to the daemon…' : 'The daemon is offline.')}</span>
+      <span className="flex-1">
+        {connection.detail ?? (starting ? 'Connecting to the daemon…' : 'The daemon is offline.')}
+      </span>
       {connection.state === 'stopped' || connection.state === 'offline' ? (
         <Button
           size="sm"
@@ -83,12 +95,24 @@ export function Toaster(): React.JSX.Element {
             role={entry.tone === 'error' ? 'alert' : 'status'}
             className="pointer-events-auto flex gap-2.5 rounded-lg border border-line-strong bg-raised p-3 shadow-xl"
           >
-            <Icon className={cn('mt-0.5 size-4 shrink-0', entry.tone === 'error' ? 'text-fail' : entry.tone === 'success' ? 'text-ok' : 'text-accent')} />
+            <Icon
+              className={cn(
+                'mt-0.5 size-4 shrink-0',
+                entry.tone === 'error' ? 'text-fail' : entry.tone === 'success' ? 'text-ok' : 'text-accent'
+              )}
+            />
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-ink">{entry.title}</p>
-              {entry.detail === undefined ? null : <p className="mt-0.5 text-[12px] break-words text-ink-muted">{entry.detail}</p>}
+              {entry.detail === undefined ? null : (
+                <p className="mt-0.5 text-[12px] break-words text-ink-muted">{entry.detail}</p>
+              )}
             </div>
-            <button type="button" aria-label="Dismiss" onClick={() => dismiss(entry.id)} className="self-start text-ink-faint hover:text-ink">
+            <button
+              type="button"
+              aria-label="Dismiss"
+              onClick={() => dismiss(entry.id)}
+              className="self-start text-ink-faint hover:text-ink"
+            >
               <X className="size-3.5" />
             </button>
           </div>

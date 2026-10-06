@@ -154,10 +154,7 @@ export function parseGeminiHarnessPayload(_payload: unknown): HarnessParseOutcom
 }
 
 /** Dispatch helper used by the runtime watch loop. Never throws. */
-export function parseHarnessPayload(
-  provider: HarnessProvider,
-  payload: unknown
-): HarnessParseOutcome {
+export function parseHarnessPayload(provider: HarnessProvider, payload: unknown): HarnessParseOutcome {
   try {
     if (provider === 'claude') return parseClaudeHarnessPayload(payload);
     if (provider === 'codex') return parseCodexHarnessPayload(payload);

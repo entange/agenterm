@@ -21,10 +21,7 @@ const INTERNAL_KEYS: readonly string[] = [
 ];
 
 /** Build the spawn env from an inherited base plus validated overrides. */
-export function buildSpawnEnv(
-  base: NodeJS.ProcessEnv,
-  overrides: Record<string, string> = {}
-): Record<string, string> {
+export function buildSpawnEnv(base: NodeJS.ProcessEnv, overrides: Record<string, string> = {}): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(base)) {
     if (typeof value !== 'string') continue;

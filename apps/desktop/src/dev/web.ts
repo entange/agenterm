@@ -26,7 +26,8 @@ function connect(): void {
     if (kind === 'connection') connection = payload as ConnectionInfo;
     if (kind === 'event') {
       const event = payload as AgentermEvent;
-      if ((event.kind === 'terminal.output' || event.kind === 'terminal.input') && !subscribed.has(event.sessionId)) return;
+      if ((event.kind === 'terminal.output' || event.kind === 'terminal.input') && !subscribed.has(event.sessionId))
+        return;
     }
     for (const handler of handlers[kind]) (handler as Handler<unknown>)(payload);
   };
@@ -77,7 +78,13 @@ window.addEventListener('keydown', (event) => {
   if (!(event.metaKey || event.ctrlKey)) return;
   const key = event.key.toLowerCase();
   const command: AppCommand | null =
-    key === 'k' ? { kind: 'palette' } : key === 'j' ? { kind: 'toggle-activity' } : event.shiftKey && key === 'h' ? { kind: 'home' } : null;
+    key === 'k'
+      ? { kind: 'palette' }
+      : key === 'j'
+        ? { kind: 'toggle-activity' }
+        : event.shiftKey && key === 'h'
+          ? { kind: 'home' }
+          : null;
   if (command === null) return;
   event.preventDefault();
   for (const handler of handlers.command) handler(command);
@@ -103,7 +110,8 @@ if (select !== null || dialog !== null) {
   const timer = setInterval(() => {
     void bridge.call('listSessions').then((result) => {
       if (!result.ok) return;
-      const match = select === null ? undefined : result.value.sessions.find((session) => session.id.startsWith(select));
+      const match =
+        select === null ? undefined : result.value.sessions.find((session) => session.id.startsWith(select));
       if (match !== undefined) useUi.getState().select(match.id, (tab ?? 'terminal') as never);
       if (dialog === 'new') useUi.getState().setNewSessionOpen(true);
       if (dialog === 'palette') useUi.getState().setPaletteOpen(true);

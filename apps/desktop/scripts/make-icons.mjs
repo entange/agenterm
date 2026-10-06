@@ -119,7 +119,13 @@ function appIcon(size) {
     layers.push([roundedRect(254 * s, y, 22 * s, 132 * s, 0), band]);
   });
   const trace = [
-    [300, 328], [380, 328], [420, 290], [462, 372], [500, 300], [540, 328], [740, 328]
+    [300, 328],
+    [380, 328],
+    [420, 290],
+    [462, 372],
+    [500, 300],
+    [540, 328],
+    [740, 328]
   ].map(([x, y]) => [x * s, y * s]);
   layers.push([polyline(trace, 20 * s), '#F2B84B']);
   return render(size, layers);

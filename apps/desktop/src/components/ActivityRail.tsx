@@ -48,11 +48,18 @@ export function ActivityRail({ sessions }: { sessions: SessionRecord[] }): React
         </div>
       </div>
       <label className="flex items-center gap-2 border-b border-line px-4 py-1.5 text-[11.5px] text-ink-muted">
-        <input type="checkbox" checked={showFiles} onChange={(event) => setShowFiles(event.target.checked)} className="accent-[var(--accent)]" />
+        <input
+          type="checkbox"
+          checked={showFiles}
+          onChange={(event) => setShowFiles(event.target.checked)}
+          className="accent-[var(--accent)]"
+        />
         Include file edits
       </label>
       {events.length === 0 ? (
-        <p className="px-4 py-6 text-[12.5px] text-ink-muted">Starts, exits, status changes, and ports appear here as they happen.</p>
+        <p className="px-4 py-6 text-[12.5px] text-ink-muted">
+          Starts, exits, status changes, and ports appear here as they happen.
+        </p>
       ) : (
         <ul className="scroll-thin flex-1 overflow-y-auto px-4 py-1">
           {events.map((event) => {
@@ -61,7 +68,13 @@ export function ActivityRail({ sessions }: { sessions: SessionRecord[] }): React
               <EventRow
                 key={event.id}
                 event={event}
-                label={effectiveScope === 'all' ? (session === undefined ? event.sessionId.slice(0, 8) : callsign(session)) : undefined}
+                label={
+                  effectiveScope === 'all'
+                    ? session === undefined
+                      ? event.sessionId.slice(0, 8)
+                      : callsign(session)
+                    : undefined
+                }
                 onOpen={session === undefined ? undefined : () => select(session.id)}
               />
             );

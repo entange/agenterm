@@ -6,8 +6,18 @@ export const Tabs = TabsPrimitive.Root;
 export const TabsContent = TabsPrimitive.Content;
 
 /** Underlined tab strip. Arrow keys move between tabs. */
-export function TabsList({ children, className }: { children: React.ReactNode; className?: string }): React.JSX.Element {
-  return <TabsPrimitive.List className={cn('flex items-end gap-1 border-b border-line px-3', className)}>{children}</TabsPrimitive.List>;
+export function TabsList({
+  children,
+  className
+}: {
+  children: React.ReactNode;
+  className?: string;
+}): React.JSX.Element {
+  return (
+    <TabsPrimitive.List className={cn('flex items-end gap-1 border-b border-line px-3', className)}>
+      {children}
+    </TabsPrimitive.List>
+  );
 }
 
 export function TabsTrigger({
@@ -26,7 +36,9 @@ export function TabsTrigger({
     >
       {children}
       {badge === undefined || badge === null ? null : (
-        <span className="rounded bg-sunken px-1 font-mono text-[10px] text-ink-muted group-data-[state=active]:text-ink">{badge}</span>
+        <span className="rounded bg-sunken px-1 font-mono text-[10px] text-ink-muted group-data-[state=active]:text-ink">
+          {badge}
+        </span>
       )}
     </TabsPrimitive.Trigger>
   );

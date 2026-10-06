@@ -19,15 +19,7 @@ function main() {
     }
     for (const entry of entries) {
       if (!entry.startsWith('node-pty@')) continue;
-      const helper = path.join(
-        root,
-        entry,
-        'node_modules',
-        'node-pty',
-        'prebuilds',
-        'darwin-arm64',
-        'spawn-helper'
-      );
+      const helper = path.join(root, entry, 'node_modules', 'node-pty', 'prebuilds', 'darwin-arm64', 'spawn-helper');
       try {
         const stat = fs.statSync(helper);
         if ((stat.mode & 0o111) === 0) {

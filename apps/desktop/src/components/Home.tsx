@@ -32,7 +32,9 @@ export function Home({
   const act = useActions();
   const live = sessions.filter(isLive);
   const needsYou = sessions.filter((session) => attention.get(session.id)?.group === 'needs-you');
-  const ended = sessions.filter((session) => !isLive(session) && attention.get(session.id)?.group !== 'needs-you').slice(0, 5);
+  const ended = sessions
+    .filter((session) => !isLive(session) && attention.get(session.id)?.group !== 'needs-you')
+    .slice(0, 5);
   const discover = useDiscover();
   const unmanaged = (discover.data ?? []).filter((candidate) => candidate.sessionId === null);
   const [showAllElsewhere, setShowAllElsewhere] = React.useState(false);
@@ -57,10 +59,22 @@ export function Home({
                 const info = attention.get(session.id);
                 const ended = !isLive(session);
                 return (
-                  <article key={session.id} className="relative overflow-hidden rounded-lg border border-line bg-panel p-3.5 pl-4.5">
-                    <span aria-hidden className={cn('absolute inset-y-0 left-0 w-1', signalBg[info?.signal ?? 'attn'], !ended && 'attn-breathe')} />
+                  <article
+                    key={session.id}
+                    className="relative overflow-hidden rounded-lg border border-line bg-panel p-3.5 pl-4.5"
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'absolute inset-y-0 left-0 w-1',
+                        signalBg[info?.signal ?? 'attn'],
+                        !ended && 'attn-breathe'
+                      )}
+                    />
                     <div className="flex items-center gap-2">
-                      <span className={cn('callsign text-[11px]', signalText[info?.signal ?? 'attn'])}>{callsign(session)}</span>
+                      <span className={cn('callsign text-[11px]', signalText[info?.signal ?? 'attn'])}>
+                        {callsign(session)}
+                      </span>
                       <span className="truncate text-[13px] font-medium text-ink">{session.title}</span>
                     </div>
                     <p className={cn('mt-1 text-[12.5px]', signalText[info?.signal ?? 'attn'])}>{info?.reason}</p>
@@ -94,7 +108,13 @@ export function Home({
           ) : (
             <div className="overflow-hidden rounded-lg border border-line bg-panel">
               {live.map((session, i) => (
-                <BoardRow key={session.id} session={session} attention={attention.get(session.id)} first={i === 0} onOpen={() => select(session.id)} />
+                <BoardRow
+                  key={session.id}
+                  session={session}
+                  attention={attention.get(session.id)}
+                  first={i === 0}
+                  onOpen={() => select(session.id)}
+                />
               ))}
             </div>
           )}
@@ -104,26 +124,41 @@ export function Home({
           <section className="mt-8">
             <h2 className="eyebrow mb-1 text-ink-faint">Running elsewhere</h2>
             <p className="mb-2 text-[12.5px] text-ink-muted">
-              Agents started outside agenterm. Attach to watch their processes, ports, and changes without touching them.
+              Agents started outside agenterm. Attach to watch their processes, ports, and changes without touching
+              them.
             </p>
             <div className="overflow-hidden rounded-lg border border-line bg-panel">
               {elsewhere.map((candidate, i) => (
-                <div key={candidate.pid} className={cn('flex items-center gap-3 px-4 py-2', i > 0 && 'border-t border-line')}>
+                <div
+                  key={candidate.pid}
+                  className={cn('flex items-center gap-3 px-4 py-2', i > 0 && 'border-t border-line')}
+                >
                   <span className="w-28 text-[12.5px] text-ink">{PROVIDER_NAMES[candidate.provider]}</span>
                   <span className="w-44 truncate font-mono text-[11.5px] text-ink-muted">
                     {candidate.cwd === null ? 'folder unknown' : shortPath(candidate.cwd)}
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-faint" title={candidate.commandLine}>
+                  <span
+                    className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-faint"
+                    title={candidate.commandLine}
+                  >
                     pid {candidate.pid} · {candidate.commandLine}
                   </span>
-                  <Button size="sm" tone="secondary" onClick={() => useUi.getState().openDialog({ kind: 'attach', candidate })}>
+                  <Button
+                    size="sm"
+                    tone="secondary"
+                    onClick={() => useUi.getState().openDialog({ kind: 'attach', candidate })}
+                  >
                     <Eye className="size-3.5" /> Attach
                   </Button>
                 </div>
               ))}
             </div>
             {unmanaged.length > 4 ? (
-              <button type="button" onClick={() => setShowAllElsewhere(!showAllElsewhere)} className="mt-1.5 text-[12px] text-ink-faint hover:text-ink">
+              <button
+                type="button"
+                onClick={() => setShowAllElsewhere(!showAllElsewhere)}
+                className="mt-1.5 text-[12px] text-ink-faint hover:text-ink"
+              >
                 {showAllElsewhere ? 'Show fewer' : `Show ${unmanaged.length - 4} more`}
               </button>
             ) : null}
@@ -136,11 +171,17 @@ export function Home({
             <ul className="overflow-hidden rounded-lg border border-line bg-panel">
               {ended.map((session, i) => (
                 <li key={session.id} className={cn(i > 0 && 'border-t border-line')}>
-                  <button type="button" onClick={() => select(session.id)} className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-raised">
+                  <button
+                    type="button"
+                    onClick={() => select(session.id)}
+                    className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-raised"
+                  >
                     <span className="callsign w-24 text-[11px] text-ink-faint">{callsign(session)}</span>
                     <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{session.title}</span>
                     <span className="text-[12px] text-ink-muted">{attention.get(session.id)?.reason}</span>
-                    <span className="w-10 text-right font-mono text-[11px] text-ink-faint">{formatAge(session.endedAtMs ?? session.startedAtMs)}</span>
+                    <span className="w-10 text-right font-mono text-[11px] text-ink-faint">
+                      {formatAge(session.endedAtMs ?? session.startedAtMs)}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -167,7 +208,14 @@ function BoardRow({
   const lastLine = useLive((state) => state.lastLine[session.id]);
   const signal = attention?.signal ?? 'idle';
   return (
-    <button type="button" onClick={onOpen} className={cn('relative grid w-full grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_200px_44px] items-center gap-4 py-2.5 pr-4 pl-5 text-left hover:bg-raised', !first && 'border-t border-line')}>
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        'relative grid w-full grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_200px_44px] items-center gap-4 py-2.5 pr-4 pl-5 text-left hover:bg-raised',
+        !first && 'border-t border-line'
+      )}
+    >
       <span aria-hidden className={cn('absolute inset-y-0 left-0 w-[3px]', signalBg[signal])} />
       <span className="min-w-0">
         <span className="flex items-center gap-2">
@@ -179,7 +227,12 @@ function BoardRow({
           {folderName(session.cwd)}
         </span>
       </span>
-      <span className={cn('truncate font-mono text-[11.5px]', attention?.group === 'needs-you' ? signalText[signal] : 'text-ink-muted')}>
+      <span
+        className={cn(
+          'truncate font-mono text-[11.5px]',
+          attention?.group === 'needs-you' ? signalText[signal] : 'text-ink-muted'
+        )}
+      >
         {attention?.group === 'needs-you' || lastLine === undefined ? attention?.reason : lastLine}
       </span>
       {session.origin === 'spawned' ? (
@@ -206,7 +259,11 @@ function QuickStart({ onNewSession }: { onNewSession: (provider?: AgentProvider)
       <p className="text-[13px] text-ink">Start an agent in a folder. It keeps running when you close this window.</p>
       <div className="mt-4 flex flex-wrap gap-2">
         {QUICK.map((entry) => (
-          <Button key={entry.provider} tone={entry.provider === 'claude' ? 'primary' : 'secondary'} onClick={() => onNewSession(entry.provider)}>
+          <Button
+            key={entry.provider}
+            tone={entry.provider === 'claude' ? 'primary' : 'secondary'}
+            onClick={() => onNewSession(entry.provider)}
+          >
             {PROVIDER_NAMES[entry.provider]}
             <span className="font-mono text-[11px] opacity-70">{entry.hint}</span>
           </Button>

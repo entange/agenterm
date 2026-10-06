@@ -62,7 +62,8 @@ export class AttentionMonitor {
     if (event.kind === 'session.exited' && session?.lifecycle !== 'killed') {
       const bad = event.exitSignal !== null || (event.exitCode !== null && event.exitCode !== 0);
       if (bad) {
-        const detail = event.exitSignal !== null ? `Ended by ${event.exitSignal}` : `Exited with code ${event.exitCode}`;
+        const detail =
+          event.exitSignal !== null ? `Ended by ${event.exitSignal}` : `Exited with code ${event.exitCode}`;
         this.notify(event.sessionId, `exit:${event.createdAtMs}`, name, detail);
       }
     }
@@ -95,7 +96,9 @@ export class AttentionMonitor {
     const waiting = this.sessions.filter(
       (session) =>
         session.lifecycle === 'running' &&
-        (session.overlay === 'waiting_permission' || session.overlay === 'waiting_input' || session.overlay === 'failed')
+        (session.overlay === 'waiting_permission' ||
+          session.overlay === 'waiting_input' ||
+          session.overlay === 'failed')
     ).length;
     if (process.platform === 'darwin' || process.platform === 'linux') app.setBadgeCount(waiting);
     this.options.onSessions(this.sessions);

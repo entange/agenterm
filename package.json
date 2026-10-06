@@ -13,7 +13,8 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "node scripts/ensure-pty-helper.mjs",    "dev": "turbo run dev",
+    "postinstall": "node scripts/ensure-pty-helper.mjs",
+    "dev": "turbo run dev",
     "dev:daemon": "turbo run dev --filter=@agenterm/runtime",
     "dev:desktop": "turbo run dev --filter=agenterm-desktop",
     "dev:cli": "turbo run dev --filter=agenterm",
@@ -22,13 +23,16 @@
     "pack:win": "turbo run pack --filter=agenterm-desktop",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "eslint": "10.11.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "prettier": "3.9.9",
     "turbo": "2.11.5",
     "typescript": "6.0.3",
-    "eslint": "10.11.0",
-    "prettier": "3.9.9",
-    "@typescript-eslint/parser": "8.70.1"
+    "typescript-eslint": "8.71.1"
   }
 }

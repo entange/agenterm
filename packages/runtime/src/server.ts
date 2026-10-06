@@ -26,7 +26,7 @@ import { ActivityMeter } from './activity.js';
 import { checkBearer } from './auth.js';
 import { effectiveCommand, PROVIDER_INSTALL_HINTS, resolveBinary } from './binary.js';
 import { CommandTracker } from './commands.js';
-import { SqliteCommands } from './database.js';
+import { type SqliteCommands } from './database.js';
 import { discoverAgents, processCwd, type ProcessLister } from './discover.js';
 import { buildSpawnEnv } from './env.js';
 import { EventBus } from './events.js';
@@ -195,7 +195,14 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       perSession.delete(oldest);
     }
     fileChanges.set(change.sessionId, perSession);
-    bus.publish({ id: '', sessionId: change.sessionId, createdAtMs: now, kind: 'file.changed', path: shown, change: change.change });
+    bus.publish({
+      id: '',
+      sessionId: change.sessionId,
+      createdAtMs: now,
+      kind: 'file.changed',
+      path: shown,
+      change: change.change
+    });
   };
 
   /** True while the session leader can still receive signals or input. */
@@ -568,7 +575,13 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       return;
     }
     const updated = store.setTitle(session.id, parsed.value.title) ?? session;
-    bus.publish({ id: '', sessionId: session.id, createdAtMs: Date.now(), kind: 'session.updated', title: updated.title });
+    bus.publish({
+      id: '',
+      sessionId: session.id,
+      createdAtMs: Date.now(),
+      kind: 'session.updated',
+      title: updated.title
+    });
     return { session: updated };
   });
 
@@ -695,7 +708,14 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     }
     const seq = (inputSeq.get(session.id) ?? 0) + 1;
     inputSeq.set(session.id, seq);
-    bus.publish({ id: '', sessionId: session.id, createdAtMs: Date.now(), kind: 'terminal.input', seq, data: parsed.value.data });
+    bus.publish({
+      id: '',
+      sessionId: session.id,
+      createdAtMs: Date.now(),
+      kind: 'terminal.input',
+      seq,
+      data: parsed.value.data
+    });
     return { acceptedBytes: Buffer.byteLength(parsed.value.data, 'utf8') };
   });
 
@@ -748,7 +768,10 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       return { signaled: true, pid: session.pid, signal };
     }
     const osSignal = SIGNAL_TO_OS[signal];
-    const targets = signal === 'interrupt' ? [session.pid] : (await supervisor.poll().catch(() => undefined), supervisor.subtreePids(session.pid));
+    const targets =
+      signal === 'interrupt'
+        ? [session.pid]
+        : (await supervisor.poll().catch(() => undefined), supervisor.subtreePids(session.pid));
     let leaderSignaled = false;
     for (const pid of targets) {
       try {
@@ -794,14 +817,18 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       await fail(reply, {
         status: 409,
         code: 'no_pty',
-        message: session.origin === 'attached' ? 'attached sessions expose no PTY scrollback' : 'no scrollback was kept for this session'
+        message:
+          session.origin === 'attached'
+            ? 'attached sessions expose no PTY scrollback'
+            : 'no scrollback was kept for this session'
       });
       return;
     }
     // A dead session has one immutable chunk; any cursor past it is caught up.
-    const chunks = tail.length > 0 && (parsed.value.sinceSeq ?? 0) < 1
-      ? [{ seq: 1, data: tail, createdAtMs: session.endedAtMs ?? session.startedAtMs }]
-      : [];
+    const chunks =
+      tail.length > 0 && (parsed.value.sinceSeq ?? 0) < 1
+        ? [{ seq: 1, data: tail, createdAtMs: session.endedAtMs ?? session.startedAtMs }]
+        : [];
     return {
       sessionId: session.id,
       chunks,
@@ -873,7 +900,11 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     }
     const result = await readGitDiff(session.cwd, file);
     if (result === null) {
-      await fail(reply, { status: 400, code: 'invalid_path', message: 'path is outside the worktree or not in a repo' });
+      await fail(reply, {
+        status: 400,
+        code: 'invalid_path',
+        message: 'path is outside the worktree or not in a repo'
+      });
       return;
     }
     return { sessionId: session.id, ...result };

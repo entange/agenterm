@@ -49,7 +49,12 @@ export function useCommands(id: string, enabled = true) {
 
 export function useGit(id: string, enabled = true) {
   const online = useOnline();
-  return useQuery({ queryKey: keys.git(id), queryFn: () => api('git', id), enabled: online && enabled, refetchInterval: 20_000 });
+  return useQuery({
+    queryKey: keys.git(id),
+    queryFn: () => api('git', id),
+    enabled: online && enabled,
+    refetchInterval: 20_000
+  });
 }
 
 export function useDiff(id: string, path: string | null) {

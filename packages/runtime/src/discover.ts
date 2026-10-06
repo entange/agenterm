@@ -113,7 +113,13 @@ export function parsePsOutput(stdout: string): RawProcessEntry[] {
 
 async function systeminformationLister(): Promise<readonly RawProcessEntry[]> {
   const result = await si.processes();
-  const list = (result.list ?? []) as Array<{ pid?: number; parentPid?: number; command?: string; params?: string; path?: string }>;
+  const list = (result.list ?? []) as Array<{
+    pid?: number;
+    parentPid?: number;
+    command?: string;
+    params?: string;
+    path?: string;
+  }>;
   return list.map((entry) => {
     const command = typeof entry.command === 'string' && entry.command.length > 0 ? entry.command : (entry.path ?? '');
     const params = typeof entry.params === 'string' && entry.params.length > 0 ? ` ${entry.params}` : '';

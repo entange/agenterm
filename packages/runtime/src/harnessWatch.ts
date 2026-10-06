@@ -32,16 +32,14 @@ export class HarnessWatch {
   private readonly intervalMs: number;
   private readonly onAccess: ((entry: AccessLog) => void) | undefined;
 
-  constructor(
-    options: {
-      enabled?: boolean | undefined;
-      dataDir?: string | undefined;
-      store: SessionStore;
-      bus: EventBus;
-      intervalMs?: number | undefined;
-      onAccess?: ((entry: AccessLog) => void) | undefined;
-    }
-  ) {
+  constructor(options: {
+    enabled?: boolean | undefined;
+    dataDir?: string | undefined;
+    store: SessionStore;
+    bus: EventBus;
+    intervalMs?: number | undefined;
+    onAccess?: ((entry: AccessLog) => void) | undefined;
+  }) {
     this.enabled = options.enabled ?? false;
     this.dataDir = options.dataDir;
     this.store = options.store;
@@ -103,10 +101,7 @@ export class HarnessWatch {
     }
   }
 
-  private refreshSession(
-    sessionId: string,
-    grants: ReturnType<typeof loadGrants>
-  ): void {
+  private refreshSession(sessionId: string, grants: ReturnType<typeof loadGrants>): void {
     const record = this.store.get(sessionId);
     if (record === null) return;
     if (record.lifecycle === 'exited' || record.lifecycle === 'killed') return;
@@ -130,7 +125,11 @@ export class HarnessWatch {
     this.applyOverlay(sessionId, outcome.overlay, outcome.summary);
   }
 
-  private applyOverlay(sessionId: string, overlay: 'unknown' | 'working' | 'waiting_input' | 'waiting_permission' | 'completed' | 'failed', summary: string | null): void {
+  private applyOverlay(
+    sessionId: string,
+    overlay: 'unknown' | 'working' | 'waiting_input' | 'waiting_permission' | 'completed' | 'failed',
+    summary: string | null
+  ): void {
     const record = this.store.get(sessionId);
     if (record === null) return;
     if (record.overlay === overlay) return;

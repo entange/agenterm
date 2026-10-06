@@ -23,7 +23,12 @@ describe('kill, signal, and close', () => {
   it('kills a live tree, keeps the row as history, and records the exit once', async () => {
     const { app, spawn, store, seen, killed } = rig();
     const session = await spawn();
-    const res = await app.inject({ method: 'DELETE', url: `/sessions/${session.id}`, headers, payload: { killTree: true } });
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/sessions/${session.id}`,
+      headers,
+      payload: { killTree: true }
+    });
     expect(res.json()).toEqual({ detached: false, killed: true, pid: session.pid });
     expect(killed).toEqual([session.pid]);
     const row = store.get(session.id);
@@ -36,9 +41,19 @@ describe('kill, signal, and close', () => {
     const { app, spawn, last, killed } = rig();
     const session = await spawn();
     last()?.emitExit(0);
-    const signal = await app.inject({ method: 'POST', url: `/sessions/${session.id}/signal`, headers, payload: { signal: 'kill' } });
+    const signal = await app.inject({
+      method: 'POST',
+      url: `/sessions/${session.id}/signal`,
+      headers,
+      payload: { signal: 'kill' }
+    });
     expect(signal.statusCode).toBe(409);
-    const kill = await app.inject({ method: 'DELETE', url: `/sessions/${session.id}`, headers, payload: { killTree: true } });
+    const kill = await app.inject({
+      method: 'DELETE',
+      url: `/sessions/${session.id}`,
+      headers,
+      payload: { killTree: true }
+    });
     expect(kill.statusCode).toBe(200);
     expect((kill.json() as { killed: boolean }).killed).toBe(false);
     expect(killed).toEqual([]);
@@ -47,7 +62,12 @@ describe('kill, signal, and close', () => {
   it('sends interrupt as Ctrl+C through the PTY', async () => {
     const { app, spawn, last } = rig();
     const session = await spawn();
-    const res = await app.inject({ method: 'POST', url: `/sessions/${session.id}/signal`, headers, payload: { signal: 'interrupt' } });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/sessions/${session.id}/signal`,
+      headers,
+      payload: { signal: 'interrupt' }
+    });
     expect(res.statusCode).toBe(200);
     expect(last()?.written).toEqual(['\x03']);
   });
@@ -60,11 +80,26 @@ describe('kill, signal, and close', () => {
     const attached = await app.inject({ method: 'POST', url: '/sessions/attach', headers, payload: { pid: 4242 } });
     const id = (attached.json() as { session: { id: string; provider: string } }).session.id;
     expect((attached.json() as { session: { provider: string } }).session.provider).toBe('codex');
-    const noConfirm = await app.inject({ method: 'DELETE', url: `/sessions/${id}`, headers, payload: { killTree: true } });
+    const noConfirm = await app.inject({
+      method: 'DELETE',
+      url: `/sessions/${id}`,
+      headers,
+      payload: { killTree: true }
+    });
     expect(noConfirm.statusCode).toBe(403);
-    const wrong = await app.inject({ method: 'POST', url: `/sessions/${id}/signal`, headers, payload: { signal: 'terminate', confirmPid: 1 } });
+    const wrong = await app.inject({
+      method: 'POST',
+      url: `/sessions/${id}/signal`,
+      headers,
+      payload: { signal: 'terminate', confirmPid: 1 }
+    });
     expect(wrong.statusCode).toBe(403);
-    const detach = await app.inject({ method: 'DELETE', url: `/sessions/${id}`, headers, payload: { killTree: false } });
+    const detach = await app.inject({
+      method: 'DELETE',
+      url: `/sessions/${id}`,
+      headers,
+      payload: { killTree: false }
+    });
     expect(detach.json()).toEqual({ detached: true, killed: false, pid: 4242 });
   });
 
@@ -88,7 +123,12 @@ describe('rename, restart, and history', () => {
   it('renames a session and publishes session.updated', async () => {
     const { app, spawn, seen } = rig();
     const session = await spawn();
-    const res = await app.inject({ method: 'PATCH', url: `/sessions/${session.id}`, headers, payload: { title: '  fix login  ' } });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/sessions/${session.id}`,
+      headers,
+      payload: { title: '  fix login  ' }
+    });
     expect((res.json() as { session: { title: string } }).session.title).toBe('fix login');
     expect(seen.some((event) => event.kind === 'session.updated')).toBe(true);
     const bad = await app.inject({ method: 'PATCH', url: `/sessions/${session.id}`, headers, payload: { title: ' ' } });

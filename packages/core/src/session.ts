@@ -18,13 +18,7 @@ export type SessionOrigin = 'spawned' | 'attached';
  * crashed: daemon restarted or PTY lost unexpectedly. Log kept.
  * killed: ended by an explicit kill-tree or signal request from the user.
  */
-export type SessionLifecycleStatus =
-  | 'created'
-  | 'starting'
-  | 'running'
-  | 'exited'
-  | 'crashed'
-  | 'killed';
+export type SessionLifecycleStatus = 'created' | 'starting' | 'running' | 'exited' | 'crashed' | 'killed';
 
 /**
  * Best-effort overlay status.
@@ -39,12 +33,7 @@ export type SessionLifecycleStatus =
  * failed: harness reports task failure.
  */
 export type SessionOverlayStatus =
-  | 'unknown'
-  | 'working'
-  | 'waiting_input'
-  | 'waiting_permission'
-  | 'completed'
-  | 'failed';
+  'unknown' | 'working' | 'waiting_input' | 'waiting_permission' | 'completed' | 'failed';
 
 /** Source of the overlay value. pty is local truth, others are overlays. */
 export type OverlaySource = 'pty' | 'harness' | 'otel';

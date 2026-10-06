@@ -68,13 +68,18 @@ export function CommandsTab({ query }: { query: UseQueryResult<CommandRecord[]> 
         <tbody>
           {rows.map((row) => (
             <tr key={row.id} className="border-t border-line hover:bg-panel">
-              <td className="px-4 py-1.5 font-mono text-[11.5px] text-ink-muted" title={new Date(row.startedAtMs).toLocaleString()}>
+              <td
+                className="px-4 py-1.5 font-mono text-[11.5px] text-ink-muted"
+                title={new Date(row.startedAtMs).toLocaleString()}
+              >
                 {formatClock(row.startedAtMs)}
               </td>
               <td className="px-2 py-1.5 font-mono text-[11.5px] text-ink-muted">
                 {row.durationMs === null ? <span className="text-work">running</span> : formatDuration(row.durationMs)}
               </td>
-              <td className="px-2 py-1.5 text-right font-mono text-[11.5px] text-ink-muted">{row.outputLineCount ?? 0}</td>
+              <td className="px-2 py-1.5 text-right font-mono text-[11.5px] text-ink-muted">
+                {row.outputLineCount ?? 0}
+              </td>
               <td className="selectable truncate px-4 py-1.5 font-mono text-[12px] text-ink">{row.text}</td>
             </tr>
           ))}
@@ -104,7 +109,10 @@ function StateLetter({ state, staged }: { state: string | null; staged: boolean 
   if (state === null) return <span className="w-3" />;
   const info = STATE_LETTER[state] ?? { letter: '?', className: 'text-ink-muted', label: state };
   return (
-    <span className={cn('w-3 text-center font-mono text-[11px] font-semibold', info.className)} title={`${info.label}${staged ? ' (staged)' : ''}`}>
+    <span
+      className={cn('w-3 text-center font-mono text-[11px] font-semibold', info.className)}
+      title={`${info.label}${staged ? ' (staged)' : ''}`}
+    >
       {info.letter}
     </span>
   );
@@ -144,8 +152,9 @@ export function GitTab({
           <div className="mt-0.5 font-mono text-[11.5px] text-ink-muted">
             {status.isDirty ? (
               <>
-                <span className="text-ok">+{status.insertions}</span> <span className="text-fail">−{status.deletions}</span> ·{' '}
-                {status.stagedCount} staged · {status.unstagedCount} unstaged
+                <span className="text-ok">+{status.insertions}</span>{' '}
+                <span className="text-fail">−{status.deletions}</span> · {status.stagedCount} staged ·{' '}
+                {status.unstagedCount} unstaged
               </>
             ) : (
               'Working tree clean'
@@ -176,7 +185,11 @@ export function GitTab({
       </div>
       <div className="min-w-0 flex-1">
         {active === null ? (
-          <EmptyState icon={<FileDiff className="size-6" />} title="No changes" detail="Edits made in this workspace show up here as they happen." />
+          <EmptyState
+            icon={<FileDiff className="size-6" />}
+            title="No changes"
+            detail="Edits made in this workspace show up here as they happen."
+          />
         ) : (
           <DiffView sessionId={session.id} path={active} />
         )}
@@ -192,7 +205,9 @@ function DiffView({ sessionId, path }: { sessionId: string; path: string }): Rea
   const lines = diff.data.diff.length === 0 ? [] : diff.data.diff.replace(/\n$/, '').split('\n');
   return (
     <div className="scroll-thin h-full overflow-auto bg-term">
-      <div className="sticky top-0 border-b border-line bg-panel px-4 py-1.5 font-mono text-[12px] text-ink">{path}</div>
+      <div className="sticky top-0 border-b border-line bg-panel px-4 py-1.5 font-mono text-[12px] text-ink">
+        {path}
+      </div>
       {lines.length === 0 ? (
         <p className="px-4 py-4 text-[12.5px] text-ink-muted">No textual changes versus HEAD.</p>
       ) : (
@@ -205,7 +220,11 @@ function DiffView({ sessionId, path }: { sessionId: string; path: string }): Rea
                 line.startsWith('+') && !line.startsWith('+++') && 'bg-ok/12 text-ok',
                 line.startsWith('-') && !line.startsWith('---') && 'bg-fail/12 text-fail',
                 line.startsWith('@@') && 'bg-accent-soft text-accent',
-                (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('+++') || line.startsWith('---')) && 'text-ink-faint',
+                (line.startsWith('diff ') ||
+                  line.startsWith('index ') ||
+                  line.startsWith('+++') ||
+                  line.startsWith('---')) &&
+                  'text-ink-faint',
                 !/^[-+@di]/.test(line) && 'text-ink'
               )}
             >
@@ -221,7 +240,13 @@ function DiffView({ sessionId, path }: { sessionId: string; path: string }): Rea
 
 // --- files -----------------------------------------------------------------
 
-export function FilesTab({ query, onOpen }: { query: UseQueryResult<FileChangesResponse>; onOpen: (path: string) => void }): React.JSX.Element {
+export function FilesTab({
+  query,
+  onOpen
+}: {
+  query: UseQueryResult<FileChangesResponse>;
+  onOpen: (path: string) => void;
+}): React.JSX.Element {
   if (query.isPending) return <Loading />;
   if (query.isError) return <ErrorState error={query.error} retry={() => void query.refetch()} />;
   const { changes, watching } = query.data;
@@ -242,7 +267,11 @@ export function FilesTab({ query, onOpen }: { query: UseQueryResult<FileChangesR
     <ul className="scroll-thin h-full overflow-y-auto py-1">
       {changes.map((change) => (
         <li key={change.path}>
-          <button type="button" onClick={() => onOpen(change.path)} className="flex w-full items-center gap-3 px-4 py-1.5 text-left hover:bg-panel">
+          <button
+            type="button"
+            onClick={() => onOpen(change.path)}
+            className="flex w-full items-center gap-3 px-4 py-1.5 text-left hover:bg-panel"
+          >
             <span
               className={cn(
                 'w-16 text-[11.5px]',
@@ -278,7 +307,8 @@ function treeOrder(processes: ProcessSnapshot[], leader: number): Array<{ proces
     for (const child of byParent.get(pid) ?? []) visit(child.pid, depth + 1);
   };
   visit(leader, 0);
-  for (const process of processes) if (!out.some((entry) => entry.process.pid === process.pid)) out.push({ process, depth: 0 });
+  for (const process of processes)
+    if (!out.some((entry) => entry.process.pid === process.pid)) out.push({ process, depth: 0 });
   return out;
 }
 
@@ -337,8 +367,13 @@ export function ProcessesTab({
                 <td className="px-2 py-1.5 text-right font-mono text-[11.5px] text-ink-muted">
                   {process.cpuPercent === null ? '—' : `${process.cpuPercent.toFixed(1)}%`}
                 </td>
-                <td className="px-2 py-1.5 text-right font-mono text-[11.5px] text-ink-muted">{formatBytes(process.rssBytes)}</td>
-                <td className="selectable max-w-0 truncate px-4 py-1.5 font-mono text-[12px] text-ink" title={process.command}>
+                <td className="px-2 py-1.5 text-right font-mono text-[11.5px] text-ink-muted">
+                  {formatBytes(process.rssBytes)}
+                </td>
+                <td
+                  className="selectable max-w-0 truncate px-4 py-1.5 font-mono text-[12px] text-ink"
+                  title={process.command}
+                >
                   <span className="text-ink-faint">{depth > 0 ? `${'  '.repeat(depth - 1)}└ ` : ''}</span>
                   {process.command || '(exited)'}
                 </td>
@@ -364,11 +399,25 @@ const EVENT_TONE: Partial<Record<AgentermEvent['kind'], string>> = {
 };
 
 /** One line of the activity feed. */
-export function EventRow({ event, label, onOpen }: { event: AgentermEvent; label?: string | undefined; onOpen?: (() => void) | undefined }): React.JSX.Element {
-  const failed = event.kind === 'session.exited' && (event.exitSignal !== null || (event.exitCode !== null && event.exitCode !== 0));
+export function EventRow({
+  event,
+  label,
+  onOpen
+}: {
+  event: AgentermEvent;
+  label?: string | undefined;
+  onOpen?: (() => void) | undefined;
+}): React.JSX.Element {
+  const failed =
+    event.kind === 'session.exited' && (event.exitSignal !== null || (event.exitCode !== null && event.exitCode !== 0));
   return (
     <li className="group flex gap-2.5 py-1.5">
-      <span className={cn('mt-[7px] size-1.5 shrink-0 rounded-full', failed ? 'bg-fail' : (EVENT_TONE[event.kind] ?? 'bg-idle'))} />
+      <span
+        className={cn(
+          'mt-[7px] size-1.5 shrink-0 rounded-full',
+          failed ? 'bg-fail' : (EVENT_TONE[event.kind] ?? 'bg-idle')
+        )}
+      />
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 text-[12.5px] leading-snug break-words text-ink" title={describeEvent(event)}>
           {describeEvent(event)}
@@ -407,7 +456,12 @@ export function ActivityTab({ session }: { session: SessionRecord }): React.JSX.
     .filter((event) => (seen.has(event.id) ? false : (seen.add(event.id), true)))
     .sort((a, b) => b.createdAtMs - a.createdAtMs);
   if (events.length === 0) {
-    return <EmptyState title="No activity yet" detail="Starts, exits, status changes, ports, and file edits for this session show up here." />;
+    return (
+      <EmptyState
+        title="No activity yet"
+        detail="Starts, exits, status changes, ports, and file edits for this session show up here."
+      />
+    );
   }
   return (
     <ul className="scroll-thin h-full overflow-y-auto px-5 py-2">

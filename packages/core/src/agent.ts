@@ -7,13 +7,7 @@
 export type AgentProvider = 'claude' | 'codex' | 'gemini' | 'opencode' | 'generic';
 
 /** All provider keys in sorted order for UI select lists. */
-export const AGENT_PROVIDERS: readonly AgentProvider[] = [
-  'claude',
-  'codex',
-  'gemini',
-  'generic',
-  'opencode'
-] as const;
+export const AGENT_PROVIDERS: readonly AgentProvider[] = ['claude', 'codex', 'gemini', 'generic', 'opencode'] as const;
 
 /**
  * Agent definition row.

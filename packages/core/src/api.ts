@@ -1,10 +1,6 @@
 import type { AgentProvider } from './agent.js';
 import type { DiscoveredProcess, PortRecord, ProcessSnapshot } from './process.js';
-import type {
-  SessionLifecycleStatus,
-  SessionOverlayStatus,
-  SessionRecord,
-} from './session.js';
+import type { SessionLifecycleStatus, SessionOverlayStatus, SessionRecord } from './session.js';
 
 /** Standard error envelope returned by every route on failure. */
 export interface ErrorEnvelope {

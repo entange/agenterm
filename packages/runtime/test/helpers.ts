@@ -81,7 +81,12 @@ export function rig(overrides: Partial<CreateAppOptions> = {}) {
     fileWatch: new FileWatch({ debounceMs: 20 }),
     commandsDb: new SqliteCommands(opened.db),
     gitReader: async () => ({ branch: null, worktreeRoot: null }),
-    baseEnv: { HOME: '/home/agent', USER: 'agent', PATH: process.env['PATH'] ?? '/usr/bin:/bin', ELECTRON_RUN_AS_NODE: '1' },
+    baseEnv: {
+      HOME: '/home/agent',
+      USER: 'agent',
+      PATH: process.env['PATH'] ?? '/usr/bin:/bin',
+      ELECTRON_RUN_AS_NODE: '1'
+    },
     ...overrides
   });
   const spawn = async (payload: Record<string, unknown> = {}) => {

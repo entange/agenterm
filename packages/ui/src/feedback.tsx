@@ -2,8 +2,21 @@ import * as React from 'react';
 import { cn, signalBg, type Signal } from './utils.js';
 
 /** Status dot. `pulse` is reserved for signals that need the user. */
-export function SignalDot({ signal, pulse = false, className }: { signal: Signal; pulse?: boolean; className?: string }): React.JSX.Element {
-  return <span aria-hidden className={cn('inline-block size-2 shrink-0 rounded-full', signalBg[signal], pulse && 'attn-breathe', className)} />;
+export function SignalDot({
+  signal,
+  pulse = false,
+  className
+}: {
+  signal: Signal;
+  pulse?: boolean;
+  className?: string;
+}): React.JSX.Element {
+  return (
+    <span
+      aria-hidden
+      className={cn('inline-block size-2 shrink-0 rounded-full', signalBg[signal], pulse && 'attn-breathe', className)}
+    />
+  );
 }
 
 /** Spinner for in-flight loads. */
@@ -12,7 +25,10 @@ export function Spinner({ className }: { className?: string }): React.JSX.Elemen
     <span
       role="status"
       aria-label="Loading"
-      className={cn('inline-block size-3.5 animate-spin rounded-full border-2 border-line-strong border-t-accent', className)}
+      className={cn(
+        'inline-block size-3.5 animate-spin rounded-full border-2 border-line-strong border-t-accent',
+        className
+      )}
     />
   );
 }

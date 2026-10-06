@@ -23,7 +23,10 @@ const MAX_LINE = 4096;
 const MAX_PENDING = 64 * 1024;
 
 function stripSequences(input: string): string {
-  return input.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '').replace(/\r/g, '');
+  return input
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    .replace(/\x1b\][^\x07]*\x07/g, '')
+    .replace(/\r/g, '');
 }
 
 function splitPrompt(line: string): string | null {
@@ -50,15 +53,13 @@ export class CommandTracker {
   private readonly save: CommandSave | undefined;
   private readonly now: () => number;
 
-  constructor(
-    options: {
-      sessionId: string;
-      cwd: string;
-      pid?: number | null | undefined;
-      save?: CommandSave | undefined;
-      now?: (() => number) | undefined;
-    }
-  ) {
+  constructor(options: {
+    sessionId: string;
+    cwd: string;
+    pid?: number | null | undefined;
+    save?: CommandSave | undefined;
+    now?: (() => number) | undefined;
+  }) {
     this.sessionId = options.sessionId;
     this.cwd = options.cwd;
     this.pid = options.pid ?? null;

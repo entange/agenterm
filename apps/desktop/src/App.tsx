@@ -50,7 +50,10 @@ export function App(): React.JSX.Element {
   );
 
   // Board order drives keyboard navigation so ⌘1 is the top strip.
-  const ordered = React.useMemo(() => boardOrder(sessions, attention).flatMap(([, members]) => members), [sessions, attention]);
+  const ordered = React.useMemo(
+    () => boardOrder(sessions, attention).flatMap(([, members]) => members),
+    [sessions, attention]
+  );
 
   const onCommand = (command: AppCommand): void => {
     const ui = useUi.getState();
@@ -93,7 +96,13 @@ export function App(): React.JSX.Element {
   }, [selected, selectedId, sessionsQuery.isSuccess]);
 
   if (getBridge() === null) {
-    return <EmptyState className="h-full" title="agenterm needs its desktop app" detail="Open this page from the agenterm app, not a browser." />;
+    return (
+      <EmptyState
+        className="h-full"
+        title="agenterm needs its desktop app"
+        detail="Open this page from the agenterm app, not a browser."
+      />
+    );
   }
 
   return (
@@ -113,7 +122,12 @@ export function App(): React.JSX.Element {
           {railOpen ? <ActivityRail sessions={sessions} /> : null}
         </div>
       </div>
-      <NewSessionDialog open={newSessionOpen} onOpenChange={setNewSessionOpen} sessions={sessions} initialProvider={initialProvider} />
+      <NewSessionDialog
+        open={newSessionOpen}
+        onOpenChange={setNewSessionOpen}
+        sessions={sessions}
+        initialProvider={initialProvider}
+      />
       <PendingDialogs />
       <CommandPalette sessions={ordered} attention={attention} onNewSession={() => openNewSession()} />
       <Toaster />

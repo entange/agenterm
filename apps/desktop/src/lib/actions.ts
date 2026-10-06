@@ -72,7 +72,10 @@ export function actions(client: QueryClient) {
         await api('deleteSession', session.id, { killTree: false });
         if (useUi.getState().selectedId === session.id) useUi.getState().select(null);
         refresh();
-        toast('info', session.origin === 'attached' ? `Detached from pid ${session.pid}` : `Closed ${callsign(session)}`);
+        toast(
+          'info',
+          session.origin === 'attached' ? `Detached from pid ${session.pid}` : `Closed ${callsign(session)}`
+        );
       } catch (error) {
         toastError(`Could not close ${callsign(session)}`, error);
       }
@@ -101,7 +104,6 @@ export function actions(client: QueryClient) {
 }
 
 export type Actions = ReturnType<typeof actions>;
-
 
 export function useActions(): Actions {
   const client = useQueryClient();

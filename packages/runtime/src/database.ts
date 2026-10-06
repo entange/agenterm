@@ -318,7 +318,9 @@ export class SqliteEvents {
   }
 
   /** Newest-first page across sessions for the activity feed. */
-  recent(query: { sessionId?: string | undefined; beforeMs?: number | undefined; limit?: number | undefined } = {}): AgentermEvent[] {
+  recent(
+    query: { sessionId?: string | undefined; beforeMs?: number | undefined; limit?: number | undefined } = {}
+  ): AgentermEvent[] {
     const filters = [];
     if (query.sessionId !== undefined) filters.push(eq(schema.events.sessionId, query.sessionId));
     if (query.beforeMs !== undefined) filters.push(lt(schema.events.createdAtMs, query.beforeMs));
@@ -346,7 +348,13 @@ export class SqliteEvents {
   }
 }
 
-function pruneTable(db: RuntimeDatabase, table: 'events' | 'commands', timeColumn: string, cap: number, cutoffMs: number): number {
+function pruneTable(
+  db: RuntimeDatabase,
+  table: 'events' | 'commands',
+  timeColumn: string,
+  cap: number,
+  cutoffMs: number
+): number {
   const byAge = db.run(sql.raw(`DELETE FROM ${table} WHERE ${timeColumn} < ${Math.floor(cutoffMs)}`));
   const byCap = db.run(
     sql.raw(

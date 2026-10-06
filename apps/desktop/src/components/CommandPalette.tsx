@@ -44,7 +44,9 @@ export function CommandPalette({
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/35" />
         <DialogPrimitive.Content className="fixed top-[12vh] left-1/2 z-50 w-[600px] -translate-x-1/2 overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl">
           <DialogPrimitive.Title className="sr-only">Command palette</DialogPrimitive.Title>
-          <DialogPrimitive.Description className="sr-only">Jump to a session or run an action</DialogPrimitive.Description>
+          <DialogPrimitive.Description className="sr-only">
+            Jump to a session or run an action
+          </DialogPrimitive.Description>
           <Command label="Command palette" loop>
             <Command.Input
               autoFocus
@@ -54,7 +56,10 @@ export function CommandPalette({
             <Command.List className="scroll-thin max-h-[380px] overflow-y-auto p-2">
               <Command.Empty className="px-3 py-6 text-center text-[12.5px] text-ink-muted">No matches.</Command.Empty>
               {sessions.length > 0 ? (
-                <Command.Group heading="Sessions" className="[&_[cmdk-group-heading]]:eyebrow [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-ink-faint">
+                <Command.Group
+                  heading="Sessions"
+                  className="[&_[cmdk-group-heading]]:eyebrow [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-ink-faint"
+                >
                   {sessions.map((session) => (
                     <Command.Item
                       key={session.id}
@@ -65,35 +70,60 @@ export function CommandPalette({
                       <TerminalSquare className="size-3.5 text-ink-faint" />
                       <span className="callsign w-20 text-[10.5px] text-ink-faint">{callsign(session)}</span>
                       <span className="min-w-0 flex-1 truncate">{session.title}</span>
-                      <span className="truncate text-[11.5px] text-ink-faint">{attention.get(session.id)?.reason ?? shortPath(session.cwd)}</span>
+                      <span className="truncate text-[11.5px] text-ink-faint">
+                        {attention.get(session.id)?.reason ?? shortPath(session.cwd)}
+                      </span>
                     </Command.Item>
                   ))}
                 </Command.Group>
               ) : null}
-              <Command.Group heading="Actions" className="[&_[cmdk-group-heading]]:eyebrow [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-ink-faint">
+              <Command.Group
+                heading="Actions"
+                className="[&_[cmdk-group-heading]]:eyebrow [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-ink-faint"
+              >
                 <Command.Item value="new session start agent" onSelect={() => run(onNewSession)} className={itemClass}>
                   <Plus className="size-3.5 text-ink-faint" /> New session <Kbd className="ml-auto">⌘N</Kbd>
                 </Command.Item>
-                <Command.Item value="control room home overview" onSelect={() => run(() => select(null))} className={itemClass}>
-                  <LayoutGrid className="size-3.5 text-ink-faint" /> Go to control room <Kbd className="ml-auto">⇧⌘H</Kbd>
+                <Command.Item
+                  value="control room home overview"
+                  onSelect={() => run(() => select(null))}
+                  className={itemClass}
+                >
+                  <LayoutGrid className="size-3.5 text-ink-faint" /> Go to control room{' '}
+                  <Kbd className="ml-auto">⇧⌘H</Kbd>
                 </Command.Item>
                 <Command.Item value="toggle activity rail feed" onSelect={() => run(toggleRail)} className={itemClass}>
-                  <Activity className="size-3.5 text-ink-faint" /> Show or hide activity <Kbd className="ml-auto">⌘J</Kbd>
+                  <Activity className="size-3.5 text-ink-faint" /> Show or hide activity{' '}
+                  <Kbd className="ml-auto">⌘J</Kbd>
                 </Command.Item>
                 {selected !== undefined && isLive(selected) ? (
-                  <Command.Item value={`kill ${callsign(selected)}`} onSelect={() => run(() => openDialog({ kind: 'kill', session: selected }))} className={itemClass}>
+                  <Command.Item
+                    value={`kill ${callsign(selected)}`}
+                    onSelect={() => run(() => openDialog({ kind: 'kill', session: selected }))}
+                    className={itemClass}
+                  >
                     <Square className="size-3 text-fail" /> Kill {callsign(selected)}…
                   </Command.Item>
                 ) : null}
                 <Command.Item
                   value="theme appearance dark light system"
-                  onSelect={() => run(() => setTheme(theme === 'system' ? 'dark' : theme === 'dark' ? 'light' : 'system'))}
+                  onSelect={() =>
+                    run(() => setTheme(theme === 'system' ? 'dark' : theme === 'dark' ? 'light' : 'system'))
+                  }
                   className={itemClass}
                 >
-                  {theme === 'dark' ? <Moon className="size-3.5 text-ink-faint" /> : <SunMoon className="size-3.5 text-ink-faint" />}
+                  {theme === 'dark' ? (
+                    <Moon className="size-3.5 text-ink-faint" />
+                  ) : (
+                    <SunMoon className="size-3.5 text-ink-faint" />
+                  )}
                   Theme: {theme} (switch)
                 </Command.Item>
-                <Command.Item value="stop daemon shutdown" onSelect={() => run(() => void getBridge()?.stopDaemon())} className={itemClass}>
+                <Command.Item
+                  value="stop daemon shutdown"
+                  onSelect={() => run(() => void getBridge()?.stopDaemon())}
+                  className={itemClass}
+                >
                   <Power className="size-3.5 text-ink-faint" /> Stop daemon…
                 </Command.Item>
               </Command.Group>

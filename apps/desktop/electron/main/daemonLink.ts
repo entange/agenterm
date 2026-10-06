@@ -20,7 +20,9 @@ interface Lock {
 function readLock(): Lock | null {
   try {
     const parsed = JSON.parse(fs.readFileSync(path.join(dataDir(), 'agentermd.lock'), 'utf8')) as Partial<Lock>;
-    return typeof parsed.pid === 'number' && typeof parsed.port === 'number' ? { pid: parsed.pid, port: parsed.port } : null;
+    return typeof parsed.pid === 'number' && typeof parsed.port === 'number'
+      ? { pid: parsed.pid, port: parsed.port }
+      : null;
   } catch {
     return null;
   }
@@ -116,7 +118,8 @@ export class DaemonLink {
   }
 
   private setInfo(next: ConnectionInfo): void {
-    if (next.state === this.info.state && next.version === this.info.version && next.detail === this.info.detail) return;
+    if (next.state === this.info.state && next.version === this.info.version && next.detail === this.info.detail)
+      return;
     this.info = next;
     for (const handler of this.connectionHandlers) handler(next);
   }

@@ -41,69 +41,81 @@ describe('database schema', () => {
   it('creates every table with a typed round trip', () => {
     const { raw, db } = openDatabase(tmpFile('schema.db'));
     try {
-      db.insert(schema.machines).values({
-        id: 'm1',
-        hostname: 'host',
-        platform: 'darwin',
-        arch: 'arm64',
-        firstSeenAtMs: 1,
-        lastSeenAtMs: 2
-      }).run();
-      db.insert(schema.projects).values({
-        id: 'p1',
-        machineId: 'm1',
-        name: 'demo',
-        rootPath: '/work',
-        createdAtMs: 1,
-        updatedAtMs: 2
-      }).run();
-      db.insert(schema.workspaces).values({
-        id: 'w1',
-        projectId: 'p1',
-        cwd: '/work/app',
-        worktreeRoot: '/work',
-        branch: 'work',
-        isDirty: 0,
-        createdAtMs: 1,
-        updatedAtMs: 2
-      }).run();
-      db.insert(schema.agents).values({
-        id: 'a1',
-        workspaceId: 'w1',
-        provider: 'claude',
-        displayName: 'claude',
-        command: 'claude',
-        argsJson: '[]',
-        envJson: '{}',
-        createdAtMs: 1
-      }).run();
+      db.insert(schema.machines)
+        .values({
+          id: 'm1',
+          hostname: 'host',
+          platform: 'darwin',
+          arch: 'arm64',
+          firstSeenAtMs: 1,
+          lastSeenAtMs: 2
+        })
+        .run();
+      db.insert(schema.projects)
+        .values({
+          id: 'p1',
+          machineId: 'm1',
+          name: 'demo',
+          rootPath: '/work',
+          createdAtMs: 1,
+          updatedAtMs: 2
+        })
+        .run();
+      db.insert(schema.workspaces)
+        .values({
+          id: 'w1',
+          projectId: 'p1',
+          cwd: '/work/app',
+          worktreeRoot: '/work',
+          branch: 'work',
+          isDirty: 0,
+          createdAtMs: 1,
+          updatedAtMs: 2
+        })
+        .run();
+      db.insert(schema.agents)
+        .values({
+          id: 'a1',
+          workspaceId: 'w1',
+          provider: 'claude',
+          displayName: 'claude',
+          command: 'claude',
+          argsJson: '[]',
+          envJson: '{}',
+          createdAtMs: 1
+        })
+        .run();
       const session = sampleSession('s-schema');
       new SqliteSessions(db).save(session);
-      db.insert(schema.processes).values({
-        id: 'pr1',
-        sessionId: 's-schema',
-        pid: 10,
-        ppid: 1,
-        command: 'claude',
-        cwd: null,
-        cpuPercent: 5,
-        rssBytes: 1000,
-        startedAtMs: null,
-        endedAtMs: null,
-        exitCode: null,
-        sampledAtMs: 3
-      }).run();
-      db.insert(schema.commands).values({
-        id: 'c1',
-        sessionId: 's-schema',
-        text: 'bun test',
-        cwd: '/work',
-        pid: 10,
-        startedAtMs: 3,
-        durationMs: 40,
-        exitCode: 0,
-        outputLineCount: 12
-      }).run();
+      db.insert(schema.processes)
+        .values({
+          id: 'pr1',
+          sessionId: 's-schema',
+          pid: 10,
+          ppid: 1,
+          command: 'claude',
+          cwd: null,
+          cpuPercent: 5,
+          rssBytes: 1000,
+          startedAtMs: null,
+          endedAtMs: null,
+          exitCode: null,
+          sampledAtMs: 3
+        })
+        .run();
+      db.insert(schema.commands)
+        .values({
+          id: 'c1',
+          sessionId: 's-schema',
+          text: 'bun test',
+          cwd: '/work',
+          pid: 10,
+          startedAtMs: 3,
+          durationMs: 40,
+          exitCode: 0,
+          outputLineCount: 12
+        })
+        .run();
       new SqliteEvents(db).append({
         id: 'e1',
         sessionId: 's-schema',

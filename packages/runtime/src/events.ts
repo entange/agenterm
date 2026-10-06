@@ -69,7 +69,10 @@ export class EventBus {
         fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
         const file = path.join(dir, 'events.jsonl');
         rotateIfLarge(file);
-        fs.appendFileSync(file, `${redactText(JSON.stringify(event))}\n`, { encoding: 'utf8', mode: PRIVATE_FILE_MODE });
+        fs.appendFileSync(file, `${redactText(JSON.stringify(event))}\n`, {
+          encoding: 'utf8',
+          mode: PRIVATE_FILE_MODE
+        });
       } catch {
         // Mirror is best effort; delivery to subscribers still happens.
       }

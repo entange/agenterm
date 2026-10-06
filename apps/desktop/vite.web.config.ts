@@ -47,7 +47,9 @@ function devBridge(): Plugin {
             const { method, args } = JSON.parse(body) as { method: string; args: unknown[] };
             response.setHeader('Content-Type', 'application/json');
             if (!(API_METHODS as readonly string[]).includes(method)) {
-              response.end(JSON.stringify({ ok: false, error: { status: 400, code: 'bad_call', message: 'unknown method' } }));
+              response.end(
+                JSON.stringify({ ok: false, error: { status: 400, code: 'bad_call', message: 'unknown method' } })
+              );
               return;
             }
             try {
@@ -59,7 +61,12 @@ function devBridge(): Plugin {
               response.end(
                 JSON.stringify({
                   ok: false,
-                  error: { status: record.status ?? 0, code: record.code ?? 'internal', message: record.message ?? String(error), hint: record.hint }
+                  error: {
+                    status: record.status ?? 0,
+                    code: record.code ?? 'internal',
+                    message: record.message ?? String(error),
+                    hint: record.hint
+                  }
                 })
               );
             }

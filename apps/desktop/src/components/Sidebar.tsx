@@ -21,7 +21,9 @@ const ENDED_PREVIEW = 6;
 
 function matches(session: SessionRecord, query: string): boolean {
   if (query.length === 0) return true;
-  const haystack = [session.title, callsign(session), session.cwd, session.branch ?? '', session.provider].join(' ').toLowerCase();
+  const haystack = [session.title, callsign(session), session.cwd, session.branch ?? '', session.provider]
+    .join(' ')
+    .toLowerCase();
   return query
     .toLowerCase()
     .split(/\s+/)
@@ -29,7 +31,10 @@ function matches(session: SessionRecord, query: string): boolean {
 }
 
 /** Sessions grouped by what they need from the user, in board order. */
-export function boardOrder(sessions: SessionRecord[], attention: Map<string, Attention>): Array<[AttentionGroup, SessionRecord[]]> {
+export function boardOrder(
+  sessions: SessionRecord[],
+  attention: Map<string, Attention>
+): Array<[AttentionGroup, SessionRecord[]]> {
   const groups = new Map<AttentionGroup, SessionRecord[]>(ATTENTION_ORDER.map((group) => [group, []]));
   for (const session of sessions) {
     groups.get(attention.get(session.id)?.group ?? 'quiet')?.push(session);
@@ -63,7 +68,9 @@ export function Sidebar({
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       const target = event.target as HTMLElement | null;
-      const typing = target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.closest('.xterm') !== null);
+      const typing =
+        target !== null &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.closest('.xterm') !== null);
       if (event.key === '/' && !typing) {
         event.preventDefault();
         searchRef.current?.focus();
@@ -129,7 +136,12 @@ export function Sidebar({
           const shown = group === 'ended' && !showAllEnded ? members.slice(0, ENDED_PREVIEW) : members;
           return (
             <section key={group} className="mt-3 first:mt-1">
-              <h2 className={cn('eyebrow mb-1.5 flex items-center gap-2 px-2', group === 'needs-you' ? 'text-attn' : 'text-ink-faint')}>
+              <h2
+                className={cn(
+                  'eyebrow mb-1.5 flex items-center gap-2 px-2',
+                  group === 'needs-you' ? 'text-attn' : 'text-ink-faint'
+                )}
+              >
                 {GROUP_LABELS[group]}
                 <span className="font-mono text-[10px] tracking-normal">{members.length}</span>
               </h2>
@@ -192,13 +204,26 @@ function Strip({
         !live && !needsYou && 'opacity-70 hover:opacity-100'
       )}
     >
-      <span aria-hidden className={cn('absolute inset-y-0 left-0 w-[3px]', signalBg[signal], needsYou && signal === 'attn' && 'attn-breathe')} />
+      <span
+        aria-hidden
+        className={cn(
+          'absolute inset-y-0 left-0 w-[3px]',
+          signalBg[signal],
+          needsYou && signal === 'attn' && 'attn-breathe'
+        )}
+      />
       <span className="flex items-center gap-2">
-        <span className={cn('callsign text-[10.5px]', needsYou ? signalText[signal] : 'text-ink-faint')}>{callsign(session)}</span>
+        <span className={cn('callsign text-[10.5px]', needsYou ? signalText[signal] : 'text-ink-faint')}>
+          {callsign(session)}
+        </span>
         <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink">{session.title}</span>
-        <span className="font-mono text-[10.5px] text-ink-faint">{formatAge(session.endedAtMs ?? session.startedAtMs)}</span>
+        <span className="font-mono text-[10.5px] text-ink-faint">
+          {formatAge(session.endedAtMs ?? session.startedAtMs)}
+        </span>
       </span>
-      <span className={cn('truncate font-mono text-[11px]', needsYou ? signalText[signal] : 'text-ink-muted')}>{detail ?? ' '}</span>
+      <span className={cn('truncate font-mono text-[11px]', needsYou ? signalText[signal] : 'text-ink-muted')}>
+        {detail ?? ' '}
+      </span>
       <span className="flex items-center gap-2">
         <span className="flex min-w-0 items-center gap-1 text-[11px] text-ink-faint">
           {session.branch === null ? null : (
@@ -211,7 +236,12 @@ function Strip({
           <span className="truncate">{folderName(session.cwd)}</span>
         </span>
         {live && session.origin === 'spawned' ? (
-          <Trace samples={samples ?? EMPTY_TRACE} signal={signal} className="ml-auto max-w-[96px] min-w-[64px] flex-1" height={14} />
+          <Trace
+            samples={samples ?? EMPTY_TRACE}
+            signal={signal}
+            className="ml-auto max-w-[96px] min-w-[64px] flex-1"
+            height={14}
+          />
         ) : null}
       </span>
     </button>
@@ -236,9 +266,18 @@ function SidebarFooter(): React.JSX.Element {
   const online = connection.state === 'online';
   return (
     <div className="flex items-center gap-1 border-t border-line px-3 py-2">
-      <span className={cn('size-1.5 rounded-full', online ? 'bg-ok' : connection.state === 'starting' ? 'bg-attn' : 'bg-fail')} />
+      <span
+        className={cn(
+          'size-1.5 rounded-full',
+          online ? 'bg-ok' : connection.state === 'starting' ? 'bg-attn' : 'bg-fail'
+        )}
+      />
       <span className="flex-1 truncate text-[11.5px] text-ink-faint">
-        {online ? `Daemon ${connection.version ?? ''}` : connection.state === 'starting' ? 'Starting daemon…' : 'Daemon offline'}
+        {online
+          ? `Daemon ${connection.version ?? ''}`
+          : connection.state === 'starting'
+            ? 'Starting daemon…'
+            : 'Daemon offline'}
       </span>
       <IconButton
         label={notifications === false ? 'Turn notifications on' : 'Turn notifications off'}
