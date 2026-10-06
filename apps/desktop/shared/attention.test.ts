@@ -14,6 +14,7 @@ function row(overrides: Partial<SessionRecord>): SessionRecord {
     worktreeRoot: null,
     branch: null,
     origin: 'spawned',
+    parentSessionId: null,
     commandLine: ['claude'],
     resolvedBinaryPath: null,
     pid: 10,

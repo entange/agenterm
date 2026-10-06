@@ -1,15 +1,58 @@
-import type { AgentermEvent } from '@agenterm/core';
-import { useQueryClient } from '@tanstack/react-query';
+import type { AgentermEvent, SessionRecord } from '@agenterm/core';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import type { AppCommand } from '../../shared/bridge.js';
+import type { ActivityTick, AppCommand } from '../../shared/bridge.js';
 import { api, getBridge } from './bridge.js';
 import { useLive } from './live.js';
 import { keys } from './queries.js';
 
+/** Full session-list refetches happen at most this often; events patch rows in between. */
+const LIST_REFRESH_MS = 1500;
+
+/** Apply an event to the cached session list in place. Returns false when a refetch is needed. */
+export function patchSessions(client: QueryClient, event: AgentermEvent): boolean {
+  const current = client.getQueryData<SessionRecord[]>(keys.sessions);
+  if (current === undefined) return false;
+  const index = current.findIndex((session) => session.id === event.sessionId);
+  if (index === -1) return event.kind !== 'session.created' && event.kind !== 'session.attached';
+  const session = current[index] as SessionRecord;
+  let next: SessionRecord | null = null;
+  switch (event.kind) {
+    case 'agent.status':
+      next = { ...session, overlay: event.overlay, overlaySource: event.source };
+      break;
+    case 'session.updated':
+      next = { ...session, title: event.title };
+      break;
+    case 'session.exited':
+      next = {
+        ...session,
+        lifecycle: session.lifecycle === 'killed' ? 'killed' : 'exited',
+        endedAtMs: session.endedAtMs ?? event.createdAtMs,
+        exitCode: event.exitCode,
+        exitSignal: event.exitSignal
+      };
+      break;
+    case 'session.detached':
+      client.setQueryData<SessionRecord[]>(
+        keys.sessions,
+        current.filter((entry) => entry.id !== event.sessionId)
+      );
+      return true;
+    default:
+      return true;
+  }
+  const copy = current.slice();
+  copy[index] = next;
+  client.setQueryData<SessionRecord[]>(keys.sessions, copy);
+  return true;
+}
+
 /**
- * Connect the renderer to main once: connection state, heartbeat ticks,
- * the activity feed, and targeted cache invalidation per event so views
- * update the moment the daemon reports a change.
+ * Connect the renderer to main once: connection state, a one-second
+ * heartbeat clock fed by daemon activity frames, the activity feed, and
+ * in-place cache patches so hundreds of sessions never trigger a refetch
+ * per event.
  */
 export function useDaemonWiring(onCommand: (command: AppCommand) => void): void {
   const client = useQueryClient();
@@ -35,6 +78,7 @@ export function useDaemonWiring(onCommand: (command: AppCommand) => void): void 
     const invalidate = (queryKey: readonly unknown[]): void => {
       void client.invalidateQueries({ queryKey });
     };
+    const refreshList = (): void => later('sessions', LIST_REFRESH_MS, () => invalidate(keys.sessions));
 
     const seed = async (): Promise<void> => {
       const [events, activity, usage] = await Promise.allSettled([
@@ -53,25 +97,23 @@ export function useDaemonWiring(onCommand: (command: AppCommand) => void): void 
       switch (event.kind) {
         case 'session.created':
         case 'session.attached':
+        case 'workspace.conflict':
+          refreshList();
+          break;
         case 'session.exited':
         case 'session.updated':
         case 'agent.status':
-        case 'workspace.conflict':
-          later('sessions', 60, () => invalidate(keys.sessions));
-          invalidate(keys.detail(id));
-          break;
         case 'session.detached':
-          later('sessions', 60, () => invalidate(keys.sessions));
-          live.forget(id);
+          if (!patchSessions(client, event)) refreshList();
+          if (event.kind === 'session.detached') live.forget(id);
           break;
         case 'port.opened':
         case 'port.closed':
-          invalidate(keys.processes(id));
-          invalidate(keys.detail(id));
+          later(`processes:${id}`, 300, () => invalidate(keys.processes(id)));
           break;
         case 'file.changed':
-          later(`files:${id}`, 250, () => invalidate(keys.files(id)));
-          later(`git:${id}`, 900, () => {
+          later(`files:${id}`, 400, () => invalidate(keys.files(id)));
+          later(`git:${id}`, 1200, () => {
             invalidate(keys.git(id));
             invalidate(['diff', id]);
           });
@@ -81,8 +123,25 @@ export function useDaemonWiring(onCommand: (command: AppCommand) => void): void 
       }
     };
 
+    // Daemon frames arrive about once a second; a local clock folds them in so
+    // traces keep moving (and flatten) even when nothing prints.
+    let pending: ActivityTick['sessions'] = {};
+    const clock = setInterval(() => {
+      const incoming = pending;
+      pending = {};
+      useLive.getState().step(incoming, Date.now());
+    }, 1000);
+
     const offEvent = bridge.onEvent(onEvent);
-    const offActivity = bridge.onActivity((tick) => useLive.getState().applyTick(tick));
+    const offActivity = bridge.onActivity((tick) => {
+      for (const [id, sample] of Object.entries(tick.sessions)) {
+        const prior = pending[id];
+        pending[id] = {
+          bytes: (prior?.bytes ?? 0) + sample.bytes,
+          lastLine: sample.lastLine ?? prior?.lastLine ?? null
+        };
+      }
+    });
     const offConnection = bridge.onConnection((info) => {
       const was = useLive.getState().connection.state;
       useLive.getState().setConnection(info);
@@ -97,6 +156,7 @@ export function useDaemonWiring(onCommand: (command: AppCommand) => void): void 
       if (info.state === 'online') void seed();
     });
     return () => {
+      clearInterval(clock);
       offEvent();
       offActivity();
       offConnection();

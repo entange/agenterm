@@ -1,5 +1,6 @@
 import type { ActivityResponse, AgentermEvent, UsageResponse } from '@agenterm/core';
 import { create } from 'zustand';
+import { WORKING_WINDOW_MS } from '../../shared/attention.js';
 import type { ActivityTick, ConnectionInfo } from '../../shared/bridge.js';
 
 /** Heartbeat window: one sample per second for two minutes. */
@@ -7,65 +8,89 @@ export const TRACE_SAMPLES = 120;
 
 const FEED_LIMIT = 400;
 
+export const EMPTY_TRACE: number[] = Array.from({ length: TRACE_SAMPLES }, () => 0);
+
+type Spend = { costUsd: number; inputTokens: number; outputTokens: number };
+
 interface LiveState {
   connection: ConnectionInfo;
-  /** Output bytes per second, oldest first, TRACE_SAMPLES long. */
+  /** Output bytes per second, oldest first, TRACE_SAMPLES long. Read per strip, never as a whole. */
   traces: Record<string, number[]>;
   lastLine: Record<string, string>;
   lastOutputAt: Record<string, number>;
+  /**
+   * Ids with output in the last WORKING_WINDOW_MS, as a sorted string so
+   * subscribers re-render only when membership changes, not every second.
+   */
+  workingKey: string;
+  /** Wall clock rounded to 30 s, for "quiet for 5m" style labels. */
+  clock: number;
   /** Non-terminal events, newest first. */
   feed: AgentermEvent[];
   /** Model spend per session from agent telemetry. */
-  usage: Record<string, { costUsd: number; inputTokens: number; outputTokens: number }>;
-  seedUsage: (snapshot: UsageResponse) => void;
+  usage: Record<string, Spend>;
   setConnection: (info: ConnectionInfo) => void;
-  applyTick: (tick: ActivityTick) => void;
-  /** Replace traces with the daemon's recorded window, e.g. after connecting. */
+  /** Advance every trace by one second, folding in any daemon activity received since the last step. */
+  step: (incoming: ActivityTick['sessions'], atMs: number) => void;
   seedActivity: (snapshot: ActivityResponse) => void;
+  seedUsage: (snapshot: UsageResponse) => void;
   pushEvent: (event: AgentermEvent) => void;
   seedFeed: (events: AgentermEvent[]) => void;
   forget: (sessionId: string) => void;
 }
 
-export const EMPTY_TRACE: number[] = Array.from({ length: TRACE_SAMPLES }, () => 0);
+function workingKeyOf(lastOutputAt: Record<string, number>, now: number): string {
+  return Object.entries(lastOutputAt)
+    .filter(([, at]) => now - at <= WORKING_WINDOW_MS)
+    .map(([id]) => id)
+    .sort()
+    .join(',');
+}
 
 /**
- * Live state fed by main: connection, per-session output heartbeat, and
- * the activity feed. Every tick advances every known trace by one sample
- * so idle sessions visibly flatline.
+ * Live state fed by main: connection, per-session output heartbeat, the
+ * activity feed, and spend. Built so 500 sessions stay cheap: traces are
+ * read per visible strip, and app-wide subscribers watch the working set
+ * and a 30-second clock instead of every tick.
  */
 export const useLive = create<LiveState>((set) => ({
   connection: { state: 'starting', version: null, detail: null },
   traces: {},
   lastLine: {},
   lastOutputAt: {},
+  workingKey: '',
+  clock: Math.floor(Date.now() / 30_000) * 30_000,
   feed: [],
   usage: {},
-  seedUsage: (snapshot) =>
-    set((state) => {
-      const usage = { ...state.usage };
-      for (const [id, entry] of Object.entries(snapshot.sessions)) {
-        usage[id] = { costUsd: entry.costUsd, inputTokens: entry.inputTokens, outputTokens: entry.outputTokens };
-      }
-      return { usage };
-    }),
   setConnection: (connection) => set({ connection }),
-  applyTick: (tick) =>
+  step: (incoming, atMs) =>
     set((state) => {
       const traces: Record<string, number[]> = {};
-      const ids = new Set([...Object.keys(state.traces), ...Object.keys(tick.sessions)]);
-      const lastLine = { ...state.lastLine };
-      const lastOutputAt = { ...state.lastOutputAt };
-      for (const id of ids) {
-        const sample = tick.sessions[id];
+      for (const id of new Set([...Object.keys(state.traces), ...Object.keys(incoming)])) {
         const prior = state.traces[id] ?? EMPTY_TRACE;
-        traces[id] = [...prior.slice(1), sample?.bytes ?? 0];
-        if (sample !== undefined) {
+        const bytes = incoming[id]?.bytes ?? 0;
+        // Idle traces that are already flat stay the same array so their strips do not re-render.
+        traces[id] = bytes === 0 && prior.every((value) => value === 0) ? prior : [...prior.slice(1), bytes];
+      }
+      let lastLine = state.lastLine;
+      let lastOutputAt = state.lastOutputAt;
+      if (Object.keys(incoming).length > 0) {
+        lastLine = { ...state.lastLine };
+        lastOutputAt = { ...state.lastOutputAt };
+        for (const [id, sample] of Object.entries(incoming)) {
           if (sample.lastLine !== null) lastLine[id] = sample.lastLine;
-          if (sample.bytes > 0) lastOutputAt[id] = tick.atMs;
+          if (sample.bytes > 0) lastOutputAt[id] = atMs;
         }
       }
-      return { traces, lastLine, lastOutputAt };
+      const workingKey = workingKeyOf(lastOutputAt, atMs);
+      const clock = Math.floor(atMs / 30_000) * 30_000;
+      return {
+        traces,
+        lastLine,
+        lastOutputAt,
+        ...(workingKey === state.workingKey ? {} : { workingKey }),
+        ...(clock === state.clock ? {} : { clock })
+      };
     }),
   seedActivity: (snapshot) =>
     set((state) => {
@@ -77,7 +102,15 @@ export const useLive = create<LiveState>((set) => ({
         if (entry.lastLine !== null) lastLine[id] = entry.lastLine;
         if (entry.lastOutputAtMs !== null) lastOutputAt[id] = entry.lastOutputAtMs;
       }
-      return { traces, lastLine, lastOutputAt };
+      return { traces, lastLine, lastOutputAt, workingKey: workingKeyOf(lastOutputAt, snapshot.atMs) };
+    }),
+  seedUsage: (snapshot) =>
+    set((state) => {
+      const usage = { ...state.usage };
+      for (const [id, entry] of Object.entries(snapshot.sessions)) {
+        usage[id] = { costUsd: entry.costUsd, inputTokens: entry.inputTokens, outputTokens: entry.outputTokens };
+      }
+      return { usage };
     }),
   pushEvent: (event) =>
     set((state) => {

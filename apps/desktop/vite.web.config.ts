@@ -85,6 +85,7 @@ function devBridge(): Plugin {
             if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ kind, payload }));
           };
           send('connection', link.connection());
+          const mine = new Set<string>();
           const offs = [
             link.onEvent((event) => send('event', event)),
             link.onActivity((tick) => send('activity', tick)),
@@ -96,8 +97,22 @@ function devBridge(): Plugin {
               link.sendInput(message.sessionId, message.data);
             }
             if (message.kind === 'start') void link.ensure();
+            if (message.kind === 'subscribe' && typeof message.sessionId === 'string' && !mine.has(message.sessionId)) {
+              mine.add(message.sessionId);
+              link.subscribe(message.sessionId);
+            }
+            if (
+              message.kind === 'unsubscribe' &&
+              typeof message.sessionId === 'string' &&
+              mine.delete(message.sessionId)
+            ) {
+              link.unsubscribe(message.sessionId);
+            }
           });
-          ws.on('close', () => offs.forEach((off) => off()));
+          ws.on('close', () => {
+            offs.forEach((off) => off());
+            for (const sessionId of mine) link.unsubscribe(sessionId);
+          });
         });
       });
     }

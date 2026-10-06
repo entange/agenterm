@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import { AgentermClient, daemonBaseUrl, lastVisibleLine, type AgentermEvent } from '@agenterm/core';
+import { AgentermClient, daemonBaseUrl, type AgentermEvent } from '@agenterm/core';
 import WebSocket from 'ws';
 import type { ActivityTick, ConnectionInfo } from '../../shared/bridge.js';
 
@@ -74,10 +74,8 @@ export class DaemonLink {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private retryDelayMs = 500;
   private userStopped = false;
-  private readonly tails = new Map<string, string>();
-  private readonly bytes = new Map<string, number>();
-  private readonly dirtyLines = new Set<string>();
-  private readonly tickTimer: ReturnType<typeof setInterval>;
+  /** Terminal-output subscriptions with reference counts across windows. */
+  private readonly outputs = new Map<string, number>();
   private readonly eventHandlers = new Set<(event: AgentermEvent) => void>();
   private readonly activityHandlers = new Set<(tick: ActivityTick) => void>();
   private readonly connectionHandlers = new Set<(info: ConnectionInfo) => void>();
@@ -88,9 +86,7 @@ export class DaemonLink {
       isPackaged: boolean;
       resourcesPath: string;
     }
-  ) {
-    this.tickTimer = setInterval(() => this.flushActivity(), 1000);
-  }
+  ) {}
 
   connection(): ConnectionInfo {
     return this.info;
@@ -174,7 +170,21 @@ export class DaemonLink {
         });
         return this.info;
       }
-      const child = spawn(spec.command, spec.args, { detached: true, stdio: 'ignore', env: spec.env });
+      // Raise the open-file limit first: Finder-launched apps get a soft limit of 256,
+      // and every terminal holds several descriptors.
+      const launch =
+        process.platform === 'win32'
+          ? { command: spec.command, args: spec.args }
+          : {
+              command: '/bin/sh',
+              args: [
+                '-c',
+                'ulimit -n 65536 2>/dev/null || ulimit -n 10240 2>/dev/null; exec "$0" "$@"',
+                spec.command,
+                ...spec.args
+              ]
+            };
+      const child = spawn(launch.command, launch.args, { detached: true, stdio: 'ignore', env: spec.env });
       child.unref();
       for (let i = 0; i < 80 && version === null; i++) {
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -241,19 +251,23 @@ export class DaemonLink {
     this.socket = socket;
     socket.on('open', () => {
       this.retryDelayMs = 500;
-      socket.send(JSON.stringify({ kind: 'subscribe', sessionId: '*' }));
+      // Only terminals someone is looking at stream bytes; activity arrives as one frame per second.
+      for (const sessionId of this.outputs.keys()) socket.send(JSON.stringify({ kind: 'subscribe', sessionId }));
       this.setInfo({ state: 'online', version, detail: null });
     });
     socket.on('message', (raw) => {
-      let parsed: { kind?: string; event?: AgentermEvent };
+      let parsed: { kind?: string; event?: AgentermEvent; tick?: ActivityTick };
       try {
         parsed = JSON.parse(String(raw)) as typeof parsed;
       } catch {
         return;
       }
+      if (parsed.kind === 'activity' && parsed.tick !== undefined) {
+        for (const handler of this.activityHandlers) handler(parsed.tick);
+        return;
+      }
       if (parsed.kind !== 'event' || parsed.event === undefined) return;
       const event = parsed.event;
-      if (event.kind === 'terminal.output') this.trackOutput(event.sessionId, event.data);
       for (const handler of this.eventHandlers) handler(event);
     });
     socket.on('error', () => undefined);
@@ -281,34 +295,28 @@ export class DaemonLink {
     this.retryDelayMs = Math.min(this.retryDelayMs * 2, 5000);
   }
 
-  private trackOutput(sessionId: string, data: string): void {
-    this.bytes.set(sessionId, (this.bytes.get(sessionId) ?? 0) + data.length);
-    this.tails.set(sessionId, ((this.tails.get(sessionId) ?? '') + data).slice(-4096));
-    this.dirtyLines.add(sessionId);
+  /** Start streaming one session's terminal bytes (reference counted). */
+  subscribe(sessionId: string): void {
+    const count = this.outputs.get(sessionId) ?? 0;
+    this.outputs.set(sessionId, count + 1);
+    if (count === 0) this.sendFrame({ kind: 'subscribe', sessionId });
   }
 
-  private flushActivity(): void {
-    if (this.bytes.size === 0 && this.dirtyLines.size === 0) return;
-    const tick: ActivityTick = { atMs: Date.now(), sessions: {} };
-    for (const sessionId of new Set([...this.bytes.keys(), ...this.dirtyLines])) {
-      tick.sessions[sessionId] = {
-        bytes: this.bytes.get(sessionId) ?? 0,
-        lastLine: lastVisibleLine(this.tails.get(sessionId) ?? '')
-      };
+  unsubscribe(sessionId: string): void {
+    const count = this.outputs.get(sessionId) ?? 0;
+    if (count <= 1) {
+      this.outputs.delete(sessionId);
+      if (count === 1) this.sendFrame({ kind: 'unsubscribe', sessionId });
+      return;
     }
-    this.bytes.clear();
-    this.dirtyLines.clear();
-    for (const handler of this.activityHandlers) handler(tick);
+    this.outputs.set(sessionId, count - 1);
   }
 
-  /** Forget per-session buffers once a session is closed. */
-  forget(sessionId: string): void {
-    this.tails.delete(sessionId);
-    this.bytes.delete(sessionId);
+  private sendFrame(frame: unknown): void {
+    if (this.socket !== null && this.socket.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(frame));
   }
 
   dispose(): void {
-    clearInterval(this.tickTimer);
     if (this.retryTimer !== null) clearTimeout(this.retryTimer);
     this.userStopped = true;
     this.closeSocket();

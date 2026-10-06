@@ -14,45 +14,46 @@
  * idle = alive and quiet. Accent marks selection and focus only.
  */
 :root {
-  --canvas: #eef1f5;
-  --panel: #f7f8fa;
+  --canvas: #f4f4f5;
+  --panel: #fafafa;
   --raised: #ffffff;
-  --sunken: #e6eaf0;
-  --line: #dce2ea;
-  --line-strong: #c5ceda;
-  --ink: #16202b;
-  --ink-muted: #556375;
-  --ink-faint: #8694a6;
-  --accent: #3d5bd9;
-  --accent-soft: #3d5bd91f;
+  --sunken: #ececee;
+  --line: #e4e4e7;
+  --line-strong: #d4d4d8;
+  --ink: #09090b;
+  --ink-muted: #52525b;
+  --ink-faint: #8a8a93;
+  --accent: #18181b;
+  --accent-soft: #18181b12;
   --sig-attn: #b7791f;
   --sig-work: #1f7fd1;
   --sig-fail: #c9423f;
   --sig-ok: #2f8f5b;
-  --sig-idle: #7c8a9c;
-  --term-bg: #fbfcfd;
-  --term-fg: #1d2733;
+  --sig-idle: #8a8a93;
+  --term-bg: #ffffff;
+  --term-fg: #18181b;
 }
 
+/* Neutral graphite: no hue in the surfaces, so the signal colors are the only color on screen. */
 .dark {
-  --canvas: #11161d;
-  --panel: #151b23;
-  --raised: #1c2430;
-  --sunken: #0d1218;
-  --line: #253040;
-  --line-strong: #344256;
-  --ink: #dce3ec;
-  --ink-muted: #8a98ab;
-  --ink-faint: #5e6b7d;
-  --accent: #9db2ff;
-  --accent-soft: #9db2ff24;
+  --canvas: #0b0b0c;
+  --panel: #111112;
+  --raised: #18181a;
+  --sunken: #070708;
+  --line: #222225;
+  --line-strong: #303034;
+  --ink: #ededee;
+  --ink-muted: #a0a0a7;
+  --ink-faint: #67676e;
+  --accent: #ededee;
+  --accent-soft: #ffffff14;
   --sig-attn: #f2b84b;
   --sig-work: #5fb3f9;
   --sig-fail: #ef6f6c;
   --sig-ok: #6ccb9a;
-  --sig-idle: #7c8a9c;
-  --term-bg: #0d1218;
-  --term-fg: #d5dde8;
+  --sig-idle: #74747c;
+  --term-bg: #0b0b0c;
+  --term-fg: #e4e4e7;
 }
 
 @theme inline {

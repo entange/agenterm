@@ -31,6 +31,9 @@ function connect(): void {
     }
     for (const handler of handlers[kind]) (handler as Handler<unknown>)(payload);
   };
+  ws.onopen = () => {
+    for (const sessionId of subscribed) ws.send(JSON.stringify({ kind: 'subscribe', sessionId }));
+  };
   ws.onclose = () => setTimeout(connect, 1000);
 }
 connect();
@@ -48,8 +51,14 @@ const bridge: AgentermBridge = {
     return (await response.json()) as never;
   },
   sendInput: (sessionId, data) => socket?.send(JSON.stringify({ kind: 'input', sessionId, data })),
-  subscribeOutput: (sessionId) => subscribed.add(sessionId),
-  unsubscribeOutput: (sessionId) => subscribed.delete(sessionId),
+  subscribeOutput: (sessionId) => {
+    subscribed.add(sessionId);
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'subscribe', sessionId }));
+  },
+  unsubscribeOutput: (sessionId) => {
+    subscribed.delete(sessionId);
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'unsubscribe', sessionId }));
+  },
   onEvent: (handler) => on('event', handler as Handler<never>),
   onActivity: (handler) => on('activity', handler as Handler<never>),
   onConnection: (handler) => on('connection', handler as Handler<never>),
@@ -93,10 +102,24 @@ window.addEventListener('keydown', (event) => {
 // Screenshot helpers: ?theme=dark|light, ?select=<id prefix>&tab=<tab>, ?dialog=new|palette.
 const params = new URLSearchParams(location.search);
 const theme = params.get('theme');
+const group = params.get('group');
+const density = params.get('density');
 if (theme === 'dark' || theme === 'light') {
   const key = 'agenterm.ui.v1';
   const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
   localStorage.setItem(key, JSON.stringify({ ...stored, theme }));
+}
+if (group === 'status' || group === 'project' || density === 'compact' || density === 'comfortable') {
+  const key = 'agenterm.ui.v1';
+  const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+  localStorage.setItem(
+    key,
+    JSON.stringify({
+      ...stored,
+      ...(group === null ? {} : { groupBy: group }),
+      ...(density === null ? {} : { density })
+    })
+  );
 }
 
 await import('../main.js');

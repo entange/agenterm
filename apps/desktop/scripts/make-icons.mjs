@@ -110,11 +110,11 @@ function render(size, layers) {
 function appIcon(size) {
   const s = size / 1024;
   const m = 100 * s;
-  const layers = [[roundedRect(m, m, size - 2 * m, size - 2 * m, 185 * s), '#161C24']];
+  const layers = [[roundedRect(m, m, size - 2 * m, size - 2 * m, 185 * s), '#111112']];
   const bands = ['#F2B84B', '#5FB3F9', '#6CCB9A'];
   bands.forEach((band, i) => {
     const y = (262 + i * 180) * s;
-    layers.push([roundedRect(232 * s, y, 560 * s, 132 * s, 26 * s), '#232D3A']);
+    layers.push([roundedRect(232 * s, y, 560 * s, 132 * s, 26 * s), '#232326']);
     layers.push([roundedRect(232 * s, y, 44 * s, 132 * s, 22 * s), band]);
     layers.push([roundedRect(254 * s, y, 22 * s, 132 * s, 0), band]);
   });

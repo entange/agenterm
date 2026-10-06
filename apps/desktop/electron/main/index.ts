@@ -116,7 +116,7 @@ function createWindow(): BrowserWindow {
     minHeight: 600,
     show: false,
     title: 'agenterm',
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#11161D' : '#EEF1F5',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0B0B0C' : '#F4F4F5',
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 16, y: 15 },
     ...(isMac ? {} : { icon: resource('icon.png') }),
@@ -143,6 +143,7 @@ function createWindow(): BrowserWindow {
   });
   const contentsId = win.webContents.id;
   win.on('closed', () => {
+    for (const sessionId of outputSubscriptions.get(contentsId) ?? []) link.unsubscribe(sessionId);
     outputSubscriptions.delete(contentsId);
     if (mainWindow === win) mainWindow = null;
   });
@@ -229,11 +230,14 @@ function registerIpc(): void {
   ipcMain.on(IPC.subscribe, (event, sessionId: unknown) => {
     if (!trusted(event) || typeof sessionId !== 'string') return;
     const set = outputSubscriptions.get(event.sender.id) ?? new Set<string>();
+    if (!set.has(sessionId)) link.subscribe(sessionId);
     set.add(sessionId);
     outputSubscriptions.set(event.sender.id, set);
   });
   ipcMain.on(IPC.unsubscribe, (event, sessionId: unknown) => {
-    if (typeof sessionId === 'string') outputSubscriptions.get(event.sender.id)?.delete(sessionId);
+    if (typeof sessionId === 'string' && outputSubscriptions.get(event.sender.id)?.delete(sessionId) === true) {
+      link.unsubscribe(sessionId);
+    }
   });
   ipcMain.handle(IPC.getConnection, () => link.connection());
   ipcMain.handle(IPC.startDaemon, (event) => (trusted(event) ? link.ensure() : link.connection()));
@@ -414,7 +418,6 @@ const monitor = new AttentionMonitor({
 
 link.onEvent((event) => {
   const terminal = event.kind === 'terminal.output' || event.kind === 'terminal.input';
-  if (event.kind === 'session.detached') link.forget(event.sessionId);
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue;
     if (terminal && outputSubscriptions.get(win.webContents.id)?.has(event.sessionId) !== true) continue;

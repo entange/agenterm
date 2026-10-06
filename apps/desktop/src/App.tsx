@@ -7,7 +7,8 @@ import { ConnectionBanner, TitleBar, Toaster } from './components/chrome.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { NewSessionDialog, PendingDialogs } from './components/dialogs.js';
 import { Home } from './components/Home.js';
-import { boardOrder, Sidebar } from './components/Sidebar.js';
+import { Sidebar } from './components/Sidebar.js';
+import { buildRows } from './lib/board.js';
 import { SessionView } from './components/SessionView.js';
 import { getBridge } from './lib/bridge.js';
 import { useAttention, useSessions } from './lib/queries.js';
@@ -49,10 +50,14 @@ export function App(): React.JSX.Element {
     [setNewSessionOpen]
   );
 
-  // Board order drives keyboard navigation so ⌘1 is the top strip.
+  // Sidebar order (same grouping, nothing collapsed) drives ⌘1-9, cycling, and the palette.
+  const groupBy = useUi((state) => state.groupBy);
   const ordered = React.useMemo(
-    () => boardOrder(sessions, attention).flatMap(([, members]) => members),
-    [sessions, attention]
+    () =>
+      buildRows(sessions, attention, { groupBy, collapsed: new Set(), filter: '', showAllEnded: true }).flatMap(
+        (row) => (row.kind === 'session' ? [row.session] : [])
+      ),
+    [sessions, attention, groupBy]
   );
 
   const onCommand = (command: AppCommand): void => {

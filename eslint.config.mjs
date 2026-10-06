@@ -23,7 +23,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['**/*.tsx'],
+    files: ['**/*.tsx', 'apps/desktop/src/**/*.ts'],
     plugins: { 'react-hooks': reactHooks },
     rules: {
       'react-hooks/rules-of-hooks': 'error',

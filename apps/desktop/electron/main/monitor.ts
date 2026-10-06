@@ -45,7 +45,7 @@ export class AttentionMonitor {
 
   private handle(event: AgentermEvent): void {
     if (event.kind === 'terminal.output' || event.kind === 'terminal.input' || event.kind === 'file.changed') return;
-    this.scheduleRefresh(300);
+    this.scheduleRefresh(1500);
     const session = this.find(event.sessionId);
     const name = session === undefined ? 'An agent' : `${callsign(session)} · ${session.title}`;
     if (event.kind === 'agent.status' && event.overlay === 'working') {

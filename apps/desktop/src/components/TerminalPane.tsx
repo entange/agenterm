@@ -11,20 +11,20 @@ import { useLive } from '../lib/live.js';
 import { useUi } from '../lib/ui.js';
 
 const DARK: ITheme = {
-  background: '#0d1218',
-  foreground: '#d5dde8',
-  cursor: '#9db2ff',
-  cursorAccent: '#0d1218',
-  selectionBackground: '#9db2ff40',
-  black: '#1c2430',
+  background: '#0b0b0c',
+  foreground: '#e4e4e7',
+  cursor: '#ededee',
+  cursorAccent: '#0b0b0c',
+  selectionBackground: '#ffffff33',
+  black: '#27272a',
   red: '#ef6f6c',
   green: '#6ccb9a',
   yellow: '#f2b84b',
   blue: '#5fb3f9',
   magenta: '#c49cf4',
   cyan: '#59d0d6',
-  white: '#c4ccd8',
-  brightBlack: '#5e6b7d',
+  white: '#d4d4d8',
+  brightBlack: '#71717a',
   brightRed: '#ff8f8b',
   brightGreen: '#8fe0b5',
   brightYellow: '#ffd07a',
@@ -35,27 +35,27 @@ const DARK: ITheme = {
 };
 
 const LIGHT: ITheme = {
-  background: '#fbfcfd',
-  foreground: '#1d2733',
-  cursor: '#3d5bd9',
-  cursorAccent: '#fbfcfd',
-  selectionBackground: '#3d5bd933',
-  black: '#1d2733',
+  background: '#ffffff',
+  foreground: '#18181b',
+  cursor: '#18181b',
+  cursorAccent: '#ffffff',
+  selectionBackground: '#18181b26',
+  black: '#18181b',
   red: '#c9423f',
   green: '#2f8f5b',
   yellow: '#a06a12',
   blue: '#1f6fc1',
   magenta: '#8a4fc7',
   cyan: '#13858b',
-  white: '#8694a6',
-  brightBlack: '#556375',
+  white: '#8a8a93',
+  brightBlack: '#52525b',
   brightRed: '#e0524e',
   brightGreen: '#38a86b',
   brightYellow: '#b7791f',
   brightBlue: '#2f86e0',
   brightMagenta: '#a066e0',
   brightCyan: '#1aa1a8',
-  brightWhite: '#16202b'
+  brightWhite: '#09090b'
 };
 
 function currentTheme(): ITheme {

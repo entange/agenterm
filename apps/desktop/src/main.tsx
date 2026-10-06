@@ -14,6 +14,9 @@ const queryClient = new QueryClient({
   }
 });
 
+// Development builds expose the query cache for profiling from devtools.
+if (import.meta.env.DEV) (window as unknown as { __agentermQuery?: QueryClient }).__agentermQuery = queryClient;
+
 const host = document.getElementById('root');
 if (host !== null) {
   createRoot(host).render(

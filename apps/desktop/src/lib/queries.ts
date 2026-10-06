@@ -1,5 +1,6 @@
 import type { SessionRecord } from '@agenterm/core';
 import { useQuery, type QueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { attentionOf, acknowledgementKey, type Attention } from '../../shared/attention.js';
 import { api } from './bridge.js';
 import { useLive } from './live.js';
@@ -94,25 +95,34 @@ export function useDiscover(enabled = true) {
   });
 }
 
-/** Attention for every session, recomputed each heartbeat tick. */
+/**
+ * Attention for every session. Recomputed when the list, the working set,
+ * acknowledgements, or the 30-second clock change; never on every tick,
+ * which would re-render the whole app each second with hundreds of agents.
+ */
 export function useAttention(sessions: SessionRecord[] | undefined): Map<string, Attention> {
-  const lastOutputAt = useLive((state) => state.lastOutputAt);
+  const workingKey = useLive((state) => state.workingKey);
+  const clock = useLive((state) => state.clock);
   const acknowledged = useUi((state) => state.acknowledged);
-  // Re-evaluate quiet/working boundaries as time passes.
-  useLive((state) => state.traces);
-  const now = Date.now();
-  const out = new Map<string, Attention>();
-  for (const session of sessions ?? []) {
-    out.set(
-      session.id,
-      attentionOf(session, {
-        nowMs: now,
-        lastOutputAtMs: lastOutputAt[session.id],
-        acknowledged: acknowledged.includes(acknowledgementKey(session))
-      })
-    );
-  }
-  return out;
+  return useMemo(() => {
+    const lastOutputAt = useLive.getState().lastOutputAt;
+    const seen = new Set(acknowledged);
+    const now = Math.max(Date.now(), clock);
+    const out = new Map<string, Attention>();
+    for (const session of sessions ?? []) {
+      out.set(
+        session.id,
+        attentionOf(session, {
+          nowMs: now,
+          lastOutputAtMs: lastOutputAt[session.id],
+          acknowledged: seen.has(acknowledgementKey(session))
+        })
+      );
+    }
+    return out;
+    // workingKey stands in for lastOutputAt membership, which is read fresh above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, workingKey, clock, acknowledged]);
 }
 
 /**

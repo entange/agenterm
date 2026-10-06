@@ -6,18 +6,32 @@ export type PendingDialog = { kind: 'kill'; session: SessionRecord } | { kind: '
 
 export type SessionTab = 'terminal' | 'commands' | 'git' | 'files' | 'processes' | 'activity';
 export type ThemePreference = 'system' | 'dark' | 'light';
+export type GroupBy = 'status' | 'project';
+export type Density = 'comfortable' | 'compact';
 
 interface Persisted {
   railOpen: boolean;
   theme: ThemePreference;
   acknowledged: string[];
   recentCwds: string[];
+  groupBy: GroupBy;
+  density: Density;
+  /** Collapsed sidebar groups and parent sessions, by key. */
+  collapsed: string[];
 }
 
 const STORAGE_KEY = 'agenterm.ui.v1';
 
 function load(): Persisted {
-  const fallback: Persisted = { railOpen: true, theme: 'system', acknowledged: [], recentCwds: [] };
+  const fallback: Persisted = {
+    railOpen: true,
+    theme: 'system',
+    acknowledged: [],
+    recentCwds: [],
+    groupBy: 'status',
+    density: 'comfortable',
+    collapsed: []
+  };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw === null ? fallback : { ...fallback, ...(JSON.parse(raw) as Partial<Persisted>) };
@@ -46,6 +60,9 @@ interface UiState extends Persisted {
   setTheme: (theme: ThemePreference) => void;
   acknowledge: (key: string) => void;
   rememberCwd: (cwd: string) => void;
+  setGroupBy: (groupBy: GroupBy) => void;
+  setDensity: (density: Density) => void;
+  toggleCollapsed: (key: string) => void;
 }
 
 /** View state. Panel and theme choices plus seen endings persist across launches. */
@@ -56,7 +73,10 @@ export const useUi = create<UiState>((set, get) => {
       railOpen: state.railOpen,
       theme: state.theme,
       acknowledged: state.acknowledged,
-      recentCwds: state.recentCwds
+      recentCwds: state.recentCwds,
+      groupBy: state.groupBy,
+      density: state.density,
+      collapsed: state.collapsed
     };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -95,6 +115,22 @@ export const useUi = create<UiState>((set, get) => {
       const acknowledged = [...get().acknowledged, key].slice(-500);
       set({ acknowledged });
       persist({ acknowledged });
+    },
+    setGroupBy: (groupBy) => {
+      set({ groupBy });
+      persist({ groupBy });
+    },
+    setDensity: (density) => {
+      set({ density });
+      persist({ density });
+    },
+    toggleCollapsed: (key) => {
+      const current = get().collapsed;
+      const collapsed = current.includes(key)
+        ? current.filter((entry) => entry !== key)
+        : [...current, key].slice(-500);
+      set({ collapsed });
+      persist({ collapsed });
     },
     rememberCwd: (cwd) => {
       const recentCwds = [cwd, ...get().recentCwds.filter((entry) => entry !== cwd)].slice(0, 8);
