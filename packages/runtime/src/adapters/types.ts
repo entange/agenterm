@@ -5,7 +5,8 @@ import type { HarnessParseOutcome, HarnessProvider } from '@agenterm/core';
 /** Candidate transcript files found under granted roots. No reads yet. */
 export interface HarnessAdapter {
   provider: HarnessProvider;
-  discoverFiles: (grantedRoots: string[]) => string[];
+  /** Candidate files, newest first. `cwd` narrows to the session's own project when the layout allows. */
+  discoverFiles: (grantedRoots: string[], cwd?: string) => string[];
   parseText: (text: string | null) => HarnessParseOutcome;
 }
 

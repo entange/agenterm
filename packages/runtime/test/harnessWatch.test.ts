@@ -50,9 +50,10 @@ describe('HarnessWatch with fixtures', () => {
   it('maps a permission transcript to waiting_permission with an event', async () => {
     const dataDir = scratch();
     const home = path.join(scratch(), 'fakehome');
-    fs.mkdirSync(path.join(home, 'projects'), { recursive: true });
+    // Real layout: one folder per project, named after its cwd (/tmp → -tmp).
+    fs.mkdirSync(path.join(home, 'projects', '-tmp'), { recursive: true });
     fs.writeFileSync(
-      path.join(home, 'projects', 'work.jsonl'),
+      path.join(home, 'projects', '-tmp', 'work.jsonl'),
       `${JSON.stringify({ version: '1', kind: 'permission_prompt', text: 'Tool needs approval to edit src/auth.ts' })}\n`
     );
     addGrant(dataDir, 'claude', home);
@@ -128,5 +129,24 @@ describe('HarnessWatch with fixtures', () => {
     await watch.poll();
     expect(store.get(id)?.overlay).toBe('unknown');
     watch.stop();
+  });
+});
+
+describe('claude adapter project scoping', () => {
+  it('reads only the transcript folder of the session cwd', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const { claudeAdapter, claudeProjectSlug } = await import('../src/adapters/claude.js');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agenterm-claude-root-'));
+    const mine = path.join(root, 'projects', claudeProjectSlug('/work/app.v2'));
+    const other = path.join(root, 'projects', claudeProjectSlug('/work/other'));
+    fs.mkdirSync(mine, { recursive: true });
+    fs.mkdirSync(other, { recursive: true });
+    fs.writeFileSync(path.join(mine, 'a.jsonl'), '{}\n');
+    fs.writeFileSync(path.join(other, 'b.jsonl'), '{}\n');
+    expect(claudeProjectSlug('/work/app.v2')).toBe('-work-app-v2');
+    expect(claudeAdapter.discoverFiles([root], '/work/app.v2').map((file) => path.basename(file))).toEqual(['a.jsonl']);
+    expect(claudeAdapter.discoverFiles([root], '/work/none')).toEqual([]);
   });
 });

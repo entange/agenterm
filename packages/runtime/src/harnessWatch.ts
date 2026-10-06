@@ -112,7 +112,7 @@ export class HarnessWatch {
     for (const root of roots) {
       this.audit(root, 'list');
     }
-    const files = adapter.discoverFiles(roots).slice(0, 3);
+    const files = adapter.discoverFiles(roots, record.cwd).slice(0, 3);
     if (files.length === 0) {
       this.applyOverlay(sessionId, 'unknown', null);
       return;

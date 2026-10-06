@@ -10,9 +10,24 @@ import { newestFiles, parseTail, type HarnessAdapter } from './types.js';
  * ~/.claude/projects/<slug>/*.jsonl layout. Lenient: any mismatch
  * yields unknown and never throws into the event bus.
  */
+/** Claude names each project folder after its cwd with non-alphanumerics as dashes. */
+export function claudeProjectSlug(cwd: string): string {
+  return cwd.replace(/[^A-Za-z0-9]/g, '-');
+}
+
 export const claudeAdapter: HarnessAdapter = {
   provider: 'claude',
-  discoverFiles: (grantedRoots: string[]) => {
+  discoverFiles: (grantedRoots: string[], cwd?: string) => {
+    if (cwd !== undefined) {
+      // Only this session's project folder: never another project's transcript.
+      const scoped: string[] = [];
+      for (const root of grantedRoots) {
+        for (const base of [path.join(root, 'projects'), root]) {
+          scoped.push(...newestFiles(path.join(base, claudeProjectSlug(cwd)), '.jsonl', 2));
+        }
+      }
+      return scoped.slice(0, 2);
+    }
     const out: string[] = [];
     for (const root of grantedRoots) {
       const projects = path.join(root, 'projects');
