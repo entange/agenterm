@@ -4,12 +4,18 @@ import type {
   DeleteSessionRequest,
   DeleteSessionResponse,
   DiscoverResponse,
+  EventsQuery,
+  EventsResponse,
+  FileChangesResponse,
+  GitDiffResponse,
+  GitStatusResponse,
   HealthResponse,
   ListSessionsQuery,
   ListSessionsResponse,
   SessionDetailResponse,
   SessionCommandsQuery,
-  SessionCommandsResponse,  SessionInputRequest,
+  SessionCommandsResponse,
+  SessionInputRequest,
   SessionInputResponse,
   SessionOutputQuery,
   SessionOutputResponse,
@@ -20,7 +26,9 @@ import type {
   SessionSignalRequest,
   SessionSignalResponse,
   SpawnSessionRequest,
-  SpawnSessionResponse
+  SpawnSessionResponse,
+  UpdateSessionRequest,
+  UpdateSessionResponse
 } from './api.js';
 
 /** Client options. Token is read from the agenterm data dir by the caller. */
@@ -30,8 +38,22 @@ export interface ApiClientOptions {
   fetchImpl?: typeof fetch;
 }
 
-function authHeaders(token: string): Record<string, string> {
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+/**
+ * Error thrown for non-2xx daemon replies. Carries the envelope code and
+ * hint so callers can branch on `missing_binary`, `session_running`, ...
+ */
+export class AgentermApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly hint: string | undefined;
+
+  constructor(status: number, code: string, message: string, hint?: string) {
+    super(message);
+    this.name = 'AgentermApiError';
+    this.status = status;
+    this.code = code;
+    this.hint = hint;
+  }
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -40,7 +62,11 @@ async function readJson(response: Response): Promise<unknown> {
   try {
     return JSON.parse(text) as unknown;
   } catch {
-    throw new Error(`daemon returned malformed JSON with status ${response.status}`);
+    throw new AgentermApiError(
+      response.status,
+      'malformed_response',
+      `daemon returned malformed JSON with status ${response.status}`
+    );
   }
 }
 
@@ -50,14 +76,24 @@ function ensureOk(response: Response, body: unknown): void {
   const nested = record?.['error'] as Record<string, unknown> | undefined;
   const message =
     typeof nested?.['message'] === 'string' ? nested['message'] : `request failed with status ${response.status}`;
-  throw new Error(message);
+  const code = typeof nested?.['code'] === 'string' ? nested['code'] : 'http_error';
+  const hint = typeof nested?.['hint'] === 'string' ? nested['hint'] : undefined;
+  throw new AgentermApiError(response.status, code, message, hint);
+}
+
+function querySuffix(entries: Record<string, string | number | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(entries)) {
+    if (value !== undefined) params.set(key, String(value));
+  }
+  return params.size > 0 ? `?${params.toString()}` : '';
 }
 
 /**
  * Typed daemon client shared by the desktop UI and the CLI.
  *
  * Thin wrapper over localhost HTTP. Validation lives in the daemon; this
- * layer only maps envelopes to typed results.
+ * layer only maps envelopes to typed results and errors.
  */
 export class AgentermClient {
   private readonly baseUrl: string;
@@ -70,159 +106,118 @@ export class AgentermClient {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
-  async health(): Promise<HealthResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/health`, {
-      headers: { Authorization: `Bearer ${this.token}` }
-    });
+  private async request<T>(method: string, pathname: string, payload?: unknown): Promise<T> {
+    const headers: Record<string, string> = { Authorization: `Bearer ${this.token}` };
+    const init: RequestInit = { method, headers };
+    if (payload !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(payload);
+    }
+    const response = await this.fetchImpl(`${this.baseUrl}${pathname}`, init);
     const body = await readJson(response);
     ensureOk(response, body);
-    return body as HealthResponse;
+    return body as T;
   }
 
-  async discover(): Promise<DiscoverResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/discover`, {
-      headers: { Authorization: `Bearer ${this.token}` }
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as DiscoverResponse;
+  private sessionPath(id: string, suffix = ''): string {
+    return `/sessions/${encodeURIComponent(id)}${suffix}`;
   }
 
-  async listSessions(query: ListSessionsQuery = {}): Promise<ListSessionsResponse> {
-    const params = new URLSearchParams();
-    if (query.provider !== undefined) params.set('provider', query.provider);
-    if (query.lifecycle !== undefined) params.set('lifecycle', query.lifecycle);
-    if (query.overlay !== undefined) params.set('overlay', query.overlay);
-    if (query.cwd !== undefined) params.set('cwd', query.cwd);
-    const suffix = params.size > 0 ? `?${params.toString()}` : '';
-    const response = await this.fetchImpl(`${this.baseUrl}/sessions${suffix}`, {
-      headers: { Authorization: `Bearer ${this.token}` }
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as ListSessionsResponse;
+  health(): Promise<HealthResponse> {
+    return this.request('GET', '/health');
   }
 
-  async attach(request: AttachSessionRequest): Promise<AttachSessionResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/sessions/attach`, {
-      method: 'POST',
-      headers: authHeaders(this.token),
-      body: JSON.stringify(request)
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as AttachSessionResponse;
+  discover(): Promise<DiscoverResponse> {
+    return this.request('GET', '/discover');
   }
 
-  async sessionDetail(id: string): Promise<SessionDetailResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}`, {
-      headers: { Authorization: `Bearer ${this.token}` }
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as SessionDetailResponse;
-  }
-
-  async spawn(request: SpawnSessionRequest): Promise<SpawnSessionResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/sessions`, {
-      method: 'POST',
-      headers: authHeaders(this.token),
-      body: JSON.stringify(request)
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as SpawnSessionResponse;
-  }
-
-  async deleteSession(id: string, request: DeleteSessionRequest): Promise<DeleteSessionResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-      headers: authHeaders(this.token),
-      body: JSON.stringify(request)
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as DeleteSessionResponse;
-  }
-
-  async sendInput(id: string, request: SessionInputRequest): Promise<SessionInputResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/input`, {
-      method: 'POST',
-      headers: authHeaders(this.token),
-      body: JSON.stringify(request)
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as SessionInputResponse;
-  }
-
-  async resize(id: string, request: SessionResizeRequest): Promise<SessionResizeResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/resize`, {
-      method: 'POST',
-      headers: authHeaders(this.token),
-      body: JSON.stringify(request)
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as SessionResizeResponse;
-  }
-
-  async signal(id: string, request: SessionSignalRequest): Promise<SessionSignalResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/signal`, {
-      method: 'POST',
-      headers: authHeaders(this.token),
-      body: JSON.stringify(request)
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as SessionSignalResponse;
-  }
-
-  async output(id: string, query: SessionOutputQuery = {}): Promise<SessionOutputResponse> {
-    const params = new URLSearchParams();
-    if (query.tailBytes !== undefined) params.set('tailBytes', String(query.tailBytes));
-    if (query.sinceSeq !== undefined) params.set('sinceSeq', String(query.sinceSeq));
-    if (query.limit !== undefined) params.set('limit', String(query.limit));
-    const suffix = params.size > 0 ? `?${params.toString()}` : '';
-    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/output${suffix}`, {
-      headers: { Authorization: `Bearer ${this.token}` }
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as SessionOutputResponse;
-  }
-
-  async processes(id: string): Promise<SessionProcessesResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/processes`, {
-      headers: { Authorization: `Bearer ${this.token}` }
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as SessionProcessesResponse;
-  }
-
-  async ports(id: string): Promise<SessionPortsResponse> {
-    const response = await this.fetchImpl(`${this.baseUrl}/sessions/${encodeURIComponent(id)}/ports`, {
-      headers: { Authorization: `Bearer ${this.token}` }
-    });
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as SessionPortsResponse;
-  }
-
-  async commands(id: string, query: SessionCommandsQuery = {}): Promise<SessionCommandsResponse> {
-    const params = new URLSearchParams();
-    if (query.limit !== undefined) params.set('limit', String(query.limit));
-    const suffix = params.size > 0 ? `?${params.toString()}` : '';
-    const response = await this.fetchImpl(
-      `${this.baseUrl}/sessions/${encodeURIComponent(id)}/commands${suffix}`,
-      {
-        headers: { Authorization: `Bearer ${this.token}` }
-      }
+  listSessions(query: ListSessionsQuery = {}): Promise<ListSessionsResponse> {
+    return this.request(
+      'GET',
+      `/sessions${querySuffix({
+        provider: query.provider,
+        lifecycle: query.lifecycle,
+        overlay: query.overlay,
+        cwd: query.cwd
+      })}`
     );
-    const body = await readJson(response);
-    ensureOk(response, body);
-    return body as SessionCommandsResponse;
+  }
+
+  attach(request: AttachSessionRequest): Promise<AttachSessionResponse> {
+    return this.request('POST', '/sessions/attach', request);
+  }
+
+  sessionDetail(id: string): Promise<SessionDetailResponse> {
+    return this.request('GET', this.sessionPath(id));
+  }
+
+  spawn(request: SpawnSessionRequest): Promise<SpawnSessionResponse> {
+    return this.request('POST', '/sessions', request);
+  }
+
+  deleteSession(id: string, request: DeleteSessionRequest): Promise<DeleteSessionResponse> {
+    return this.request('DELETE', this.sessionPath(id), request);
+  }
+
+  updateSession(id: string, request: UpdateSessionRequest): Promise<UpdateSessionResponse> {
+    return this.request('PATCH', this.sessionPath(id), request);
+  }
+
+  restart(id: string): Promise<UpdateSessionResponse> {
+    return this.request('POST', this.sessionPath(id, '/restart'), {});
+  }
+
+  sendInput(id: string, request: SessionInputRequest): Promise<SessionInputResponse> {
+    return this.request('POST', this.sessionPath(id, '/input'), request);
+  }
+
+  resize(id: string, request: SessionResizeRequest): Promise<SessionResizeResponse> {
+    return this.request('POST', this.sessionPath(id, '/resize'), request);
+  }
+
+  signal(id: string, request: SessionSignalRequest): Promise<SessionSignalResponse> {
+    return this.request('POST', this.sessionPath(id, '/signal'), request);
+  }
+
+  output(id: string, query: SessionOutputQuery = {}): Promise<SessionOutputResponse> {
+    return this.request(
+      'GET',
+      this.sessionPath(
+        id,
+        `/output${querySuffix({ tailBytes: query.tailBytes, sinceSeq: query.sinceSeq, limit: query.limit })}`
+      )
+    );
+  }
+
+  processes(id: string): Promise<SessionProcessesResponse> {
+    return this.request('GET', this.sessionPath(id, '/processes'));
+  }
+
+  ports(id: string): Promise<SessionPortsResponse> {
+    return this.request('GET', this.sessionPath(id, '/ports'));
+  }
+
+  commands(id: string, query: SessionCommandsQuery = {}): Promise<SessionCommandsResponse> {
+    return this.request('GET', this.sessionPath(id, `/commands${querySuffix({ limit: query.limit })}`));
+  }
+
+  git(id: string): Promise<GitStatusResponse> {
+    return this.request('GET', this.sessionPath(id, '/git'));
+  }
+
+  gitDiff(id: string, path: string): Promise<GitDiffResponse> {
+    return this.request('GET', this.sessionPath(id, `/git/diff${querySuffix({ path })}`));
+  }
+
+  files(id: string): Promise<FileChangesResponse> {
+    return this.request('GET', this.sessionPath(id, '/files'));
+  }
+
+  events(query: EventsQuery = {}): Promise<EventsResponse> {
+    return this.request(
+      'GET',
+      `/events${querySuffix({ sessionId: query.sessionId, beforeMs: query.beforeMs, limit: query.limit })}`
+    );
   }
 }
 

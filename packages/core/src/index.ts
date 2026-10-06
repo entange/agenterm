@@ -9,13 +9,21 @@ export type {
   DiscoverCandidate,
   DiscoverResponse,
   ErrorEnvelope,
+  EventsQuery,
+  EventsResponse,
+  FileChangeRecord,
+  FileChangesResponse,
+  GitDiffResponse,
+  GitFileState,
+  GitStatusResponse,
   HealthResponse,
   ListSessionsQuery,
   ListSessionsResponse,
   ServerSocketMessage,
   SessionCommandsQuery,
   SessionCommandsResponse,
-  SessionDetailResponse,  SessionInputRequest,
+  SessionDetailResponse,
+  SessionInputRequest,
   SessionInputResponse,
   SessionOutputChunk,
   SessionOutputQuery,
@@ -28,11 +36,14 @@ export type {
   SessionSignalRequest,
   SessionSignalResponse,
   SpawnSessionRequest,
-  SpawnSessionResponse
+  SpawnSessionResponse,
+  UpdateSessionRequest,
+  UpdateSessionResponse
 } from './api.js';
-export { AgentermClient, daemonBaseUrl } from './client.js';
+export { AgentermApiError, AgentermClient, daemonBaseUrl } from './client.js';
 export type { CommandRecord } from './command.js';
 export type { AgentermEvent, EventBase, EventRow } from './event.js';
+export { isTerminalEventKind } from './event.js';
 export type {
   HarnessParseOutcome,
   HarnessProvider
@@ -66,6 +77,7 @@ export {
   parseAgentProvider,
   parseAttachSessionRequest,
   parseDeleteSessionRequest,
+  parseEventsQuery,
   parseListSessionsQuery,
   parseNonEmptyString,
   parsePidValue,
@@ -75,6 +87,7 @@ export {
   parseSessionOutputQuery,
   parseSessionResizeRequest,
   parseSessionSignalRequest,
-  parseSpawnSessionRequest
+  parseSpawnSessionRequest,
+  parseUpdateSessionRequest
 } from './validation.js';
 export type { WorkspaceRecord } from './workspace.js';

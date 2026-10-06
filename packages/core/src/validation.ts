@@ -2,12 +2,14 @@ import { AGENT_PROVIDERS, type AgentProvider } from './agent.js';
 import type {
   AttachSessionRequest,
   DeleteSessionRequest,
+  EventsQuery,
   ListSessionsQuery,
   SessionInputRequest,
   SessionOutputQuery,
   SessionResizeRequest,
   SessionSignalRequest,
   SpawnSessionRequest,
+  UpdateSessionRequest,
 } from './api.js';
 import type { SessionLifecycleStatus, SessionOverlayStatus } from './session.js';
 
@@ -51,8 +53,10 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+/** POSIX absolute paths plus Windows drive and UNC paths. */
 function isAbsolutePath(value: unknown): value is string {
-  return typeof value === 'string' && value.startsWith('/') && value.length > 1;
+  if (typeof value !== 'string' || value.length < 2) return false;
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\');
 }
 
 function isUuid(value: unknown): value is string {
@@ -192,7 +196,61 @@ export function parseDeleteSessionRequest(body: unknown): ValidationResult<Delet
   if (typeof killTree !== 'boolean') {
     return { ok: false, code: 'invalid_killTree', message: 'killTree must be a boolean' };
   }
-  return { ok: true, value: { killTree } };
+  const confirmPid = body['confirmPid'];
+  if (confirmPid !== undefined && !isPid(confirmPid)) {
+    return { ok: false, code: 'invalid_confirmPid', message: 'confirmPid must be an integer above zero' };
+  }
+  return { ok: true, value: confirmPid === undefined ? { killTree } : { killTree, confirmPid } };
+}
+
+/** Validate rename body. */
+export function parseUpdateSessionRequest(body: unknown): ValidationResult<UpdateSessionRequest> {
+  if (!isPlainRecord(body)) {
+    return { ok: false, code: 'invalid_body', message: 'body must be an object' };
+  }
+  const title = body['title'];
+  if (typeof title !== 'string' || title.trim().length === 0 || title.trim().length > 200) {
+    return { ok: false, code: 'invalid_title', message: 'title must be 1-200 chars' };
+  }
+  return { ok: true, value: { title: title.trim() } };
+}
+
+function coerceInteger(value: unknown): unknown {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) ? parsed : value;
+  }
+  return value;
+}
+
+/** Validate the events feed query. Accepts string-typed query params. */
+export function parseEventsQuery(query: unknown): ValidationResult<EventsQuery> {
+  if (!isPlainRecord(query)) {
+    return { ok: false, code: 'invalid_query', message: 'query must be an object' };
+  }
+  const out: EventsQuery = {};
+  const sessionId = query['sessionId'];
+  if (sessionId !== undefined) {
+    if (!isUuid(sessionId)) {
+      return { ok: false, code: 'invalid_session_id', message: 'session id must be a UUID string' };
+    }
+    out.sessionId = sessionId;
+  }
+  const beforeMs = coerceInteger(query['beforeMs']);
+  if (beforeMs !== undefined) {
+    if (!(typeof beforeMs === 'number' && Number.isInteger(beforeMs) && beforeMs > 0)) {
+      return { ok: false, code: 'invalid_beforeMs', message: 'beforeMs must be a positive integer' };
+    }
+    out.beforeMs = beforeMs;
+  }
+  const limit = coerceInteger(query['limit']);
+  if (limit !== undefined) {
+    if (!isDims(limit, 1, 500)) {
+      return { ok: false, code: 'invalid_limit', message: 'limit must be an integer 1-500' };
+    }
+    out.limit = limit;
+  }
+  return { ok: true, value: out };
 }
 
 /** Validate input body. */
@@ -235,7 +293,11 @@ export function parseSessionSignalRequest(body: unknown): ValidationResult<Sessi
   if (signal !== 'interrupt' && signal !== 'terminate' && signal !== 'kill') {
     return { ok: false, code: 'invalid_signal', message: 'signal must be interrupt, terminate, or kill' };
   }
-  return { ok: true, value: { signal } };
+  const confirmPid = body['confirmPid'];
+  if (confirmPid !== undefined && !isPid(confirmPid)) {
+    return { ok: false, code: 'invalid_confirmPid', message: 'confirmPid must be an integer above zero' };
+  }
+  return { ok: true, value: confirmPid === undefined ? { signal } : { signal, confirmPid } };
 }
 
 /** Validate output query. Applies defaults. */

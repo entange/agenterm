@@ -40,6 +40,12 @@ export interface SessionDetachedEvent extends EventBase {
   pid: number;
 }
 
+/** Session row changed outside lifecycle, such as a rename. */
+export interface SessionUpdatedEvent extends EventBase {
+  kind: 'session.updated';
+  title: string;
+}
+
 /** Terminal output chunk with monotonic sequence numbers. */
 export interface TerminalOutputEvent extends EventBase {
   kind: 'terminal.output';
@@ -49,7 +55,11 @@ export interface TerminalOutputEvent extends EventBase {
   data: string;
 }
 
-/** Terminal input echo. Records bytes written to owned PTY stdin. */
+/**
+ * Terminal input echo. Records bytes written to owned PTY stdin.
+ * Delivered live to subscribers only; never persisted, since input can
+ * carry typed passwords.
+ */
 export interface TerminalInputEvent extends EventBase {
   kind: 'terminal.input';
   /** Monotonic sequence number per session. Integer, >= 0. */
@@ -123,6 +133,7 @@ export type AgentermEvent =
   | SessionExitedEvent
   | SessionAttachedEvent
   | SessionDetachedEvent
+  | SessionUpdatedEvent
   | TerminalOutputEvent
   | TerminalInputEvent
   | ProcessStartedEvent
@@ -145,4 +156,9 @@ export interface EventRow {
   payloadJson: string;
   /** Creation time. Milliseconds since epoch. Indexed. */
   createdAtMs: number;
+}
+
+/** Terminal byte events are streamed live but never stored or listed. */
+export function isTerminalEventKind(kind: AgentermEvent['kind']): boolean {
+  return kind === 'terminal.output' || kind === 'terminal.input';
 }

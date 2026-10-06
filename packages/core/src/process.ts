@@ -40,12 +40,16 @@ export interface DiscoveredProcess {
   pid: number;
   /** Parent OS pid. Integer, >= 0. */
   ppid: number;
-  /** Full command line text. Never empty. */
+  /** Full command line text, redacted. Never empty. */
   commandLine: string;
   /** Binary name lowercased for matching. Example: claude. */
   binaryName: string;
+  /** Provider inferred from the binary or script. Drives the harness overlay. */
+  provider: import('./agent.js').AgentProvider;
   /** Working directory where resolvable, else null. */
   cwd: string | null;
+  /** Session id when this pid is already tracked, else null. */
+  sessionId: string | null;
 }
 
 /**

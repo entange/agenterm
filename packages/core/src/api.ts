@@ -18,17 +18,26 @@ export interface ErrorEnvelope {
   };
 }
 
-/** GET /health response. Liveness plus daemon detail. */
+/**
+ * GET /health response. Liveness for anyone on localhost; the detail
+ * fields are only present when the request carries the bearer token.
+ */
 export interface HealthResponse {
   ok: true;
   /** Production daemon version. Example: 0.1.0. No stage suffix. */
   version: string;
-  /** Daemon uptime in seconds. Integer, >= 0. */
-  uptimeSeconds: number;
-  /** Daemon start time. Milliseconds since epoch. */
-  startedAtMs: number;
-  /** Listening port. Integer, 1-65535. */
-  port: number;
+  /** Daemon uptime in seconds. Integer, >= 0. Authenticated only. */
+  uptimeSeconds?: number;
+  /** Daemon start time. Milliseconds since epoch. Authenticated only. */
+  startedAtMs?: number;
+  /** Listening port. Integer, 1-65535. Authenticated only. */
+  port?: number;
+  /** Daemon process id. Authenticated only. */
+  pid?: number;
+  /** Sessions with a live leader. Authenticated only. */
+  liveSessions?: number;
+  /** True when the harness overlay watcher is enabled. Authenticated only. */
+  harnessWatch?: boolean;
 }
 
 /** GET /sessions query filters. All optional. */
@@ -108,18 +117,37 @@ export interface SessionDetailResponse {
 /** DELETE /sessions/:id body. Selects detach versus kill-tree. */
 export interface DeleteSessionRequest {
   /**
-   * True means kill the full process tree. False means detach only.
-   * Attached sessions default to false and require explicit true naming
-   * the pid to kill. Spawned sessions accept either value.
+   * True ends the full process tree of a live session and keeps the row
+   * as history. False closes the row: attached sessions detach (the OS
+   * process is untouched) and ended sessions are removed. Closing a live
+   * spawned session is refused; kill it first.
    */
   killTree: boolean;
+  /**
+   * Required when killing an attached session. Must equal the session
+   * pid so the approval names exactly the process being ended.
+   */
+  confirmPid?: number;
 }
 
 /** DELETE /sessions/:id response. */
 export interface DeleteSessionResponse {
+  /** True when the row was removed from the session list. */
   detached: boolean;
+  /** True when a live process tree was signaled. */
   killed: boolean;
   pid: number;
+}
+
+/** PATCH /sessions/:id body. Only the title is editable. */
+export interface UpdateSessionRequest {
+  /** New human title. 1-200 chars after trim. */
+  title: string;
+}
+
+/** PATCH /sessions/:id and POST /sessions/:id/restart response. */
+export interface UpdateSessionResponse {
+  session: SessionRecord;
 }
 
 /** POST /sessions/:id/input body. Write bytes to owned PTY stdin. */
@@ -153,6 +181,8 @@ export type SessionSignalName = 'interrupt' | 'terminate' | 'kill';
 /** POST /sessions/:id/signal body. */
 export interface SessionSignalRequest {
   signal: SessionSignalName;
+  /** Required for terminate or kill on attached sessions. Must equal the pid. */
+  confirmPid?: number;
 }
 
 /** POST /sessions/:id/signal response. */
@@ -185,8 +215,12 @@ export interface SessionOutputResponse {
   chunks: SessionOutputChunk[];
   /** Highest seq returned or null when no chunks. Use as sinceSeq. */
   resumeAfterSeq: number | null;
-  /** True when more chunks remain after this page. */
+  /** True when more chunks remain after this page. Loop with resumeAfterSeq. */
   hasMore: boolean;
+  /** Oldest seq still retained, or null when empty. Older output was evicted. */
+  firstSeq: number | null;
+  /** False when served from the on-disk log because no live PTY remains. */
+  live: boolean;
 }
 
 /** GET /sessions/:id/processes response. */
@@ -215,7 +249,82 @@ export interface SessionCommandsResponse {
   commands: import('./command.js').CommandRecord[];
 }
 
+/** GET /events query. Newest first. Terminal bytes are never stored. */
+export interface EventsQuery {
+  /** Only events for this session. */
+  sessionId?: string;
+  /** Only events created strictly before this time, for paging back. */
+  beforeMs?: number;
+  /** Max rows. Integer, 1-500. Defaults to 100. */
+  limit?: number;
+}
+
+/** GET /events response. Newest first. */
+export interface EventsResponse {
+  events: import('./event.js').AgentermEvent[];
+}
+
+/** One changed path in a git working tree. Letters follow git porcelain. */
+export interface GitFileState {
+  /** Path relative to the worktree root. */
+  path: string;
+  /** Index state (modified, added, deleted, renamed, ...) or null. */
+  staged: string | null;
+  /** Worktree state (modified, deleted, untracked, ...) or null. */
+  unstaged: string | null;
+}
+
+/** GET /sessions/:id/git response. Nulls and zeros outside a repo. */
+export interface GitStatusResponse {
+  sessionId: string;
+  branch: string | null;
+  worktreeRoot: string | null;
+  isDirty: boolean;
+  stagedCount: number;
+  unstagedCount: number;
+  /** Changed files, capped at 200. */
+  files: GitFileState[];
+  /** Lines added versus HEAD across staged and unstaged edits. */
+  insertions: number;
+  /** Lines removed versus HEAD across staged and unstaged edits. */
+  deletions: number;
+  sampledAtMs: number;
+}
+
+/** GET /sessions/:id/git/diff response for one path. */
+export interface GitDiffResponse {
+  sessionId: string;
+  path: string;
+  /** Unified diff text versus HEAD. Untracked files diff against empty. */
+  diff: string;
+  /** True when the diff was cut at the size cap. */
+  truncated: boolean;
+}
+
+/** One recent file change seen by the watcher. */
+export interface FileChangeRecord {
+  /** Path relative to the session cwd. */
+  path: string;
+  change: 'added' | 'modified' | 'deleted';
+  /** Time of the latest change to this path. */
+  atMs: number;
+  /** Changes to this path since the watcher started. */
+  count: number;
+}
+
+/** GET /sessions/:id/files response. Latest change per path, newest first. */
+export interface FileChangesResponse {
+  sessionId: string;
+  /** False when the cwd is not watched (not a repo, or home or root dir). */
+  watching: boolean;
+  changes: FileChangeRecord[];
+}
+
 /** Socket message sent from client to daemon on the event stream. */
+/**
+ * Lifecycle, status, port, and file events reach every client. Terminal
+ * bytes only reach clients subscribed to that session id or to '*'.
+ */
 export type ClientSocketMessage =
   | { kind: 'subscribe'; sessionId: string; sinceSeq?: number }
   | { kind: 'unsubscribe'; sessionId: string }
