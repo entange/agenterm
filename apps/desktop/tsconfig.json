@@ -3,7 +3,7 @@
   "compilerOptions": {
     "composite": false,
     "jsx": "react-jsx",
-    "types": ["node"]
+    "types": ["node", "vite/client"]
   },
-  "include": ["electron", "src", "electron.vite.config.ts"]
+  "include": ["electron", "src", "shared", "electron.vite.config.ts", "vite.web.config.ts"]
 }

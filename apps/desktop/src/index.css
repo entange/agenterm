@@ -1,7 +1,186 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+@import '@fontsource-variable/ibm-plex-sans';
+@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource-variable/martian-mono';
+@import '@xterm/xterm/css/xterm.css';
+
+@source '../../../packages/ui/src';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Instrument-panel palette. Signal colors carry meaning everywhere:
+ * attn = needs you, work = producing output, fail = failed, ok = finished,
+ * idle = alive and quiet. Accent marks selection and focus only.
+ */
+:root {
+  --canvas: #eef1f5;
+  --panel: #f7f8fa;
+  --raised: #ffffff;
+  --sunken: #e6eaf0;
+  --line: #dce2ea;
+  --line-strong: #c5ceda;
+  --ink: #16202b;
+  --ink-muted: #556375;
+  --ink-faint: #8694a6;
+  --accent: #3d5bd9;
+  --accent-soft: #3d5bd91f;
+  --sig-attn: #b7791f;
+  --sig-work: #1f7fd1;
+  --sig-fail: #c9423f;
+  --sig-ok: #2f8f5b;
+  --sig-idle: #7c8a9c;
+  --term-bg: #fbfcfd;
+  --term-fg: #1d2733;
+}
+
+.dark {
+  --canvas: #11161d;
+  --panel: #151b23;
+  --raised: #1c2430;
+  --sunken: #0d1218;
+  --line: #253040;
+  --line-strong: #344256;
+  --ink: #dce3ec;
+  --ink-muted: #8a98ab;
+  --ink-faint: #5e6b7d;
+  --accent: #9db2ff;
+  --accent-soft: #9db2ff24;
+  --sig-attn: #f2b84b;
+  --sig-work: #5fb3f9;
+  --sig-fail: #ef6f6c;
+  --sig-ok: #6ccb9a;
+  --sig-idle: #7c8a9c;
+  --term-bg: #0d1218;
+  --term-fg: #d5dde8;
+}
+
+@theme inline {
+  --font-sans: 'IBM Plex Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-call: 'Martian Mono Variable', ui-monospace, monospace;
+
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-attn: var(--sig-attn);
+  --color-work: var(--sig-work);
+  --color-fail: var(--sig-fail);
+  --color-ok: var(--sig-ok);
+  --color-idle: var(--sig-idle);
+  --color-term: var(--term-bg);
+}
 
 html,
 body,
 #root {
   height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Text the user may want to copy stays selectable. */
+.selectable,
+input,
+textarea,
+pre,
+code {
+  user-select: text;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.drag {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Callsigns: Martian Mono, compressed and tracked like a printed strip. */
+.callsign {
+  font-family: var(--font-call);
+  font-stretch: 75%;
+  font-weight: 560;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.eyebrow {
+  font-family: var(--font-call);
+  font-stretch: 75%;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* The only ambient motion: a strip that needs the user breathes. */
+@keyframes attn-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.attn-breathe {
+  animation: attn-breathe 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attn-breathe {
+    animation: none;
+  }
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.xterm {
+  height: 100%;
+  padding: 10px 0 10px 12px;
+}
+
+/* xterm.css paints the viewport #000; follow the themed terminal color instead. */
+.xterm .xterm-viewport,
+.xterm .xterm-scrollable-element {
+  background-color: var(--term-bg) !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* Code and diffs show the characters on disk, never ligatures like ⇒. */
+.font-mono,
+pre,
+code,
+kbd {
+  font-variant-ligatures: none;
+  font-feature-settings: 'calt' 0;
 }

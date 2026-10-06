@@ -1,49 +1,52 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import type { AgentermEvent } from '@agenterm/core';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import {
+  IPC,
+  type ActivityTick,
+  type AgentermBridge,
+  type ApiArgs,
+  type ApiEnvelope,
+  type ApiMethod,
+  type ApiResult,
+  type AppCommand,
+  type ConnectionInfo,
+  type Preferences
+} from '../../shared/bridge.js';
 
 /**
  * Preload bridge.
  *
- * Exposes daemon calls without forwarding the raw token to web content.
- * Renderer code calls window.agenterm.health() and similar helpers, and
- * subscribes to live events with onEvent. The main process owns the
- * token, the HTTP calls, and the single event stream.
+ * Exposes a narrow, typed surface on window.agenterm. The token, the
+ * HTTP client, and the daemon socket all live in main; this layer only
+ * forwards allowlisted calls and fans events back to the page.
  */
-export interface AgentermBridge {
-  health: () => Promise<unknown>;
-  discover: () => Promise<unknown>;
-  listSessions: () => Promise<unknown>;
-  spawn: (body: unknown) => Promise<unknown>;
-  attach: (body: unknown) => Promise<unknown>;
-  detail: (id: string) => Promise<unknown>;
-  output: (id: string, sinceSeq?: number) => Promise<unknown>;
-  commands: (id: string) => Promise<unknown>;
-  input: (id: string, data: string) => Promise<unknown>;
-  resize: (id: string, cols: number, rows: number) => Promise<unknown>;
-  signal: (id: string, signal: string) => Promise<unknown>;
-  endSession: (id: string, killTree: boolean) => Promise<unknown>;
-  onEvent: (handler: (event: unknown) => void) => () => void;
+function listen<T>(channel: string, handler: (payload: T) => void): () => void {
+  const listener = (_event: IpcRendererEvent, payload: T): void => handler(payload);
+  ipcRenderer.on(channel, listener);
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
 }
 
 const bridge: AgentermBridge = {
-  health: () => ipcRenderer.invoke('agenterm:health'),
-  discover: () => ipcRenderer.invoke('agenterm:discover'),
-  listSessions: () => ipcRenderer.invoke('agenterm:list'),
-  spawn: (body: unknown) => ipcRenderer.invoke('agenterm:spawn', body),
-  attach: (body: unknown) => ipcRenderer.invoke('agenterm:attach', body),
-  detail: (id: string) => ipcRenderer.invoke('agenterm:detail', id),
-  output: (id: string, sinceSeq?: number) => ipcRenderer.invoke('agenterm:output', id, sinceSeq),
-  commands: (id: string) => ipcRenderer.invoke('agenterm:commands', id),
-  input: (id: string, data: string) => ipcRenderer.invoke('agenterm:input', id, data),
-  resize: (id: string, cols: number, rows: number) => ipcRenderer.invoke('agenterm:resize', id, cols, rows),
-  signal: (id: string, signal: string) => ipcRenderer.invoke('agenterm:signal', id, signal),
-  endSession: (id: string, killTree: boolean) => ipcRenderer.invoke('agenterm:kill', id, killTree),
-  onEvent: (handler: (event: unknown) => void) => {
-    const listener = (_event: unknown, payload: unknown): void => handler(payload);
-    ipcRenderer.on('agenterm:event', listener);
-    return () => {
-      ipcRenderer.removeListener('agenterm:event', listener);
-    };
-  }
+  platform: process.platform,
+  call: <M extends ApiMethod>(method: M, ...args: ApiArgs<M>) =>
+    ipcRenderer.invoke(IPC.call, method, args) as Promise<ApiEnvelope<ApiResult<M>>>,
+  sendInput: (sessionId, data) => ipcRenderer.send(IPC.input, sessionId, data),
+  subscribeOutput: (sessionId) => ipcRenderer.send(IPC.subscribe, sessionId),
+  unsubscribeOutput: (sessionId) => ipcRenderer.send(IPC.unsubscribe, sessionId),
+  onEvent: (handler) => listen<AgentermEvent>(IPC.event, handler),
+  onActivity: (handler) => listen<ActivityTick>(IPC.activity, handler),
+  onConnection: (handler) => listen<ConnectionInfo>(IPC.connection, handler),
+  onCommand: (handler) => listen<AppCommand>(IPC.command, handler),
+  connection: () => ipcRenderer.invoke(IPC.getConnection) as Promise<ConnectionInfo>,
+  startDaemon: () => ipcRenderer.invoke(IPC.startDaemon) as Promise<ConnectionInfo>,
+  stopDaemon: () => ipcRenderer.invoke(IPC.stopDaemon) as Promise<boolean>,
+  pickDirectory: (defaultPath) => ipcRenderer.invoke(IPC.pickDirectory, defaultPath) as Promise<string | null>,
+  openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url) as Promise<void>,
+  revealPath: (target) => ipcRenderer.invoke(IPC.revealPath, target) as Promise<void>,
+  preferences: () => ipcRenderer.invoke(IPC.preferences) as Promise<Preferences>,
+  setPreferences: (patch) => ipcRenderer.invoke(IPC.setPreferences, patch) as Promise<Preferences>
 };
 
 contextBridge.exposeInMainWorld('agenterm', bridge);
