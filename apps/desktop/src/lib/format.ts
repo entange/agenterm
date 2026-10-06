@@ -39,6 +39,20 @@ export function formatBytes(bytes: number | null): string {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
+/** Dollars for spend: $0.42, $12.30, <$0.01. */
+export function formatCost(usd: number): string {
+  if (usd <= 0) return '$0';
+  if (usd < 0.01) return '<$0.01';
+  return `$${usd < 100 ? usd.toFixed(2) : Math.round(usd).toLocaleString()}`;
+}
+
+/** Token counts: 950, 12.3k, 1.2M. */
+export function formatTokens(count: number): string {
+  if (count < 1000) return String(Math.round(count));
+  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}k`;
+  return `${(count / 1_000_000).toFixed(1)}M`;
+}
+
 /** Home-relative path for display: /Users/me/code/app → ~/code/app. */
 export function shortPath(cwd: string): string {
   const match = /^(\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:\\Users\\[^\\]+)(.*)$/.exec(cwd);
@@ -97,6 +111,8 @@ export function describeEvent(event: AgentermEvent): string {
       return `Started ${event.command}`;
     case 'process.exited':
       return `${event.command} exited`;
+    case 'session.usage':
+      return `Spend now ${formatCost(event.costUsd)}`;
     default:
       return event.kind;
   }

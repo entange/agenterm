@@ -22,7 +22,25 @@ describe('hook payload mapping', () => {
     expect(
       claudeHookStatus({ hook_event_name: 'Notification', message: 'Claude is waiting for your input' })?.overlay
     ).toBe('waiting_input');
-    expect(claudeHookStatus({ hook_event_name: 'Stop' })?.overlay).toBe('waiting_input');
+    expect(claudeHookStatus({ hook_event_name: 'Stop', last_assistant_message: 'All tests pass.' })).toEqual({
+      overlay: 'waiting_input',
+      summary: 'All tests pass.'
+    });
+    expect(claudeHookStatus({ hook_event_name: 'PermissionRequest', tool_name: 'Bash' })).toEqual({
+      overlay: 'waiting_permission',
+      summary: 'Wants to use Bash'
+    });
+    expect(claudeHookStatus({ hook_event_name: 'StopFailure', error: 'rate_limit' })?.overlay).toBe('failed');
+    expect(
+      claudeHookStatus({ hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'x' })
+        ?.overlay
+    ).toBe('waiting_permission');
+    expect(
+      claudeHookStatus({ hook_event_name: 'Notification', notification_type: 'idle_prompt', message: 'x' })?.overlay
+    ).toBe('waiting_input');
+    expect(
+      claudeHookStatus({ hook_event_name: 'Notification', notification_type: 'auth_success', message: 'Signed in' })
+    ).toBe(null);
     expect(claudeHookStatus({ hook_event_name: 'Mystery' })).toBe(null);
     expect(claudeHookStatus('nope')).toBe(null);
   });
@@ -52,9 +70,12 @@ describe('AgentHooks.prepare', () => {
     const settings = JSON.parse(claude.args[1] ?? '{}') as { hooks: Record<string, unknown> };
     expect(Object.keys(settings.hooks)).toEqual([
       'UserPromptSubmit',
+      'PermissionRequest',
       'PostToolUse',
+      'PostToolUseFailure',
       'Notification',
       'Stop',
+      'StopFailure',
       'SessionEnd'
     ]);
     expect(claude.args.slice(2)).toEqual(['--model', 'opus']);
@@ -63,6 +84,7 @@ describe('AgentHooks.prepare', () => {
     expect(codex.args[1]).toMatch(/^notify=\["curl", /);
     expect(hooks.prepare({ sessionId: SESSION, provider: 'generic', args: ['x'], requested: true })).toEqual({
       args: ['x'],
+      env: {},
       installed: false
     });
   });

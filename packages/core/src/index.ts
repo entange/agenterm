@@ -11,6 +11,8 @@ export type {
   ErrorEnvelope,
   ActivityResponse,
   SessionActivity,
+  SessionUsage,
+  UsageResponse,
   EventsQuery,
   EventsResponse,
   FileChangeRecord,
@@ -45,7 +47,7 @@ export type {
 export { AgentermApiError, AgentermClient, daemonBaseUrl } from './client.js';
 export type { CommandRecord } from './command.js';
 export type { AgentermEvent, EventBase, EventRow } from './event.js';
-export { isTerminalEventKind } from './event.js';
+export { isLiveOnlyEventKind, isTerminalEventKind } from './event.js';
 export type { HarnessParseOutcome, HarnessProvider } from './harness.js';
 export {
   HARNESS_SUPPORTED_VERSIONS,

@@ -46,6 +46,14 @@ export interface SessionUpdatedEvent extends EventBase {
   title: string;
 }
 
+/** Running model spend for a session changed. Live only; GET /usage holds totals. */
+export interface SessionUsageEvent extends EventBase {
+  kind: 'session.usage';
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 /** Terminal output chunk with monotonic sequence numbers. */
 export interface TerminalOutputEvent extends EventBase {
   kind: 'terminal.output';
@@ -134,6 +142,7 @@ export type AgentermEvent =
   | SessionAttachedEvent
   | SessionDetachedEvent
   | SessionUpdatedEvent
+  | SessionUsageEvent
   | TerminalOutputEvent
   | TerminalInputEvent
   | ProcessStartedEvent
@@ -161,4 +170,9 @@ export interface EventRow {
 /** Terminal byte events are streamed live but never stored or listed. */
 export function isTerminalEventKind(kind: AgentermEvent['kind']): boolean {
   return kind === 'terminal.output' || kind === 'terminal.input';
+}
+
+/** Events delivered live only: terminal bytes and high-frequency counters. */
+export function isLiveOnlyEventKind(kind: AgentermEvent['kind']): boolean {
+  return isTerminalEventKind(kind) || kind === 'session.usage';
 }

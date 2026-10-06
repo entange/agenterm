@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import mitt, { type Emitter } from 'mitt';
 import type { AgentermEvent, EventsQuery } from '@agenterm/core';
-import { isTerminalEventKind, redactText } from '@agenterm/core';
+import { isLiveOnlyEventKind, redactText } from '@agenterm/core';
 import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE, type SqliteEvents } from './database.js';
 
 export type BusEventMap = {
@@ -44,7 +44,7 @@ export class EventBus {
 
   publish(event: AgentermEvent): AgentermEvent {
     const clean = { ...event, id: event.id.length > 0 ? event.id : crypto.randomUUID() };
-    if (!isTerminalEventKind(clean.kind)) {
+    if (!isLiveOnlyEventKind(clean.kind)) {
       this.record(clean);
     }
     this.emitter.emit('event', clean);

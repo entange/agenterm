@@ -5,7 +5,7 @@ import * as React from 'react';
 import type { Attention } from '../../shared/attention.js';
 import { callsign } from '../../shared/callsign.js';
 import { useActions } from '../lib/actions.js';
-import { folderName, formatAge, isLive, PROVIDER_NAMES, shortPath } from '../lib/format.js';
+import { folderName, formatAge, formatCost, isLive, PROVIDER_NAMES, shortPath } from '../lib/format.js';
 import { EMPTY_TRACE, useLive } from '../lib/live.js';
 import { useDiscover } from '../lib/queries.js';
 import { useUi } from '../lib/ui.js';
@@ -35,6 +35,8 @@ export function Home({
   const ended = sessions
     .filter((session) => !isLive(session) && attention.get(session.id)?.group !== 'needs-you')
     .slice(0, 5);
+  const usage = useLive((state) => state.usage);
+  const spend = Object.values(usage).reduce((total, entry) => total + entry.costUsd, 0);
   const discover = useDiscover();
   const unmanaged = (discover.data ?? []).filter((candidate) => candidate.sessionId === null);
   const [showAllElsewhere, setShowAllElsewhere] = React.useState(false);
@@ -50,6 +52,12 @@ export function Home({
       <div className="mx-auto max-w-[1080px] px-8 pt-7 pb-12">
         <div className="eyebrow text-ink-faint">Control room</div>
         <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-ink">{headline}</h1>
+        {spend > 0 ? (
+          <p className="mt-1 text-[13px] text-ink-muted">
+            Agents have spent <span className="font-mono text-ink">{formatCost(spend)}</span> on model calls since the
+            daemon started.
+          </p>
+        ) : null}
 
         {needsYou.length > 0 ? (
           <section className="mt-6">
@@ -206,13 +214,14 @@ function BoardRow({
 }): React.JSX.Element {
   const samples = useLive((state) => state.traces[session.id]);
   const lastLine = useLive((state) => state.lastLine[session.id]);
+  const spend = useLive((state) => state.usage[session.id]);
   const signal = attention?.signal ?? 'idle';
   return (
     <button
       type="button"
       onClick={onOpen}
       className={cn(
-        'relative grid w-full grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_200px_44px] items-center gap-4 py-2.5 pr-4 pl-5 text-left hover:bg-raised',
+        'relative grid w-full grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_200px_52px] items-center gap-4 py-2.5 pr-4 pl-5 text-left hover:bg-raised',
         !first && 'border-t border-line'
       )}
     >
@@ -240,7 +249,10 @@ function BoardRow({
       ) : (
         <span className="text-[11.5px] text-ink-faint">Attached: output not visible</span>
       )}
-      <span className="text-right font-mono text-[11px] text-ink-faint">{formatAge(session.startedAtMs)}</span>
+      <span className="text-right font-mono text-[11px] leading-tight text-ink-faint">
+        {formatAge(session.startedAtMs)}
+        {spend === undefined ? null : <span className="block text-ink-muted">{formatCost(spend.costUsd)}</span>}
+      </span>
     </button>
   );
 }

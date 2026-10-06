@@ -93,7 +93,8 @@ export const TOOLS: Tool[] = [
   },
   {
     name: 'get_session',
-    description: 'Details for one session: its record, process tree, listening ports, and git status of its folder.',
+    description:
+      'Details for one session: its record, process tree, listening ports, git status of its folder, and model spend when the agent reports it.',
     inputSchema: { type: 'object', properties: { session_id: SESSION_ARG }, required: ['session_id'] },
     run: async (client, args) => {
       const session = await resolve(client, text(args, 'session_id'));

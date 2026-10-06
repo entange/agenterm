@@ -1,4 +1,4 @@
-import type { ActivityResponse, AgentermEvent } from '@agenterm/core';
+import type { ActivityResponse, AgentermEvent, UsageResponse } from '@agenterm/core';
 import { create } from 'zustand';
 import type { ActivityTick, ConnectionInfo } from '../../shared/bridge.js';
 
@@ -15,6 +15,9 @@ interface LiveState {
   lastOutputAt: Record<string, number>;
   /** Non-terminal events, newest first. */
   feed: AgentermEvent[];
+  /** Model spend per session from agent telemetry. */
+  usage: Record<string, { costUsd: number; inputTokens: number; outputTokens: number }>;
+  seedUsage: (snapshot: UsageResponse) => void;
   setConnection: (info: ConnectionInfo) => void;
   applyTick: (tick: ActivityTick) => void;
   /** Replace traces with the daemon's recorded window, e.g. after connecting. */
@@ -37,6 +40,15 @@ export const useLive = create<LiveState>((set) => ({
   lastLine: {},
   lastOutputAt: {},
   feed: [],
+  usage: {},
+  seedUsage: (snapshot) =>
+    set((state) => {
+      const usage = { ...state.usage };
+      for (const [id, entry] of Object.entries(snapshot.sessions)) {
+        usage[id] = { costUsd: entry.costUsd, inputTokens: entry.inputTokens, outputTokens: entry.outputTokens };
+      }
+      return { usage };
+    }),
   setConnection: (connection) => set({ connection }),
   applyTick: (tick) =>
     set((state) => {
@@ -69,6 +81,18 @@ export const useLive = create<LiveState>((set) => ({
     }),
   pushEvent: (event) =>
     set((state) => {
+      if (event.kind === 'session.usage') {
+        return {
+          usage: {
+            ...state.usage,
+            [event.sessionId]: {
+              costUsd: event.costUsd,
+              inputTokens: event.inputTokens,
+              outputTokens: event.outputTokens
+            }
+          }
+        };
+      }
       if (event.kind === 'terminal.output' || event.kind === 'terminal.input') return state;
       if (state.feed.some((entry) => entry.id === event.id)) return state;
       return { feed: [event, ...state.feed].slice(0, FEED_LIMIT) };

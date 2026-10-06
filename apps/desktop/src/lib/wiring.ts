@@ -37,9 +37,14 @@ export function useDaemonWiring(onCommand: (command: AppCommand) => void): void 
     };
 
     const seed = async (): Promise<void> => {
-      const [events, activity] = await Promise.allSettled([api('events', { limit: 200 }), api('activity')]);
+      const [events, activity, usage] = await Promise.allSettled([
+        api('events', { limit: 200 }),
+        api('activity'),
+        api('usage')
+      ]);
       if (events.status === 'fulfilled') live.seedFeed(events.value.events);
       if (activity.status === 'fulfilled') live.seedActivity(activity.value);
+      if (usage.status === 'fulfilled') live.seedUsage(usage.value);
     };
 
     const onEvent = (event: AgentermEvent): void => {

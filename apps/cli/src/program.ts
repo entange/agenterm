@@ -614,6 +614,39 @@ export function buildProgram(deps: CliDeps): Command {
     );
 
   program
+    .command('usage')
+    .description('Model spend per session, from agent telemetry (Claude Code)')
+    .action(
+      run(async () => {
+        const client = deps.client();
+        const [{ sessions: totals }, { sessions }] = await Promise.all([client.usage(), client.listSessions()]);
+        const rows = sessions.filter((session) => totals[session.id] !== undefined);
+        if (rows.length === 0) {
+          deps.out('No usage reported yet. Claude Code sessions started by agenterm report spend automatically.');
+          return;
+        }
+        let total = 0;
+        const lines = [['ID', 'COST', 'INPUT', 'OUTPUT', 'REQUESTS', 'MODEL', 'TITLE']];
+        for (const session of rows) {
+          const usage = totals[session.id];
+          if (usage === undefined) continue;
+          total += usage.costUsd;
+          lines.push([
+            session.id.slice(0, 8),
+            `$${usage.costUsd.toFixed(2)}`,
+            String(usage.inputTokens),
+            String(usage.outputTokens),
+            String(usage.requests),
+            usage.model ?? '-',
+            session.title
+          ]);
+        }
+        table(lines).forEach((line) => deps.out(line));
+        deps.out(`total $${total.toFixed(2)}`);
+      })
+    );
+
+  program
     .command('events')
     .description('Recent activity across sessions, newest first')
     .option('--session <id>', 'only one session')
@@ -667,6 +700,8 @@ function describeEvent(event: import('@agenterm/core').AgentermEvent): string {
       return 'closed';
     case 'session.updated':
       return `renamed to "${event.title}"`;
+    case 'session.usage':
+      return `spend now $${event.costUsd.toFixed(2)}`;
     case 'agent.status':
       return `status ${event.overlay.replace('_', ' ')}${event.summary === null ? '' : `: ${event.summary}`}`;
     case 'port.opened':

@@ -17,7 +17,7 @@ import { acknowledgementKey, type Attention } from '../../shared/attention.js';
 import { callsign } from '../../shared/callsign.js';
 import { useActions } from '../lib/actions.js';
 import { getBridge } from '../lib/bridge.js';
-import { formatAge, isLive, PROVIDER_NAMES, shortPath } from '../lib/format.js';
+import { formatAge, formatCost, formatTokens, isLive, PROVIDER_NAMES, shortPath } from '../lib/format.js';
 import { EMPTY_TRACE, useLive } from '../lib/live.js';
 import { useCommands, useFiles, useGit, useProcesses } from '../lib/queries.js';
 import { useUi, type SessionTab } from '../lib/ui.js';
@@ -124,6 +124,7 @@ function SessionHeader({
   const act = useActions();
   const openDialog = useUi((state) => state.openDialog);
   const samples = useLive((state) => state.traces[session.id]);
+  const spend = useLive((state) => state.usage[session.id]);
   const live = isLive(session);
   const signal = attention?.signal ?? 'idle';
   const [editing, setEditing] = React.useState(false);
@@ -196,6 +197,18 @@ function SessionHeader({
         {live && session.origin === 'spawned' ? (
           <Trace samples={samples ?? EMPTY_TRACE} signal={signal} className="ml-1 w-40 shrink" height={20} />
         ) : null}
+        {spend === undefined ? null : (
+          <Tooltip
+            content={`${formatTokens(spend.inputTokens)} input · ${formatTokens(spend.outputTokens)} output tokens`}
+          >
+            <span
+              tabIndex={0}
+              className="shrink-0 rounded-full border border-line px-2 py-0.5 font-mono text-[11.5px] text-ink-muted"
+            >
+              {formatCost(spend.costUsd)} · {formatTokens(spend.inputTokens + spend.outputTokens)} tok
+            </span>
+          </Tooltip>
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {live && session.origin === 'spawned' ? (
             <Button

@@ -29,7 +29,8 @@ export const API_METHODS = [
   'gitDiff',
   'files',
   'events',
-  'activity'
+  'activity',
+  'usage'
 ] as const;
 
 export type ApiMethod = (typeof API_METHODS)[number];

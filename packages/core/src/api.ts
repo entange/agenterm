@@ -282,6 +282,28 @@ export interface ActivityResponse {
   sessions: Record<string, SessionActivity>;
 }
 
+/** Model spend for one session, from the agent's own telemetry. */
+export interface SessionUsage {
+  /** Estimated cost in US dollars as reported by the agent. */
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  /** Model API requests seen. */
+  requests: number;
+  /** Model API errors seen. */
+  errors: number;
+  /** Most recent model name, or null. */
+  model: string | null;
+  updatedAtMs: number;
+}
+
+/** GET /usage response. Only sessions that reported usage appear. */
+export interface UsageResponse {
+  sessions: Record<string, SessionUsage>;
+}
+
 /** One changed path in a git working tree. Letters follow git porcelain. */
 export interface GitFileState {
   /** Path relative to the worktree root. */

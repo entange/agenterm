@@ -22,33 +22,50 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+/** Notification types that mean the agent is blocked on the user. */
+const NEEDS_REPLY: ReadonlySet<string> = new Set([
+  'idle_prompt',
+  'agent_needs_input',
+  'elicitation_dialog',
+  'elicitation_url_dialog'
+]);
+
 /**
  * Map a Claude Code hook payload to a status.
  *
- * UserPromptSubmit and PostToolUse mean it is working. Notification is
- * either a permission prompt or an idle wait. Stop means it finished its
- * turn and is waiting for the next prompt. Unknown events change nothing.
+ * UserPromptSubmit and tool completions mean it is working.
+ * PermissionRequest (or a permission_prompt notification) means it waits
+ * for approval; idle and input notifications mean it waits for a reply;
+ * Stop means it finished its turn; StopFailure means the turn failed.
+ * Other notification types (auth, quota, ...) and unknown events change
+ * nothing.
  */
 export function claudeHookStatus(payload: unknown): HookStatus | null {
   const record = asRecord(payload);
   if (record === null) return null;
-  const event = record['hook_event_name'];
-  switch (event) {
+  const tool = typeof record['tool_name'] === 'string' ? record['tool_name'] : null;
+  switch (record['hook_event_name']) {
     case 'UserPromptSubmit':
       return { overlay: 'working', summary: clip(record['prompt']) };
+    case 'PermissionRequest':
+      return { overlay: 'waiting_permission', summary: tool === null ? null : `Wants to use ${tool}` };
     case 'PreToolUse':
-    case 'PostToolUse': {
-      const tool = typeof record['tool_name'] === 'string' ? record['tool_name'] : null;
+    case 'PostToolUse':
+    case 'PostToolUseFailure':
       return { overlay: 'working', summary: tool === null ? null : `Using ${tool}` };
-    }
     case 'Notification': {
       const message = clip(record['message']);
-      const kind = typeof record['notification_type'] === 'string' ? record['notification_type'] : '';
-      const permission = kind === 'permission_prompt' || /permission|approve|allow/i.test(message ?? '');
-      return { overlay: permission ? 'waiting_permission' : 'waiting_input', summary: message };
+      const kind = typeof record['notification_type'] === 'string' ? record['notification_type'] : null;
+      if (kind === 'permission_prompt') return { overlay: 'waiting_permission', summary: message };
+      if (kind !== null) return NEEDS_REPLY.has(kind) ? { overlay: 'waiting_input', summary: message } : null;
+      // Older versions send no type; fall back to the message text.
+      if (/permission|approve|allow/i.test(message ?? '')) return { overlay: 'waiting_permission', summary: message };
+      return /waiting|input/i.test(message ?? '') ? { overlay: 'waiting_input', summary: message } : null;
     }
     case 'Stop':
-      return { overlay: 'waiting_input', summary: 'Finished its turn' };
+      return { overlay: 'waiting_input', summary: clip(record['last_assistant_message']) ?? 'Finished its turn' };
+    case 'StopFailure':
+      return { overlay: 'failed', summary: clip(record['error']) ?? 'The turn ended with an error' };
     case 'SessionEnd':
       return { overlay: 'completed', summary: null };
     default:
@@ -74,8 +91,17 @@ function tomlString(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
-const CLAUDE_EVENTS = ['UserPromptSubmit', 'PostToolUse', 'Notification', 'Stop', 'SessionEnd'] as const;
-const TOOL_EVENTS: ReadonlySet<string> = new Set(['PreToolUse', 'PostToolUse']);
+const CLAUDE_EVENTS = [
+  'UserPromptSubmit',
+  'PermissionRequest',
+  'PostToolUse',
+  'PostToolUseFailure',
+  'Notification',
+  'Stop',
+  'StopFailure',
+  'SessionEnd'
+] as const;
+const TOOL_EVENTS: ReadonlySet<string> = new Set(['PermissionRequest', 'PostToolUse', 'PostToolUseFailure']);
 
 /**
  * Per-session status hooks.
@@ -99,15 +125,52 @@ export class AgentHooks {
     this.port = port;
   }
 
-  /** Arguments to launch with, plus whether hooks were installed. */
-  prepare(input: { sessionId: string; provider: AgentProvider; args: string[]; requested: boolean }): {
+  /**
+   * Arguments and extra environment to launch with, plus whether hooks
+   * were installed. Claude Code also gets its OpenTelemetry logs pointed
+   * at the daemon for cost and token totals, unless the user already
+   * configured telemetry themselves.
+   */
+  prepare(input: {
+    sessionId: string;
+    provider: AgentProvider;
     args: string[];
-    installed: boolean;
-  } {
-    const { sessionId, provider, args } = input;
+    requested: boolean;
+    env?: Record<string, string> | undefined;
+  }): { args: string[]; env: Record<string, string>; installed: boolean } {
+    const { sessionId, provider } = input;
     const usable = this.options.enabled !== false && input.requested && process.platform !== 'win32';
-    if (!usable || (provider !== 'claude' && provider !== 'codex')) return { args, installed: false };
+    if (!usable || (provider !== 'claude' && provider !== 'codex'))
+      return { args: input.args, env: {}, installed: false };
     const token = crypto.randomBytes(24).toString('hex');
+    const prepared = this.launchArgs(sessionId, provider, input.args, token);
+    if (!prepared.installed) return { ...prepared, env: {} };
+    this.tokens.set(sessionId, token);
+    const env = provider === 'claude' ? this.telemetryEnv(sessionId, token, input.env ?? {}) : {};
+    return { ...prepared, env };
+  }
+
+  private telemetryEnv(sessionId: string, token: string, current: Record<string, string>): Record<string, string> {
+    const configured = Object.keys(current).some(
+      (key) => key.startsWith('OTEL_') || key === 'CLAUDE_CODE_ENABLE_TELEMETRY'
+    );
+    if (configured) return {};
+    return {
+      CLAUDE_CODE_ENABLE_TELEMETRY: '1',
+      OTEL_LOGS_EXPORTER: 'otlp',
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/json',
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: `http://127.0.0.1:${this.port}/otel/${sessionId}/v1/logs`,
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS: `x-agenterm-token=${token}`,
+      OTEL_LOGS_EXPORT_INTERVAL: '2000'
+    };
+  }
+
+  private launchArgs(
+    sessionId: string,
+    provider: 'claude' | 'codex',
+    args: string[],
+    token: string
+  ): { args: string[]; installed: boolean } {
     const url = `http://127.0.0.1:${this.port}/ingest/${provider}/${sessionId}`;
     if (provider === 'claude') {
       // A user-supplied --settings wins; layering a second one would be surprising.
@@ -121,7 +184,6 @@ export class AgentHooks {
         if (TOOL_EVENTS.has(event)) entry['matcher'] = '*';
         hooks[event] = [entry];
       }
-      this.tokens.set(sessionId, token);
       return { args: ['--settings', JSON.stringify({ hooks }), ...args], installed: true };
     }
     if (args.some((arg, i) => /^notify\s*=/.test(arg) && (args[i - 1] === '-c' || args[i - 1] === '--config'))) {
@@ -144,15 +206,14 @@ export class AgentHooks {
       url,
       '--data-binary'
     ];
-    this.tokens.set(sessionId, token);
     return { args: ['-c', `notify=[${notify.map(tomlString).join(', ')}]`, ...args], installed: true };
   }
 
-  /** Constant-time check that a push carries this session's ingest token. */
+  /** Constant-time check of a session ingest token, given as `Bearer <t>` or bare. */
   verify(sessionId: string, header: string | undefined): boolean {
     const token = this.tokens.get(sessionId);
-    if (token === undefined || typeof header !== 'string' || !header.startsWith('Bearer ')) return false;
-    const given = Buffer.from(header.slice('Bearer '.length));
+    if (token === undefined || typeof header !== 'string') return false;
+    const given = Buffer.from(header.startsWith('Bearer ') ? header.slice('Bearer '.length) : header);
     const wanted = Buffer.from(token);
     return given.length === wanted.length && crypto.timingSafeEqual(given, wanted);
   }

@@ -26,6 +26,7 @@ import {
 } from '@agenterm/core';
 import { ActivityMeter } from './activity.js';
 import { AgentHooks, agentHooksEnabled, claudeHookStatus, codexNotifyStatus } from './agentHooks.js';
+import { parseOtlpLogs, UsageLedger } from './usage.js';
 import { checkBearer } from './auth.js';
 import { effectiveCommand, PROVIDER_INSTALL_HINTS, resolveBinary } from './binary.js';
 import { CommandTracker } from './commands.js';
@@ -194,6 +195,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
   const fileWatch = options.fileWatch ?? new FileWatch();
   const pty = options.pty ?? new PtyManager({ dataDir });
   const activity = new ActivityMeter();
+  const usage = new UsageLedger();
   const hooks = options.hooks ?? new AgentHooks({ port: options.port, enabled: agentHooksEnabled() });
 
   /** Set the overlay and publish agent.status when it actually changes. */
@@ -396,7 +398,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
         file: resolved,
         args: launch.args,
         cwd: input.cwd,
-        env,
+        env: { ...env, ...launch.env },
         cols: input.cols,
         rows: input.rows
       });
@@ -462,14 +464,15 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     inputSeq.delete(session.id);
     fileChanges.delete(session.id);
     activity.forget(session.id);
+    usage.forget(session.id);
     hooks.forget(session.id);
     store.remove(session.id);
   };
 
   app.addHook('onRequest', async (request, reply) => {
     if (request.method === 'GET' && request.url === '/health') return;
-    // Agent status pushes carry their own per-session token, checked in the route.
-    if (request.method === 'POST' && request.url.startsWith('/ingest/')) return;
+    // Agent status and telemetry pushes carry their own per-session token, checked in the route.
+    if (request.method === 'POST' && (request.url.startsWith('/ingest/') || request.url.startsWith('/otel/'))) return;
     if (!checkBearer(authOf(request), options.token)) {
       await fail(reply, { status: 401, code: 'unauthorized', message: 'missing or invalid bearer token' });
     }
@@ -510,6 +513,34 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
   });
 
   app.get('/activity', async () => activity.snapshot());
+
+  app.get('/usage', async () => ({ sessions: usage.all() }));
+
+  // OTLP/HTTP JSON sink for Claude Code telemetry. Only logs carry usage; metrics are acknowledged and dropped.
+  app.post('/otel/:id/v1/:signal', async (request, reply) => {
+    const params = request.params as Record<string, unknown>;
+    const idParsed = parseSessionIdParam(params['id']);
+    const header = request.headers['x-agenterm-token'];
+    if (!idParsed.ok || !hooks.verify(idParsed.value, typeof header === 'string' ? header : undefined)) {
+      await fail(reply, { status: 401, code: 'unauthorized', message: 'invalid ingest token' });
+      return;
+    }
+    if (params['signal'] === 'logs' && usage.apply(idParsed.value, parseOtlpLogs(request.body))) {
+      const totals = usage.get(idParsed.value);
+      if (totals !== null) {
+        bus.publish({
+          id: '',
+          sessionId: idParsed.value,
+          createdAtMs: Date.now(),
+          kind: 'session.usage',
+          costUsd: totals.costUsd,
+          inputTokens: totals.inputTokens,
+          outputTokens: totals.outputTokens
+        });
+      }
+    }
+    return {};
+  });
 
   app.get('/events', async (request, reply) => {
     const parsed = parseEventsQuery(request.query ?? {});

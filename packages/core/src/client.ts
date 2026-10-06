@@ -29,7 +29,8 @@ import type {
   SpawnSessionRequest,
   SpawnSessionResponse,
   UpdateSessionRequest,
-  UpdateSessionResponse
+  UpdateSessionResponse,
+  UsageResponse
 } from './api.js';
 
 /** Client options. Token is read from the agenterm data dir by the caller. */
@@ -212,6 +213,10 @@ export class AgentermClient {
 
   files(id: string): Promise<FileChangesResponse> {
     return this.request('GET', this.sessionPath(id, '/files'));
+  }
+
+  usage(): Promise<UsageResponse> {
+    return this.request('GET', '/usage');
   }
 
   activity(): Promise<ActivityResponse> {
