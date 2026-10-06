@@ -34,6 +34,9 @@ interface UiState extends Persisted {
   newSessionOpen: boolean;
   dialog: PendingDialog | null;
   openDialog: (dialog: PendingDialog | null) => void;
+  /** Text the terminal should find once it opens, set by output search. */
+  pendingFind: string | null;
+  setPendingFind: (text: string | null) => void;
   select: (id: string | null, tab?: SessionTab) => void;
   setTab: (tab: SessionTab) => void;
   setFilter: (filter: string) => void;
@@ -70,6 +73,8 @@ export const useUi = create<UiState>((set, get) => {
     newSessionOpen: false,
     dialog: null,
     openDialog: (dialog) => set({ dialog }),
+    pendingFind: null,
+    setPendingFind: (pendingFind) => set({ pendingFind }),
     select: (selectedId, tab) =>
       set((state) => ({ selectedId, tab: tab ?? (selectedId === state.selectedId ? state.tab : 'terminal') })),
     setTab: (tab) => set({ tab }),

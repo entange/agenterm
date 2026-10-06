@@ -304,6 +304,23 @@ export interface UsageResponse {
   sessions: Record<string, SessionUsage>;
 }
 
+/** One line of terminal output that matched a search. */
+export interface OutputMatch {
+  sessionId: string;
+  /** 1-based line within the retained output searched. */
+  line: number;
+  /** Visible line text, escape codes removed and secrets redacted. */
+  text: string;
+}
+
+/** GET /search response. Newest sessions first, matches oldest first within each. */
+export interface OutputSearchResponse {
+  query: string;
+  matches: OutputMatch[];
+  /** True when the match cap cut results short. */
+  truncated: boolean;
+}
+
 /** One changed path in a git working tree. Letters follow git porcelain. */
 export interface GitFileState {
   /** Path relative to the worktree root. */

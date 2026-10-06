@@ -6,7 +6,7 @@ import { Activity, LayoutGrid, Moon, Plus, Power, Square, SunMoon, TerminalSquar
 import * as React from 'react';
 import type { Attention } from '../../shared/attention.js';
 import { callsign } from '../../shared/callsign.js';
-import { getBridge } from '../lib/bridge.js';
+import { api, getBridge } from '../lib/bridge.js';
 import { isLive, shortPath } from '../lib/format.js';
 import { useUi } from '../lib/ui.js';
 import { shortcut } from '../lib/shortcuts.js';
@@ -33,6 +33,31 @@ export function CommandPalette({
   const toggleRail = useUi((state) => state.toggleRail);
   const openDialog = useUi((state) => state.openDialog);
   const selected = sessions.find((session) => session.id === selectedId);
+  const setPendingFind = useUi((state) => state.setPendingFind);
+  const [query, setQuery] = React.useState('');
+  const [hits, setHits] = React.useState<Array<{ sessionId: string; line: number; text: string }>>([]);
+
+  // Output search runs alongside the session and action filter, debounced.
+  React.useEffect(() => {
+    const text = query.trim();
+    if (!open || text.length < 3) {
+      setHits([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void api('search', text, { limit: 30 })
+        .then((result) => {
+          if (!cancelled) setHits(result.matches);
+        })
+        .catch(() => undefined);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query, open]);
+  const byId = new Map(sessions.map((session) => [session.id, session]));
 
   const run = (action: () => void): void => {
     setOpen(false);
@@ -50,6 +75,8 @@ export function CommandPalette({
           </DialogPrimitive.Description>
           <Command label="Command palette" loop>
             <Command.Input
+              value={query}
+              onValueChange={setQuery}
               autoFocus
               placeholder="Jump to a session or run an action…"
               className="h-12 w-full border-b border-line bg-transparent px-4 text-[14px] text-ink placeholder:text-ink-faint outline-none focus-visible:outline-none"
@@ -76,6 +103,34 @@ export function CommandPalette({
                       </span>
                     </Command.Item>
                   ))}
+                </Command.Group>
+              ) : null}
+              {hits.length > 0 ? (
+                <Command.Group
+                  heading="In terminal output"
+                  className="[&_[cmdk-group-heading]]:eyebrow [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-ink-faint"
+                >
+                  {hits.map((hit) => {
+                    const session = byId.get(hit.sessionId);
+                    return (
+                      <Command.Item
+                        key={`${hit.sessionId}:${hit.line}`}
+                        value={`${query} output ${hit.sessionId} ${hit.line} ${hit.text}`}
+                        onSelect={() =>
+                          run(() => {
+                            setPendingFind(query.trim());
+                            select(hit.sessionId, 'terminal');
+                          })
+                        }
+                        className={itemClass}
+                      >
+                        <span className="callsign w-20 shrink-0 text-[10.5px] text-ink-faint">
+                          {session === undefined ? hit.sessionId.slice(0, 8) : callsign(session)}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate font-mono text-[12px]">{hit.text}</span>
+                      </Command.Item>
+                    );
+                  })}
                 </Command.Group>
               ) : null}
               <Command.Group

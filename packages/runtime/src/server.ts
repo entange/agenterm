@@ -42,6 +42,7 @@ import { DAEMON_VERSION, terminalLogPath } from './paths.js';
 import { PtyManager } from './ptyManager.js';
 import { isLiveSession, SessionStore } from './sessionStore.js';
 import { Supervisor, type SupervisorProbes } from './supervisor.js';
+import { searchTerminalText } from './search.js';
 import { readLogTail } from './terminal.js';
 
 /** Options injected for tests. Production wires the real lister and store. */
@@ -519,6 +520,40 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
   app.get('/activity', async () => activity.snapshot());
 
   app.get('/usage', async () => ({ sessions: usage.all() }));
+
+  // Search retained output across sessions: live rings, or terminal.log for ended ones.
+  app.get('/search', async (request, reply) => {
+    const query = (request.query ?? {}) as Record<string, unknown>;
+    const q = typeof query['q'] === 'string' ? query['q'].trim() : '';
+    if (q.length < 2 || q.length > 200) {
+      await fail(reply, { status: 400, code: 'invalid_query', message: 'q must be 2-200 characters' });
+      return;
+    }
+    const limit = Math.min(500, Math.max(1, Number(query['limit']) || 100));
+    const only = typeof query['sessionId'] === 'string' ? query['sessionId'] : null;
+    const matches: Array<{ sessionId: string; line: number; text: string }> = [];
+    let truncated = false;
+    for (const session of store.list()) {
+      if (only !== null && session.id !== only) continue;
+      const managed = pty.get(session.id);
+      const text =
+        managed !== null
+          ? managed.log.text()
+          : dataDir !== undefined
+            ? readLogTail(terminalLogPath(session.id, dataDir), 2 * 1024 * 1024)
+            : null;
+      if (text === null) continue;
+      for (const match of searchTerminalText(text, q, limit)) {
+        if (matches.length >= limit) {
+          truncated = true;
+          break;
+        }
+        matches.push({ sessionId: session.id, ...match });
+      }
+      if (truncated) break;
+    }
+    return { query: q, matches, truncated };
+  });
 
   // OTLP/HTTP JSON sink for Claude Code telemetry. Only logs carry usage; metrics are acknowledged and dropped.
   app.post('/otel/:id/v1/:signal', async (request, reply) => {

@@ -30,7 +30,8 @@ export const API_METHODS = [
   'files',
   'events',
   'activity',
-  'usage'
+  'usage',
+  'search'
 ] as const;
 
 export type ApiMethod = (typeof API_METHODS)[number];

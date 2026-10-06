@@ -630,6 +630,31 @@ export function buildProgram(deps: CliDeps): Command {
     );
 
   program
+    .command('grep <text>')
+    .description('Search the output of every session (or one) for text')
+    .option('--session <id>', 'only one session')
+    .option('--limit <n>', 'max matches', '100')
+    .action(
+      run(async (text: string, opts: { session?: string; limit?: string }) => {
+        const client = deps.client();
+        const sessionId = opts.session === undefined ? undefined : (await resolveSessionId(client, opts.session)).id;
+        const [result, { sessions }] = await Promise.all([
+          client.search(text, { ...(sessionId === undefined ? {} : { sessionId }), limit: Number(opts.limit) || 100 }),
+          client.listSessions()
+        ]);
+        if (result.matches.length === 0) {
+          deps.out(`No output matches "${text}".`);
+          return;
+        }
+        const titles = new Map(sessions.map((session) => [session.id, session.title]));
+        for (const match of result.matches) {
+          deps.out(`${match.sessionId.slice(0, 8)}  ${titles.get(match.sessionId) ?? ''}:${match.line}  ${match.text}`);
+        }
+        if (result.truncated) deps.err('[more matches; raise --limit]');
+      })
+    );
+
+  program
     .command('usage')
     .description('Model spend per session, from agent telemetry (Claude Code)')
     .action(

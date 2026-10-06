@@ -30,7 +30,8 @@ import type {
   SpawnSessionResponse,
   UpdateSessionRequest,
   UpdateSessionResponse,
-  UsageResponse
+  UsageResponse,
+  OutputSearchResponse
 } from './api.js';
 
 /** Client options. Token is read from the agenterm data dir by the caller. */
@@ -213,6 +214,13 @@ export class AgentermClient {
 
   files(id: string): Promise<FileChangesResponse> {
     return this.request('GET', this.sessionPath(id, '/files'));
+  }
+
+  search(query: string, options: { sessionId?: string; limit?: number } = {}): Promise<OutputSearchResponse> {
+    return this.request(
+      'GET',
+      `/search${querySuffix({ q: query, sessionId: options.sessionId, limit: options.limit })}`
+    );
   }
 
   usage(): Promise<UsageResponse> {

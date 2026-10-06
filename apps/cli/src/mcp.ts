@@ -154,6 +154,29 @@ export const TOOLS: Tool[] = [
     }
   },
   {
+    name: 'search_output',
+    description:
+      'Search the terminal output of all sessions (or one) for text, case-insensitive. Returns matching lines with their session ids.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Text to find, at least 2 characters.' },
+        session_id: SESSION_ARG,
+        limit: { type: 'integer', minimum: 1, maximum: 500, description: 'Default 50.' }
+      },
+      required: ['text']
+    },
+    run: async (client, args) => {
+      const sessionId =
+        typeof args['session_id'] === 'string' ? (await resolve(client, args['session_id'])).id : undefined;
+      const result = await client.search(text(args, 'text'), {
+        ...(sessionId === undefined ? {} : { sessionId }),
+        limit: typeof args['limit'] === 'number' ? args['limit'] : 50
+      });
+      return JSON.stringify(result, null, 2);
+    }
+  },
+  {
     name: 'send_input',
     description:
       'Type text into a running session started by agenterm, as if at its keyboard. Presses Enter afterwards unless press_enter is false.',

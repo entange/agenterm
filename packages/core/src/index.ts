@@ -13,6 +13,8 @@ export type {
   SessionActivity,
   SessionUsage,
   UsageResponse,
+  OutputMatch,
+  OutputSearchResponse,
   EventsQuery,
   EventsResponse,
   FileChangeRecord,

@@ -72,6 +72,11 @@ export class TerminalLog {
     return chunk;
   }
 
+  /** Everything the ring still holds, oldest first. */
+  text(): string {
+    return this.chunks.map((chunk) => chunk.data).join('');
+  }
+
   /** Highest sequence assigned so far, or 0 when empty. */
   latestSeq(): number {
     return this.seq;

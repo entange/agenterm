@@ -8,6 +8,7 @@ import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import * as React from 'react';
 import { api, getBridge } from '../lib/bridge.js';
 import { useLive } from '../lib/live.js';
+import { useUi } from '../lib/ui.js';
 
 const DARK: ITheme = {
   background: '#0d1218',
@@ -101,6 +102,7 @@ export function TerminalPane({
   const searchRef = React.useRef<SearchAddon | null>(null);
   const termRef = React.useRef<Terminal | null>(null);
   const [searchOpen, setSearchOpen] = React.useState(false);
+  const [findSeed, setFindSeed] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const sessionId = session.id;
 
@@ -213,7 +215,13 @@ export function TerminalPane({
       buffered = [];
       ready = true;
       setLoading(false);
-      if (interactive) term.focus();
+      // Arriving from output search: open Find on the searched text.
+      const pending = useUi.getState().pendingFind;
+      if (pending !== null) {
+        useUi.getState().setPendingFind(null);
+        setFindSeed(pending);
+        setSearchOpen(true);
+      } else if (interactive) term.focus();
     })();
 
     const offConnection = useLive.subscribe((state, previous) => {
@@ -269,9 +277,11 @@ export function TerminalPane({
       {loading ? <div className="absolute top-3 right-4 text-[11px] text-ink-faint">Loading scrollback…</div> : null}
       {searchOpen ? (
         <TerminalSearch
+          initial={findSeed}
           search={searchRef.current}
           onClose={() => {
             setSearchOpen(false);
+            setFindSeed('');
             searchRef.current?.clearDecorations();
             termRef.current?.focus();
           }}
@@ -281,21 +291,38 @@ export function TerminalPane({
   );
 }
 
-function TerminalSearch({ search, onClose }: { search: SearchAddon | null; onClose: () => void }): React.JSX.Element {
-  const [query, setQuery] = React.useState('');
+const FIND_OPTIONS = {
+  decorations: {
+    matchBackground: '#f2b84b55',
+    matchOverviewRuler: '#f2b84b',
+    activeMatchBackground: '#f2b84b',
+    activeMatchColorOverviewRuler: '#f2b84b'
+  }
+};
+
+function TerminalSearch({
+  search,
+  initial,
+  onClose
+}: {
+  search: SearchAddon | null;
+  initial: string;
+  onClose: () => void;
+}): React.JSX.Element {
+  const [query, setQuery] = React.useState(initial);
   const [found, setFound] = React.useState<boolean | null>(null);
-  const options = {
-    decorations: {
-      matchBackground: '#f2b84b55',
-      matchOverviewRuler: '#f2b84b',
-      activeMatchBackground: '#f2b84b',
-      activeMatchColorOverviewRuler: '#f2b84b'
-    }
-  };
+  const options = FIND_OPTIONS;
   const run = (direction: 'next' | 'previous'): void => {
     if (search === null || query.length === 0) return;
     setFound(direction === 'next' ? search.findNext(query, options) : search.findPrevious(query, options));
   };
+  // A seeded query jumps to its newest occurrence once.
+  const seeded = React.useRef(false);
+  React.useEffect(() => {
+    if (seeded.current || initial.length === 0 || search === null) return;
+    seeded.current = true;
+    setFound(search.findPrevious(initial, FIND_OPTIONS));
+  }, [initial, search]);
   return (
     <div className="absolute top-2 right-4 z-10 flex items-center gap-1 rounded-md border border-line-strong bg-raised p-1 shadow-lg">
       <input
