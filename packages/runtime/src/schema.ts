@@ -72,6 +72,7 @@ export const sessions = sqliteTable(
     worktreeRoot: text('worktree_root'),
     branch: text('branch'),
     origin: text('origin').notNull(),
+    parentSessionId: text('parent_session_id'),
     commandLineJson: text('command_line_json').notNull(),
     resolvedBinaryPath: text('resolved_binary_path'),
     pid: integer('pid').notNull(),

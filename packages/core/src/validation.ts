@@ -134,6 +134,10 @@ export function parseSpawnSessionRequest(body: unknown): ValidationResult<SpawnS
       return { ok: false, code: 'invalid_env', message: 'env key or value out of range' };
     }
   }
+  const parentSessionId = body['parentSessionId'];
+  if (parentSessionId !== undefined && !isUuid(parentSessionId)) {
+    return { ok: false, code: 'invalid_parentSessionId', message: 'parentSessionId must be a session id' };
+  }
   const statusHooks = body['statusHooks'];
   if (statusHooks !== undefined && typeof statusHooks !== 'boolean') {
     return { ok: false, code: 'invalid_statusHooks', message: 'statusHooks must be a boolean' };
@@ -154,6 +158,9 @@ export function parseSpawnSessionRequest(body: unknown): ValidationResult<SpawnS
   }
   if (typeof statusHooks === 'boolean') {
     spawnValue.statusHooks = statusHooks;
+  }
+  if (typeof parentSessionId === 'string') {
+    spawnValue.parentSessionId = parentSessionId;
   }
   return {
     ok: true,

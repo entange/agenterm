@@ -80,6 +80,8 @@ declare module 'fastify' {
     agenterm: {
       /** Typing into a waiting agent means the user answered it. */
       noteInput: (sessionId: string, data: string) => void;
+      /** Output heartbeat, drained into one socket frame per second. */
+      activity: ActivityMeter;
     };
   }
 }
@@ -123,6 +125,19 @@ function cwdExists(cwd: string): boolean {
   }
 }
 
+/**
+ * macOS reports pty exhaustion as a bare "posix_spawnp failed". Count the
+ * allocated pty device nodes to tell that apart from other spawn errors.
+ */
+function ptysExhausted(): boolean {
+  if (process.platform !== 'darwin') return false;
+  try {
+    return fs.readdirSync('/dev').filter((name) => name.startsWith('ttys')).length >= 505;
+  } catch {
+    return false;
+  }
+}
+
 function defaultPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -159,6 +174,7 @@ interface SpawnInput {
   rows: number;
   env: Record<string, string>;
   statusHooks: boolean;
+  parentSessionId?: string | null | undefined;
 }
 
 /** Build the Fastify app. Localhost binding happens in index. */
@@ -223,7 +239,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     const submittedReply = session.overlay === 'waiting_input' && data.includes('\r');
     if (answeredPrompt || submittedReply) applyOverlay(sessionId, 'working', 'pty', null);
   };
-  app.decorate('agenterm', { noteInput });
+  app.decorate('agenterm', { noteInput, activity });
 
   fileWatch.onChange = (change) => {
     const session = store.get(change.sessionId);
@@ -289,7 +305,13 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
 
   pty.onExit = (sessionId, exit) => {
     const record = store.get(sessionId);
-    void pty.get(sessionId)?.log.close();
+    const exited = pty.get(sessionId);
+    if (exited !== null) {
+      // With a disk mirror, the ended session's ring is freed once flushed; scrollback comes from terminal.log.
+      void exited.log.close().then(() => {
+        if (dataDir !== undefined) exited.log.release();
+      });
+    }
     hooks.forget(sessionId);
     stopTracking(sessionId);
     try {
@@ -410,11 +432,19 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       pid = managed.pid;
     } catch (error) {
       hooks.forget(id);
-      return {
-        status: 500,
-        code: 'spawn_failed',
-        message: error instanceof Error ? redactText(error.message) : 'pty spawn failed'
-      };
+      const message = error instanceof Error ? redactText(error.message) : 'pty spawn failed';
+      if (/forkpty|posix_openpt|out of pty|no more pty|EAGAIN/i.test(message) || ptysExhausted()) {
+        return {
+          status: 503,
+          code: 'pty_limit',
+          message: 'The system ran out of pseudo-terminals.',
+          hint:
+            process.platform === 'darwin'
+              ? 'macOS allows 511 by default. Close ended sessions, or raise it with: sudo sysctl -w kern.tty.ptmx_max=999'
+              : 'Close ended sessions or raise the pty limit (/proc/sys/kernel/pty/max).'
+        };
+      }
+      return { status: 500, code: 'spawn_failed', message };
     }
     const session = store.createSpawned({
       id,
@@ -428,7 +458,13 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       resolvedBinaryPath: resolved,
       pid,
       cols: input.cols,
-      rows: input.rows
+      rows: input.rows,
+      parentSessionId:
+        input.parentSessionId !== undefined &&
+        input.parentSessionId !== null &&
+        store.get(input.parentSessionId) !== null
+          ? input.parentSessionId
+          : null
     });
     // The PTY may have exited during the git read; settle that before tracking.
     const managed = pty.get(id);
@@ -537,7 +573,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       if (only !== null && session.id !== only) continue;
       const managed = pty.get(session.id);
       const text =
-        managed !== null
+        managed !== null && !managed.log.isReleased()
           ? managed.log.text()
           : dataDir !== undefined
             ? readLogTail(terminalLogPath(session.id, dataDir), 2 * 1024 * 1024)
@@ -622,7 +658,8 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       cols: body.cols ?? 80,
       rows: body.rows ?? 24,
       env,
-      statusHooks: body.statusHooks ?? true
+      statusHooks: body.statusHooks ?? true,
+      parentSessionId: body.parentSessionId
     });
     if ('status' in result) {
       await fail(reply, result);
@@ -805,7 +842,8 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       cols: session.cols,
       rows: session.rows,
       env: {},
-      statusHooks: true
+      statusHooks: true,
+      parentSessionId: session.parentSessionId
     });
     if ('status' in result) {
       await fail(reply, result);
@@ -935,7 +973,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       return;
     }
     const managed = pty.get(session.id);
-    if (managed !== null) {
+    if (managed !== null && !managed.log.isReleased()) {
       const page = managed.log.read({
         tailBytes: parsed.value.tailBytes,
         sinceSeq: parsed.value.sinceSeq,

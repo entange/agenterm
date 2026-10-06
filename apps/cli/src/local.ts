@@ -67,9 +67,23 @@ export function daemonEntry(): string | null {
   }
 }
 
+/**
+ * Wrap a launch so the daemon gets a high open-file limit. Each terminal
+ * holds several descriptors, and macOS hands GUI-launched processes a soft
+ * limit of 256, which would cap agenterm at well under a hundred terminals.
+ */
+export function withFileLimit(command: string, args: string[]): { command: string; args: string[] } {
+  if (process.platform === 'win32') return { command, args };
+  return {
+    command: '/bin/sh',
+    args: ['-c', 'ulimit -n 65536 2>/dev/null || ulimit -n 10240 2>/dev/null; exec "$0" "$@"', command, ...args]
+  };
+}
+
 /** Start the daemon detached so it outlives this CLI invocation. */
 export function startDaemonProcess(entry: string): void {
-  const child = spawn(process.execPath, [entry], { detached: true, stdio: 'ignore', env: process.env });
+  const launch = withFileLimit(process.execPath, [entry]);
+  const child = spawn(launch.command, launch.args, { detached: true, stdio: 'ignore', env: process.env });
   child.unref();
 }
 

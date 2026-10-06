@@ -67,6 +67,8 @@ export interface SpawnSessionRequest {
   rows?: number;
   /** Environment overrides. Secrets-blocklist keys are rejected. */
   env?: Record<string, string>;
+  /** Session that is starting this one. The CLI fills it from AGENTERM_SESSION_ID. */
+  parentSessionId?: string;
   /**
    * Let the agent push its own status (Claude Code hooks, Codex notify)
    * to this session. Defaults to true; ignored for generic commands.
@@ -391,4 +393,9 @@ export type ClientSocketMessage =
 export type ServerSocketMessage =
   | { kind: 'event'; event: import('./event.js').AgentermEvent }
   | { kind: 'hello'; version: string; serverTimeMs: number }
+  | {
+      kind: 'activity';
+      /** Output bytes and last visible line per session since the previous frame (about once per second). */
+      tick: { atMs: number; sessions: Record<string, { bytes: number; lastLine: string | null }> };
+    }
   | { kind: 'error'; code: string; message: string };

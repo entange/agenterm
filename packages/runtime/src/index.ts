@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import pino from 'pino';
@@ -25,6 +26,17 @@ const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 
 /** Grace for shutdown before the process exits regardless. */
 const SHUTDOWN_GRACE_MS = 4000;
+
+/** Soft open-file limit this process inherited, or null when unknown. */
+function fileLimit(): number | null {
+  if (process.platform === 'win32') return null;
+  try {
+    const value = Number(execFileSync('/bin/sh', ['-c', 'ulimit -n'], { encoding: 'utf8' }).trim());
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Daemon log file inside the data dir. */
 export function daemonLogPath(dir: string): string {
@@ -119,11 +131,16 @@ async function main(): Promise<void> {
     token,
     bus,
     pty,
-    onInput: (sessionId, data) => app.agenterm.noteInput(sessionId, data)
+    onInput: (sessionId, data) => app.agenterm.noteInput(sessionId, data),
+    activity: app.agenterm.activity
   });
   supervisor.start();
   watch.start();
-  log.info({ port: lock.port, harnessWatch: watch.isEnabled() }, 'daemon listening');
+  log.info({ port: lock.port, harnessWatch: watch.isEnabled(), fileLimit: fileLimit() }, 'daemon listening');
+  const limit = fileLimit();
+  if (limit !== null && limit < 4096) {
+    log.warn({ fileLimit: limit }, 'open-file limit is low; each terminal uses several descriptors');
+  }
 
   let stopping = false;
   const shutdown = async (signal: string): Promise<void> => {

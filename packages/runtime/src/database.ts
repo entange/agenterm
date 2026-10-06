@@ -80,6 +80,7 @@ const DDL = [
     worktree_root TEXT,
     branch TEXT,
     origin TEXT NOT NULL,
+    parent_session_id TEXT,
     command_line_json TEXT NOT NULL,
     resolved_binary_path TEXT,
     pid INTEGER NOT NULL,
@@ -152,11 +153,18 @@ export function openDatabase(file: string): { raw: Database.Database; db: Runtim
   for (const statement of DDL) {
     raw.exec(statement);
   }
+  migrate(raw);
   for (const sidecar of ['', '-wal', '-shm']) {
     chmodQuiet(`${file}${sidecar}`, PRIVATE_FILE_MODE);
   }
   const db = drizzle(raw, { schema });
   return { raw, db };
+}
+
+/** Additive column migrations for databases created by earlier builds. */
+function migrate(raw: Database.Database): void {
+  const columns = new Set((raw.pragma('table_info(sessions)') as Array<{ name: string }>).map((column) => column.name));
+  if (!columns.has('parent_session_id')) raw.exec('ALTER TABLE sessions ADD COLUMN parent_session_id TEXT');
 }
 
 /** Default database path inside the data dir. */
@@ -186,6 +194,7 @@ export function sessionToRow(record: SessionRecord): typeof schema.sessions.$inf
     worktreeRoot: record.worktreeRoot,
     branch: record.branch,
     origin: record.origin,
+    parentSessionId: record.parentSessionId,
     commandLineJson: JSON.stringify(record.commandLine),
     resolvedBinaryPath: record.resolvedBinaryPath,
     pid: record.pid,
@@ -210,6 +219,7 @@ export interface SessionRowShape {
   worktreeRoot?: string | null | undefined;
   branch?: string | null | undefined;
   origin: string;
+  parentSessionId?: string | null | undefined;
   commandLineJson: string;
   resolvedBinaryPath?: string | null | undefined;
   pid: number;
@@ -234,6 +244,7 @@ export function rowToSession(row: SessionRowShape): SessionRecord {
     worktreeRoot: row.worktreeRoot ?? null,
     branch: row.branch ?? null,
     origin: row.origin as SessionRecord['origin'],
+    parentSessionId: row.parentSessionId ?? null,
     commandLine: parseCommandLine(row.commandLineJson),
     resolvedBinaryPath: row.resolvedBinaryPath ?? null,
     pid: row.pid,

@@ -386,6 +386,9 @@ export function buildProgram(deps: CliDeps): Command {
           };
           if (typeof opts.command === 'string') req.command = opts.command;
           if (typeof opts.title === 'string') req.title = opts.title;
+          // Run from inside an agenterm terminal (an agent starting helpers): nest under it.
+          const parent = process.env['AGENTERM_SESSION_ID'];
+          if (parent !== undefined && UUID.test(parent)) req.parentSessionId = parent;
           const cols = Number(opts.cols);
           const rows = Number(opts.rows);
           if (Number.isInteger(cols)) req.cols = cols;

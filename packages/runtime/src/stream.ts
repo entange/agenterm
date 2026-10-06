@@ -31,10 +31,15 @@ function isTerminalEvent(event: AgentermEvent): boolean {
 }
 
 function send(socket: WebSocket, payload: unknown): void {
+  sendRaw(socket, JSON.stringify(payload));
+}
+
+/** Send an already-serialized frame; fan-out serializes once for all clients. */
+function sendRaw(socket: WebSocket, frame: string): void {
   if (socket.readyState !== 1) return;
   if (socket.bufferedAmount > MAX_BUFFERED_BYTES) return;
   try {
-    socket.send(JSON.stringify(payload));
+    socket.send(frame);
   } catch {
     // Slow or dead consumers fall back to sinceSeq re-fetch.
   }
@@ -69,6 +74,9 @@ export class EventStream {
       bus: EventBus;
       pty: PtyManager;
       onInput?: ((sessionId: string, data: string) => void) | undefined;
+      /** Source of the per-second activity frame sent to every client. */
+      activity?: { drain: () => unknown } | undefined;
+      activityIntervalMs?: number | undefined;
     }
   ) {
     this.wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
@@ -89,7 +97,19 @@ export class EventStream {
     };
     options.server.on('upgrade', this.onUpgrade);
     this.detach = options.bus.onEvent((event) => this.broadcast(event));
+    const activity = options.activity;
+    if (activity !== undefined) {
+      this.ticker = setInterval(() => {
+        const tick = activity.drain();
+        if (tick === null || this.clients.size === 0) return;
+        const frame = JSON.stringify({ kind: 'activity', tick });
+        for (const client of this.clients) sendRaw(client.socket, frame);
+      }, options.activityIntervalMs ?? 1000);
+      this.ticker.unref();
+    }
   }
+
+  private ticker: ReturnType<typeof setInterval> | null = null;
 
   /** Connected client count. Used by tests and health detail. */
   size(): number {
@@ -203,14 +223,17 @@ export class EventStream {
 
   private broadcast(event: AgentermEvent): void {
     const scoped = isTerminalEvent(event);
+    let frame: string | null = null;
     for (const client of this.clients) {
       if (scoped && !client.outputs.has(ALL_SESSIONS) && !client.outputs.has(event.sessionId)) continue;
-      send(client.socket, { kind: 'event', event });
+      frame ??= JSON.stringify({ kind: 'event', event });
+      sendRaw(client.socket, frame);
     }
   }
 
   /** Terminate every client so the HTTP server can close promptly. */
   close(): void {
+    if (this.ticker !== null) clearInterval(this.ticker);
     this.detach();
     this.options.server.off('upgrade', this.onUpgrade);
     for (const client of this.clients) {

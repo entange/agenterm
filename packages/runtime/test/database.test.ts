@@ -22,6 +22,7 @@ function sampleSession(id: string): SessionRecord {
     worktreeRoot: null,
     branch: 'work',
     origin: 'spawned',
+    parentSessionId: null,
     commandLine: ['/bin/echo', 'hi'],
     resolvedBinaryPath: '/bin/echo',
     pid: 4242,

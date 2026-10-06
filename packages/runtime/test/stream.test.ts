@@ -4,7 +4,12 @@ import WebSocket from 'ws';
 import { EventStream } from '../src/stream.js';
 import { rig, TOKEN } from './helpers.js';
 
-type Frame = { kind: string; event?: { kind: string; sessionId: string; seq?: number; data?: string }; code?: string };
+type Frame = {
+  kind: string;
+  event?: { kind: string; sessionId: string; seq?: number; data?: string };
+  code?: string;
+  tick?: { sessions: Record<string, { bytes: number; lastLine: string | null }> };
+};
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -14,7 +19,14 @@ afterEach(async () => {
 async function listen() {
   const r = rig();
   await r.app.listen({ host: '127.0.0.1', port: 0 });
-  const stream = new EventStream({ server: r.app.server, token: TOKEN, bus: r.bus, pty: r.pty });
+  const stream = new EventStream({
+    server: r.app.server,
+    token: TOKEN,
+    bus: r.bus,
+    pty: r.pty,
+    activity: r.app.agenterm.activity,
+    activityIntervalMs: 50
+  });
   cleanups.push(async () => {
     stream.close();
     await r.app.close();
@@ -87,6 +99,20 @@ describe('EventStream', () => {
     last()?.emitExit(0);
     socket.send(JSON.stringify({ kind: 'terminal.input', sessionId: session.id, data: 'late' }));
     await until(() => frames.some((frame) => frame.code === 'no_pty'));
+    socket.close();
+  });
+});
+
+describe('EventStream activity frames', () => {
+  it('summarizes every session once per tick without streaming bytes', async () => {
+    const { url, spawn, last } = await listen();
+    const session = await spawn();
+    const { socket, frames } = await connect(url);
+    last()?.emitData('\x1b[32mbuilding\x1b[0m\r\n');
+    await until(() => frames.some((frame) => frame.kind === 'activity'));
+    const tick = frames.find((frame) => frame.kind === 'activity')?.tick;
+    expect(tick?.sessions[session.id]).toEqual({ bytes: 19, lastLine: 'building' });
+    expect(frames.some((frame) => frame.event?.kind === 'terminal.output')).toBe(false);
     socket.close();
   });
 });

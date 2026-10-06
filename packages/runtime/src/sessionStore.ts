@@ -83,6 +83,7 @@ export class SessionStore {
       worktreeRoot: input.worktreeRoot ?? null,
       branch: input.branch ?? null,
       origin: 'attached',
+      parentSessionId: null,
       commandLine: input.commandLine.split(' ').filter((part) => part.length > 0),
       resolvedBinaryPath: null,
       pid: input.pid,
@@ -114,6 +115,7 @@ export class SessionStore {
     pid: number;
     cols: number;
     rows: number;
+    parentSessionId?: string | null | undefined;
   }): SessionRecord {
     const now = Date.now();
     const record: SessionRecord = {
@@ -125,6 +127,7 @@ export class SessionStore {
       worktreeRoot: input.worktreeRoot,
       branch: input.branch,
       origin: 'spawned',
+      parentSessionId: input.parentSessionId ?? null,
       commandLine: input.commandLine,
       resolvedBinaryPath: input.resolvedBinaryPath,
       pid: input.pid,

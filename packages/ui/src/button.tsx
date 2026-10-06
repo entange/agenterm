@@ -10,7 +10,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const tones: Record<ButtonTone, string> = {
-  primary: 'bg-accent text-canvas hover:brightness-110 font-semibold',
+  primary: 'bg-accent text-canvas hover:opacity-90 font-semibold',
   secondary: 'border border-line-strong bg-raised text-ink hover:border-ink-faint',
   quiet: 'text-ink-muted hover:bg-sunken hover:text-ink',
   danger: 'border border-fail/50 text-fail hover:bg-fail hover:text-canvas'

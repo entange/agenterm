@@ -91,7 +91,7 @@ export class PtyManager {
   ) {
     this.spawnFn = options.spawnFn ?? defaultSpawn;
     this.dataDir = options.dataDir;
-    this.maxBytes = options.maxBytes ?? 2 * 1024 * 1024;
+    this.maxBytes = options.maxBytes ?? 1024 * 1024;
     this.onOutput = options.onOutput;
     this.onExit = options.onExit;
   }

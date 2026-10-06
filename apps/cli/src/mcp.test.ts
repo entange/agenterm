@@ -11,6 +11,7 @@ const live: SessionRecord = {
   worktreeRoot: '/repo',
   branch: 'main',
   origin: 'spawned',
+  parentSessionId: null,
   commandLine: ['claude'],
   resolvedBinaryPath: '/bin/claude',
   pid: 4242,

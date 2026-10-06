@@ -66,6 +66,11 @@ export interface SessionRecord {
   branch: string | null;
   /** Origin flag. See SessionOrigin. */
   origin: SessionOrigin;
+  /**
+   * Session that started this one, when an agent ran `agenterm spawn` from
+   * inside its own terminal. Null for top-level sessions.
+   */
+  parentSessionId: string | null;
   /** Exact command line elements. First element is the binary. */
   commandLine: string[];
   /** Resolved absolute binary path or null when not yet resolved. */

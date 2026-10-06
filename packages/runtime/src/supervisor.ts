@@ -176,7 +176,7 @@ export class Supervisor {
   private children = new Map<number, number[]>();
   private byPid = new Map<number, ProcEntry>();
   private lastPorts = new Map<string, PortRecord[]>();
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly onPorts: ((sessionId: string, change: PortChange) => void) | undefined;
 
   constructor(
@@ -207,19 +207,16 @@ export class Supervisor {
 
   /** Leader plus all descendants from the most recent poll. */
   subtreePids(leaderPid: number): number[] {
-    const out: number[] = [leaderPid];
+    const seen = new Set<number>([leaderPid]);
     const queue: number[] = [leaderPid];
-    while (queue.length > 0) {
-      const current = queue.shift();
-      if (current === undefined) continue;
-      for (const child of this.childrenOf(current)) {
-        if (!out.includes(child)) {
-          out.push(child);
-          queue.push(child);
-        }
+    for (let i = 0; i < queue.length; i++) {
+      for (const child of this.children.get(queue[i] ?? 0) ?? []) {
+        if (seen.has(child)) continue;
+        seen.add(child);
+        queue.push(child);
       }
     }
-    return out;
+    return queue;
   }
 
   private inFlight: Promise<void> | null = null;
@@ -337,16 +334,28 @@ export class Supervisor {
     return targets;
   }
 
+  /**
+   * Poll on a self-scheduling loop: one cycle never overlaps the next, and
+   * the pause grows with the number of tracked trees so hundreds of sessions
+   * do not keep ps and lsof busy.
+   */
   start(): void {
     if (this.timer !== null) return;
-    this.timer = setInterval(() => {
-      void this.poll();
-    }, this.intervalMs);
+    const loop = (): void => {
+      const pause =
+        this.leaders.size > 200 ? this.intervalMs * 3 : this.leaders.size > 50 ? this.intervalMs * 2 : this.intervalMs;
+      this.timer = setTimeout(() => {
+        void this.poll().finally(() => {
+          if (this.timer !== null) loop();
+        });
+      }, pause);
+    };
+    loop();
   }
 
   stop(): void {
     if (this.timer !== null) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
   }

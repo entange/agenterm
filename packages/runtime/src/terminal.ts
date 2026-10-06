@@ -36,7 +36,7 @@ export class TerminalLog {
   private file: fs.WriteStream | null = null;
 
   constructor(options: { maxBytes?: number | undefined; file?: string | undefined } = {}) {
-    this.maxBytes = options.maxBytes ?? 2 * 1024 * 1024;
+    this.maxBytes = options.maxBytes ?? 1024 * 1024;
     if (typeof options.file === 'string') {
       try {
         fs.mkdirSync(path.dirname(options.file), { recursive: true, mode: 0o700 });
@@ -70,6 +70,22 @@ export class TerminalLog {
     if (drop > 0) this.chunks.splice(0, drop);
     this.file?.write(data);
     return chunk;
+  }
+
+  private released = false;
+
+  /**
+   * Drop the in-memory ring of an ended session whose bytes are on disk.
+   * With hundreds of sessions, ended rings would otherwise pin memory.
+   */
+  release(): void {
+    this.released = true;
+    this.chunks = [];
+    this.heldBytes = 0;
+  }
+
+  isReleased(): boolean {
+    return this.released;
   }
 
   /** Everything the ring still holds, oldest first. */
