@@ -102,6 +102,20 @@ the daemon for cost and token totals, unless you already configured `OTEL_*` you
 - Git status, diffs, and file watching apply only to folders you start or attach a session in, never your home or root
   folder.
 
+## Running hundreds of terminals
+
+agenterm is built for fleets: the sidebar is virtualized and groups by status or project, sub-sessions nest under the
+session that started them, and the daemon sends one activity summary per second instead of streaming every terminal.
+In a load test with 250 live terminals the daemon used about 5% CPU and 160 MB.
+
+macOS allows 511 pseudo-terminals system-wide by default, shared with every other terminal app. To run more:
+
+```sh
+sudo sysctl -w kern.tty.ptmx_max=999
+```
+
+When the limit is hit, agenterm reports it with this hint instead of a generic spawn error.
+
 ## Security model
 
 - The daemon listens on `127.0.0.1` only. Every HTTP route and the event socket require a 32-byte bearer token stored
