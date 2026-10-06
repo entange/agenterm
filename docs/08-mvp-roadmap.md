@@ -5,6 +5,31 @@ They must never appear in code, folder names, UI copy, API routes, env keys,
 package names, comments, or artifact names. The product ships as production
 code from the first commit.
 
+## Status (kept current)
+
+Done and verified:
+
+- Runtime: PTY spawn/resize/write/kill with login env, ring buffer plus on-disk scrollback that survives restarts,
+  forward-paging resume cursor, single-flight lock with stale-pid probing, token auth on HTTP and socket (checked before
+  upgrade), WAL SQLite with 30-day retention, discover (real argv, cwd, provider) and read-only attach with exit
+  detection, kill-tree limited to live sessions, rename, restart, close, ports join, git status and diff, file watch,
+  activity heartbeat, events feed.
+- Agent status: Claude Code hooks and Codex notify push status to per-session ingest endpoints. Claude telemetry feeds
+  per-session cost and tokens.
+- Desktop: strip board, control room, session workspace (terminal, commands, changes, files, processes, activity),
+  palette, notifications, badge, tray, menus, sandbox plus CSP, login-shell env, packaging with a bundled daemon,
+  updater.
+- CLI: full command set including daemon lifecycle, follow logs, git, files, usage. MCP stdio bridge.
+- CI: typecheck, lint, format, and tests on macOS and Linux, plus a macOS package smoke job and a release workflow.
+
+Not done yet:
+
+- Windows: paths validate and binaries resolve, but signals and the supervisor are POSIX-first and untested on Windows.
+- Full supervisor history (stored CPU/memory snapshots, full-text output search).
+- ACP client.
+- Gemini and opencode status (no documented hook mechanism yet; output heartbeat only).
+- Signed and notarized release builds need credentials.
+
 ## Foundation — "it runs, survives, reattaches"
 
 Runtime (`packages/runtime`):
