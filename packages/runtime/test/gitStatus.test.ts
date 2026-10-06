@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { simpleGit } from 'simple-git';
 import { describe, expect, it } from 'vitest';
-import { readGitStatus } from '../src/gitStatus.js';
+import { readGitDiff, readGitStatus, safeRelativePath } from '../src/gitStatus.js';
 
 async function scratchRepo(): Promise<string> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agenterm-gitstatus-'));
@@ -69,5 +69,26 @@ describe('readGitStatus', () => {
     const status = await readGitStatus(dir);
     expect(status.branch).toBe(null);
     expect(status.isDirty).toBe(false);
+  });
+});
+
+describe('readGitDiff', () => {
+  it('diffs tracked edits against HEAD and untracked files against empty', async () => {
+    const dir = await scratchRepo();
+    fs.writeFileSync(path.join(dir, 'base.txt'), 'one\ntwo\n');
+    fs.writeFileSync(path.join(dir, 'new.txt'), 'fresh\n');
+    const tracked = await readGitDiff(dir, 'base.txt');
+    expect(tracked?.diff).toContain('+two');
+    const untracked = await readGitDiff(dir, 'new.txt');
+    expect(untracked?.diff).toContain('+fresh');
+    expect(untracked?.truncated).toBe(false);
+  });
+
+  it('refuses paths outside the worktree', async () => {
+    const dir = await scratchRepo();
+    expect(await readGitDiff(dir, '../outside.txt')).toBe(null);
+    expect(await readGitDiff(dir, '/etc/passwd')).toBe(null);
+    expect(safeRelativePath('/repo', 'a/../../b')).toBe(null);
+    expect(safeRelativePath('/repo', 'src/a.ts')).toBe('src/a.ts');
   });
 });

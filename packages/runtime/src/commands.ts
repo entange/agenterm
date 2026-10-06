@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { CommandRecord } from '@agenterm/core';
+import { redactText } from '@agenterm/core';
 
 /**
  * Prompt-anchored command heuristic.
@@ -15,15 +16,22 @@ import type { CommandRecord } from '@agenterm/core';
 
 const MAX_TEXT = 2000;
 
+/** Longest line the prompt matcher inspects; TUI redraws can emit huge lines. */
+const MAX_LINE = 4096;
+
+/** Cap on buffered bytes without a newline, so full-screen TUIs cannot grow memory. */
+const MAX_PENDING = 64 * 1024;
+
 function stripSequences(input: string): string {
   return input.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '').replace(/\r/g, '');
 }
 
 function splitPrompt(line: string): string | null {
-  const clean = stripSequences(line).replace(/\s+$/, '');
-  const match = /^(.*[$%#>])\s+(.+)$/.exec(clean);
+  const clean = stripSequences(line.length > MAX_LINE ? line.slice(0, MAX_LINE) : line).replace(/\s+$/, '');
+  // Prompt marker within the first 200 chars: bounded search, no backtracking across long lines.
+  const match = /^([^\n]{0,200}?[$%#>])\s+(.+)$/.exec(clean);
   if (match === null) return null;
-  const text = (match[2] ?? '').trim().slice(0, MAX_TEXT);
+  const text = redactText((match[2] ?? '').trim()).slice(0, MAX_TEXT);
   return text.length > 0 ? text : null;
 }
 
@@ -69,6 +77,7 @@ export class CommandTracker {
       this.pending += data;
       const parts = this.pending.split('\n');
       this.pending = parts.pop() ?? '';
+      if (this.pending.length > MAX_PENDING) this.pending = this.pending.slice(-MAX_PENDING);
       for (const part of parts) {
         this.consumeLine(part);
       }

@@ -31,3 +31,8 @@ export function sessionsDir(dir?: string): string {
 export function sessionDir(sessionId: string, dir?: string): string {
   return path.join(sessionsDir(dir), sessionId);
 }
+
+/** Raw terminal mirror for one session. Survives daemon restarts. */
+export function terminalLogPath(sessionId: string, dir?: string): string {
+  return path.join(sessionDir(sessionId, dir), 'terminal.log');
+}

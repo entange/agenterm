@@ -1,5 +1,5 @@
 import * as pty from 'node-pty';
-import { stripSecretEnv } from '@agenterm/core';
+import { terminalLogPath } from './paths.js';
 import { TerminalLog } from './terminal.js';
 
 /** Minimal PTY surface used by the manager. Matches node-pty shape. */
@@ -90,10 +90,11 @@ export class PtyManager {
     if (this.sessions.has(spec.sessionId)) {
       throw new Error(`session ${spec.sessionId} already owns a PTY`);
     }
-    const safeEnv = stripSecretEnv(spec.env);
+    // spec.env is already composed by buildSpawnEnv; only terminal identity is forced here.
     const env: Record<string, string> = {
-      ...safeEnv,
+      ...spec.env,
       ['TERM']: 'xterm-256color',
+      ['COLORTERM']: 'truecolor',
       ['AGENTERM']: '1',
       ['AGENTERM_SESSION_ID']: spec.sessionId
     };
@@ -104,12 +105,9 @@ export class PtyManager {
       rows: spec.rows,
       name: 'xterm-256color'
     });
-    const logOptions: { maxBytes: number; dir?: string | undefined; sessionId?: string | undefined } = {
-      maxBytes: this.maxBytes
-    };
+    const logOptions: { maxBytes: number; file?: string | undefined } = { maxBytes: this.maxBytes };
     if (typeof this.dataDir === 'string') {
-      logOptions.dir = this.dataDir;
-      logOptions.sessionId = spec.sessionId;
+      logOptions.file = terminalLogPath(spec.sessionId, this.dataDir);
     }
     const record: ManagedPty = {
       sessionId: spec.sessionId,

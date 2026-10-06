@@ -62,3 +62,22 @@ describe('CommandTracker', () => {
     expect(() => feedAll(tracker, ['\x00\xff\n', '$ \n', '\x1b[999;888H$\n'])).not.toThrow();
   });
 });
+
+describe('CommandTracker bounds', () => {
+  it('caps buffered bytes for output without newlines', async () => {
+    const { CommandTracker } = await import('../src/commands.js');
+    const tracker = new CommandTracker({ sessionId: 's', cwd: '/tmp' });
+    for (let i = 0; i < 200; i++) tracker.feed('x'.repeat(4096));
+    expect((tracker as unknown as { pending: string }).pending.length).toBeLessThanOrEqual(64 * 1024);
+  });
+
+  it('redacts secrets in command text and handles long lines quickly', async () => {
+    const { CommandTracker } = await import('../src/commands.js');
+    const tracker = new CommandTracker({ sessionId: 's', cwd: '/tmp' });
+    tracker.feed('$ curl -H "Authorization: Bearer abcdefghijklmnopqrstu" x\n');
+    expect(tracker.rows()[0]?.text).not.toContain('abcdefghijklmnopqrstu');
+    const started = Date.now();
+    tracker.feed(`${'a'.repeat(200_000)}\n`);
+    expect(Date.now() - started).toBeLessThan(200);
+  });
+});

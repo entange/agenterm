@@ -54,6 +54,10 @@ export class HarnessWatch {
     this.enabled = enabled;
   }
 
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
   track(sessionId: string): void {
     this.tracked.add(sessionId);
   }

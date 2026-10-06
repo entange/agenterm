@@ -208,9 +208,28 @@ describe('SqliteEvents', () => {
           data: 'x'
         });
       }
-      expect(table.prune(3)).toBe(2);
+      expect(table.prune(3, 30, 10)).toBe(2);
       expect(table.forSession('s1', 10).map((row) => row.id)).toEqual(['e2', 'e3', 'e4']);
-      expect(table.prune(3)).toBe(0);
+      expect(table.prune(3, 30, 10)).toBe(0);
+    } finally {
+      raw.close();
+    }
+  });
+
+  it('prunes rows older than the retention window and pages newest first', () => {
+    const { raw, db } = openDatabase(tmpFile('retention.db'));
+    try {
+      const table = new SqliteEvents(db);
+      const day = 24 * 60 * 60 * 1000;
+      const now = 100 * day;
+      const stamps = [now - 40 * day, now - 31 * day, now - 2 * day, now - day];
+      stamps.forEach((createdAtMs, i) => {
+        table.append({ id: `r${i}`, sessionId: 's1', createdAtMs, kind: 'session.detached', pid: 1 });
+      });
+      expect(table.prune(1000, 30, now)).toBe(2);
+      expect(table.recent({ limit: 10 }).map((event) => event.id)).toEqual(['r3', 'r2']);
+      expect(table.recent({ beforeMs: now - day }).map((event) => event.id)).toEqual(['r2']);
+      expect(raw.pragma('journal_mode', { simple: true })).toBe('wal');
     } finally {
       raw.close();
     }

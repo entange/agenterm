@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, lt, sql } from 'drizzle-orm';
 import type { AgentermEvent, CommandRecord, EventRow, SessionRecord } from '@agenterm/core';
 import { redactText } from '@agenterm/core';
 import * as schema from './schema.js';
@@ -12,6 +12,23 @@ export type RuntimeDatabase = BetterSQLite3Database<typeof schema>;
 
 /** Cap for the events table. Older rows prune first. */
 export const EVENTS_CAP = 20000;
+
+/** Default retention for events and commands, per docs/07. */
+export const RETENTION_DAYS = 30;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Owner-only modes for the data dir and every file holding session data. */
+export const PRIVATE_DIR_MODE = 0o700;
+export const PRIVATE_FILE_MODE = 0o600;
+
+function chmodQuiet(file: string, mode: number): void {
+  try {
+    fs.chmodSync(file, mode);
+  } catch {
+    // Missing sidecar files and non-POSIX filesystems are fine.
+  }
+}
 
 const DDL = [
   `CREATE TABLE IF NOT EXISTS machines (
@@ -119,13 +136,24 @@ const DDL = [
   `CREATE INDEX IF NOT EXISTS events_time_idx ON events (created_at_ms)`
 ];
 
-/** Open the embedded database, creating the file and schema on demand. */
+/**
+ * Open the embedded database, creating the file and schema on demand.
+ *
+ * WAL with synchronous=NORMAL keeps each event insert off the fsync path
+ * while staying crash-safe for committed rows. The database and its WAL
+ * sidecars are owner-only because events carry command lines and cwds.
+ */
 export function openDatabase(file: string): { raw: Database.Database; db: RuntimeDatabase } {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: PRIVATE_DIR_MODE });
   const raw = new Database(file);
   raw.pragma('busy_timeout = 5000');
+  raw.pragma('journal_mode = WAL');
+  raw.pragma('synchronous = NORMAL');
   for (const statement of DDL) {
     raw.exec(statement);
+  }
+  for (const sidecar of ['', '-wal', '-shm']) {
+    chmodQuiet(`${file}${sidecar}`, PRIVATE_FILE_MODE);
   }
   const db = drizzle(raw, { schema });
   return { raw, db };
@@ -289,23 +317,43 @@ export class SqliteEvents {
       .map((row) => ({ ...row, kind: row.kind as EventRow['kind'] }));
   }
 
-  /** Drop oldest rows past the cap. Returns the removed count. */
-  prune(cap = EVENTS_CAP): number {
-    const total = this.db.select({ count: sql<number>`count(*)` }).from(schema.events).get();
-    const count = total?.count ?? 0;
-    if (count <= cap) return 0;
-    const drop = count - cap;
-    const oldest = this.db
-      .select({ id: schema.events.id })
+  /** Newest-first page across sessions for the activity feed. */
+  recent(query: { sessionId?: string | undefined; beforeMs?: number | undefined; limit?: number | undefined } = {}): AgentermEvent[] {
+    const filters = [];
+    if (query.sessionId !== undefined) filters.push(eq(schema.events.sessionId, query.sessionId));
+    if (query.beforeMs !== undefined) filters.push(lt(schema.events.createdAtMs, query.beforeMs));
+    const rows = this.db
+      .select()
       .from(schema.events)
-      .orderBy(asc(schema.events.createdAtMs))
-      .limit(drop)
+      .where(filters.length > 0 ? and(...filters) : undefined)
+      .orderBy(desc(schema.events.createdAtMs))
+      .limit(query.limit ?? 100)
       .all();
-    for (const row of oldest) {
-      this.db.delete(schema.events).where(eq(schema.events.id, row.id)).run();
+    const out: AgentermEvent[] = [];
+    for (const row of rows) {
+      try {
+        out.push(JSON.parse(row.payloadJson) as AgentermEvent);
+      } catch {
+        // Skip rows a past version wrote in another shape.
+      }
     }
-    return oldest.length;
+    return out;
   }
+
+  /** Drop rows past the cap or older than the retention window. Returns the removed count. */
+  prune(cap = EVENTS_CAP, retentionDays = RETENTION_DAYS, now = Date.now()): number {
+    return pruneTable(this.db, 'events', 'created_at_ms', cap, now - retentionDays * DAY_MS);
+  }
+}
+
+function pruneTable(db: RuntimeDatabase, table: 'events' | 'commands', timeColumn: string, cap: number, cutoffMs: number): number {
+  const byAge = db.run(sql.raw(`DELETE FROM ${table} WHERE ${timeColumn} < ${Math.floor(cutoffMs)}`));
+  const byCap = db.run(
+    sql.raw(
+      `DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} ORDER BY ${timeColumn} DESC LIMIT -1 OFFSET ${Math.max(0, Math.floor(cap))})`
+    )
+  );
+  return byAge.changes + byCap.changes;
 }
 
 /** Cap for the commands table. Oldest rows prune first. */
@@ -351,21 +399,8 @@ export class SqliteCommands {
       }));
   }
 
-  /** Drop oldest rows past the cap. Returns the removed count. */
-  prune(cap = COMMANDS_CAP): number {
-    const total = this.db.select({ count: sql<number>`count(*)` }).from(schema.commands).get();
-    const count = total?.count ?? 0;
-    if (count <= cap) return 0;
-    const drop = count - cap;
-    const oldest = this.db
-      .select({ id: schema.commands.id })
-      .from(schema.commands)
-      .orderBy(asc(schema.commands.startedAtMs))
-      .limit(drop)
-      .all();
-    for (const row of oldest) {
-      this.db.delete(schema.commands).where(eq(schema.commands.id, row.id)).run();
-    }
-    return oldest.length;
+  /** Drop rows past the cap or older than the retention window. Returns the removed count. */
+  prune(cap = COMMANDS_CAP, retentionDays = RETENTION_DAYS, now = Date.now()): number {
+    return pruneTable(this.db, 'commands', 'started_at_ms', cap, now - retentionDays * DAY_MS);
   }
 }

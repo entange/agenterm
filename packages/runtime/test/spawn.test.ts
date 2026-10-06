@@ -168,6 +168,16 @@ describe('POST /sessions spawn flow', () => {
     expect(resizeRes.statusCode).toBe(200);
     expect(store.get(id)?.cols).toBe(120);
 
+    const refused = await app.inject({
+      method: 'DELETE',
+      url: `/sessions/${id}`,
+      headers,
+      payload: { killTree: false }
+    });
+    expect(refused.statusCode).toBe(409);
+    expect((refused.json() as { error: { code: string } }).error.code).toBe('session_running');
+
+    lastFake()?.emitExit(0);
     const delRes = await app.inject({
       method: 'DELETE',
       url: `/sessions/${id}`,

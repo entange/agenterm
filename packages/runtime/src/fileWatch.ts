@@ -34,7 +34,7 @@ export class FileWatch {
   private readonly watchers = new Map<string, { watcher: FSWatcher; sessionIds: Set<string> }>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly debounceMs: number;
-  private readonly onChange: ((change: WatchedChange) => void) | undefined;
+  onChange: ((change: WatchedChange) => void) | undefined;
 
   constructor(
     options: {
@@ -44,6 +44,14 @@ export class FileWatch {
   ) {
     this.debounceMs = options.debounceMs ?? 500;
     this.onChange = options.onChange;
+  }
+
+  /** True while the session has a watcher. */
+  isTracking(sessionId: string): boolean {
+    for (const entry of this.watchers.values()) {
+      if (entry.sessionIds.has(sessionId)) return true;
+    }
+    return false;
   }
 
   /** Track a session cwd. Shares one watcher per distinct cwd. */

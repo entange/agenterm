@@ -20,8 +20,17 @@ export const PROVIDER_INSTALL_HINTS: Record<AgentProvider, string> = {
   generic: 'Provide an explicit command or add its binary to the login PATH.'
 };
 
+/** Windows resolves bare names through PATHEXT; POSIX needs no suffix. */
+function executableSuffixes(): string[] {
+  if (process.platform !== 'win32') return [''];
+  const fromEnv = (process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';').filter((ext) => ext.length > 0);
+  return ['', ...fromEnv.map((ext) => ext.toLowerCase())];
+}
+
 function isExecutable(file: string): boolean {
   try {
+    if (!fs.statSync(file).isFile()) return false;
+    if (process.platform === 'win32') return true;
     fs.accessSync(file, fs.constants.X_OK);
     return true;
   } catch {
@@ -37,15 +46,23 @@ function isExecutable(file: string): boolean {
  * path or null when absent. Logs the resolved path per session so
  * missing-binary errors stay actionable.
  */
-export function resolveBinary(command: string, envPath?: string): string | null {
-  if (command.includes('/')) {
-    return isExecutable(command) ? command : null;
+export function resolveBinary(command: string, envPath?: string, cwd?: string): string | null {
+  const suffixes = executableSuffixes();
+  if (command.includes('/') || command.includes('\\')) {
+    // Relative paths like ./run.sh resolve against the session cwd, not the daemon's.
+    const base = path.isAbsolute(command) ? command : path.resolve(cwd ?? process.cwd(), command);
+    for (const suffix of suffixes) {
+      if (isExecutable(base + suffix)) return base + suffix;
+    }
+    return null;
   }
   const search = (envPath ?? process.env['PATH'] ?? '').split(path.delimiter);
   for (const dir of search) {
     if (dir.length === 0) continue;
-    const candidate = path.join(dir, command);
-    if (isExecutable(candidate)) return candidate;
+    for (const suffix of suffixes) {
+      const candidate = path.join(dir, command + suffix);
+      if (isExecutable(candidate)) return candidate;
+    }
   }
   return null;
 }

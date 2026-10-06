@@ -2,7 +2,15 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AgentProvider, ListSessionsQuery, SessionRecord } from '@agenterm/core';
-import type { SqliteSessions } from './database.js';
+import { PRIVATE_DIR_MODE, PRIVATE_FILE_MODE, type SqliteSessions } from './database.js';
+
+/** Lifecycles where the leader process may still be running. */
+const LIVE_LIFECYCLES: ReadonlySet<SessionRecord['lifecycle']> = new Set(['created', 'starting', 'running']);
+
+/** True when the row says the leader may still be running. */
+export function isLiveSession(record: SessionRecord): boolean {
+  return LIVE_LIFECYCLES.has(record.lifecycle);
+}
 
 /**
  * Session store.
@@ -41,8 +49,11 @@ export class SessionStore {
     if (this.dataDir === undefined) return;
     try {
       const dir = path.join(this.dataDir, 'sessions', record.id);
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, 'metadata.json'), JSON.stringify(record, null, 2), 'utf8');
+      fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
+      fs.writeFileSync(path.join(dir, 'metadata.json'), JSON.stringify(record, null, 2), {
+        encoding: 'utf8',
+        mode: PRIVATE_FILE_MODE
+      });
     } catch {
       // Persistence is best effort; memory stays authoritative.
     }
@@ -52,6 +63,7 @@ export class SessionStore {
     pid: number;
     commandLine: string;
     cwd: string;
+    provider?: AgentProvider | undefined;
     title?: string | undefined;
     worktreeRoot?: string | null;
     branch?: string | null;
@@ -64,8 +76,8 @@ export class SessionStore {
         : `attached ${input.pid}`;
     const record: SessionRecord = {
       id,
-      agentId: 'attached',
-      provider: 'generic',
+      agentId: input.provider ?? 'attached',
+      provider: input.provider ?? 'generic',
       title,
       cwd: input.cwd,
       worktreeRoot: input.worktreeRoot ?? null,
@@ -131,14 +143,19 @@ export class SessionStore {
     return record;
   }
 
+  /**
+   * Record PTY exit truth. A row already marked killed by the user keeps
+   * that lifecycle but still gains the real exit code and signal.
+   */
   markExited(id: string, exitCode: number | null, exitSignal: string | null): SessionRecord | null {
     const record = this.sessions.get(id);
     if (record === undefined) return null;
-    if (record.lifecycle === 'exited' || record.lifecycle === 'killed') return record;
+    if (record.lifecycle === 'exited') return record;
+    if (record.lifecycle === 'killed' && (record.exitCode !== null || record.exitSignal !== null)) return record;
     const updated: SessionRecord = {
       ...record,
-      lifecycle: 'exited',
-      endedAtMs: Date.now(),
+      lifecycle: record.lifecycle === 'killed' ? 'killed' : 'exited',
+      endedAtMs: record.endedAtMs ?? Date.now(),
       exitCode,
       exitSignal
     };
@@ -155,6 +172,15 @@ export class SessionStore {
       lifecycle: 'killed',
       endedAtMs: Date.now()
     };
+    this.sessions.set(id, updated);
+    this.persist(updated);
+    return updated;
+  }
+
+  setTitle(id: string, title: string): SessionRecord | null {
+    const record = this.sessions.get(id);
+    if (record === undefined) return null;
+    const updated: SessionRecord = { ...record, title: title.trim().slice(0, 200) };
     this.sessions.set(id, updated);
     this.persist(updated);
     return updated;
@@ -184,7 +210,11 @@ export class SessionStore {
     return updated;
   }
 
-  /** Remove a row after detach or kill-tree. Returns the removed row. */
+  /**
+   * Remove a row after the user closes it. Also deletes the per-session
+   * folder (metadata, events.jsonl, terminal.log) so closed sessions do
+   * not leave terminal bytes on disk. Returns the removed row.
+   */
   remove(id: string): SessionRecord | null {
     const record = this.sessions.get(id);
     if (record === undefined) return null;
@@ -192,6 +222,13 @@ export class SessionStore {
     if (this.table !== undefined) {
       try {
         this.table.remove(id);
+      } catch {
+        // Best effort.
+      }
+    }
+    if (this.dataDir !== undefined) {
+      try {
+        fs.rmSync(path.join(this.dataDir, 'sessions', id), { recursive: true, force: true });
       } catch {
         // Best effort.
       }
@@ -216,9 +253,10 @@ export class SessionStore {
     return out;
   }
 
+  /** True when a live session already owns this pid. Ended rows never block reuse. */
   hasPid(pid: number): boolean {
     for (const record of this.sessions.values()) {
-      if (record.pid === pid) return true;
+      if (record.pid === pid && isLiveSession(record)) return true;
     }
     return false;
   }

@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { simpleGit, type FileStatusResult, type SimpleGit } from 'simple-git';
 
 /** One changed file with staged and unstaged states. */
@@ -101,4 +103,65 @@ export async function readGitStatus(cwd: string, git?: SimpleGit): Promise<GitSt
   } catch {
     return { ...EMPTY };
   }
+}
+
+/** Diff text cap. Large generated files would otherwise stall the UI. */
+export const MAX_DIFF_BYTES = 256 * 1024;
+
+/**
+ * Resolve a worktree-relative path, refusing anything that escapes the
+ * root (absolute paths, `..` segments, or symlinked parents). Returns
+ * the cleaned relative path or null.
+ */
+export function safeRelativePath(root: string, file: string): string | null {
+  if (file.length === 0 || file.length > 4096 || file.includes('\0') || path.isAbsolute(file)) return null;
+  const resolved = path.resolve(root, file);
+  const relative = path.relative(root, resolved);
+  if (relative.length === 0 || relative.startsWith('..') || path.isAbsolute(relative)) return null;
+  return relative.split(path.sep).join('/');
+}
+
+/**
+ * Unified diff for one file versus HEAD, covering staged and unstaged
+ * edits. Untracked files diff against /dev/null so new files show as
+ * additions. Output is capped at MAX_DIFF_BYTES. Never throws.
+ */
+export async function readGitDiff(
+  cwd: string,
+  file: string,
+  git?: SimpleGit
+): Promise<{ path: string; diff: string; truncated: boolean } | null> {
+  const client = git ?? simpleGit(cwd);
+  let root: string;
+  try {
+    root = (await client.revparse(['--show-toplevel'])).trim();
+  } catch {
+    return null;
+  }
+  const relative = safeRelativePath(root, file);
+  if (relative === null) return null;
+  const rooted = simpleGit(root);
+  let diff = '';
+  try {
+    diff = await rooted.raw(['diff', '--no-color', 'HEAD', '--', relative]);
+  } catch {
+    // No HEAD yet in a fresh repo; fall back to the index view.
+    diff = await rooted.raw(['diff', '--no-color', '--', relative]).catch(() => '');
+  }
+  if (diff.trim().length === 0) {
+    const tracked = await rooted.raw(['ls-files', '--', relative]).catch(() => '');
+    if (tracked.trim().length === 0 && fs.existsSync(path.join(root, relative))) {
+      // git diff --no-index exits 1 when files differ, which simple-git reports as an error.
+      diff = await rooted
+        .raw(['diff', '--no-color', '--no-index', '--', '/dev/null', relative])
+        .catch((error: unknown) => (error instanceof Error ? extractDiff(error.message) : ''));
+    }
+  }
+  const truncated = Buffer.byteLength(diff, 'utf8') > MAX_DIFF_BYTES;
+  return { path: relative, diff: truncated ? diff.slice(0, MAX_DIFF_BYTES) : diff, truncated };
+}
+
+function extractDiff(message: string): string {
+  const start = message.indexOf('diff --git');
+  return start === -1 ? '' : message.slice(start);
 }
