@@ -19,13 +19,14 @@
     "dev:desktop": "turbo run dev --filter=agenterm-desktop",
     "dev:cli": "turbo run dev --filter=agenterm",
     "build": "turbo run build",
-    "pack:mac": "turbo run pack --filter=agenterm-desktop",
-    "pack:win": "turbo run pack --filter=agenterm-desktop",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "pack": "turbo run pack --filter=agenterm-desktop",
+    "dist": "turbo run dist --filter=agenterm-desktop",
+    "dev:web": "turbo run dev:web --filter=agenterm-desktop"
   },
   "devDependencies": {
     "eslint": "10.11.0",

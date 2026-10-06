@@ -17,7 +17,17 @@
       "dependsOn": ["^build"]
     },
     "pack": {
-      "dependsOn": ["build"]
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "dist": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "dev:web": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
     }
   }
 }

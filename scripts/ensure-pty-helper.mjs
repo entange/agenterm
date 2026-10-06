@@ -19,14 +19,21 @@ function main() {
     }
     for (const entry of entries) {
       if (!entry.startsWith('node-pty@')) continue;
-      const helper = path.join(root, entry, 'node_modules', 'node-pty', 'prebuilds', 'darwin-arm64', 'spawn-helper');
+      const prebuilds = path.join(root, entry, 'node_modules', 'node-pty', 'prebuilds');
+      let platforms = [];
       try {
-        const stat = fs.statSync(helper);
-        if ((stat.mode & 0o111) === 0) {
-          fs.chmodSync(helper, 0o755);
-        }
+        platforms = fs.readdirSync(prebuilds);
       } catch {
-        // Layout differs; leave the install alone.
+        continue;
+      }
+      for (const platform of platforms) {
+        const helper = path.join(prebuilds, platform, 'spawn-helper');
+        try {
+          const stat = fs.statSync(helper);
+          if ((stat.mode & 0o111) === 0) fs.chmodSync(helper, 0o755);
+        } catch {
+          // No helper for this platform; leave the install alone.
+        }
       }
     }
   } catch {

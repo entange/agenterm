@@ -128,7 +128,7 @@ export class DaemonLink {
   private async launchSpec(): Promise<{ command: string; args: string[]; env: Record<string, string> } | null> {
     const env = await this.options.loginEnv;
     if (this.options.isPackaged) {
-      const entry = path.join(this.options.resourcesPath, 'agentermd', 'index.js');
+      const entry = path.join(this.options.resourcesPath, 'agentermd', 'index.mjs');
       if (!fs.existsSync(entry)) return null;
       // Packaged native modules are rebuilt for Electron's Node ABI.
       return { command: process.execPath, args: [entry], env: { ...env, ELECTRON_RUN_AS_NODE: '1' } };
