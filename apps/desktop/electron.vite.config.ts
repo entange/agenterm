@@ -36,7 +36,7 @@ export default defineConfig({
       rollupOptions: {
         input: resolve(__dirname, 'electron/main/index.ts'),
         // Electron's built-in module and native-capable deps load at runtime.
-        external: ['electron', 'ws', 'bufferutil', 'utf-8-validate']
+        external: ['electron', 'ws', 'electron-updater', 'bufferutil', 'utf-8-validate']
       }
     }
   },

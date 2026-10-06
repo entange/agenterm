@@ -23,6 +23,7 @@ import { callsign } from '../../shared/callsign.js';
 import { DaemonLink, dataDir } from './daemonLink.js';
 import { loadLoginEnv } from './loginEnv.js';
 import { AttentionMonitor } from './monitor.js';
+import { startUpdater } from './updater.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const isMac = process.platform === 'darwin';
@@ -427,3 +428,4 @@ buildAppMenu();
 createTray();
 mainWindow = createWindow();
 void link.ensure();
+startUpdater();
