@@ -11,6 +11,7 @@ import {
   type SpawnSessionRequest
 } from '@agenterm/core';
 import { Command } from 'commander';
+import { runMcpStdio } from './mcp.js';
 import { daemonEntry, daemonLogTail, dataDir, pidAlive, readLock, startDaemonProcess } from './local.js';
 
 /** Side effects the program needs. Tests inject stubs. */
@@ -636,6 +637,17 @@ export function buildProgram(deps: CliDeps): Command {
         ]).forEach((line) => deps.out(line));
       })
     );
+
+  program
+    .command('mcp')
+    .description('Serve the Model Context Protocol on stdio so agents can see and steer sessions')
+    .addHelpText(
+      'after',
+      '\nAdd to Claude Code:  claude mcp add agenterm -- agenterm mcp\nAdd to Codex:        codex mcp add agenterm -- agenterm mcp'
+    )
+    .action(async () => {
+      await runMcpStdio(deps.client, program.version() ?? '0.1.0');
+    });
 
   addHarnessCommands(program, deps);
   return program;
