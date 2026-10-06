@@ -70,3 +70,13 @@ describe('PtyManager with a real PTY', () => {
     expect(() => manager.resize('missing', 80, 24)).toThrow();
   });
 });
+
+describe('signalName', () => {
+  it('maps numbers to names and treats 0 as no signal', async () => {
+    const { signalName } = await import('../src/ptyManager.js');
+    expect(signalName(0)).toBe(null);
+    expect(signalName(undefined)).toBe(null);
+    expect(signalName(15)).toBe('SIGTERM');
+    expect(signalName(9)).toBe('SIGKILL');
+  });
+});

@@ -1,3 +1,4 @@
+import os from 'node:os';
 import * as pty from 'node-pty';
 import { terminalLogPath } from './paths.js';
 import { TerminalLog } from './terminal.js';
@@ -38,6 +39,15 @@ export interface ManagedPty {
   pid: number;
   log: TerminalLog;
   exit: PtyExit | null;
+}
+
+/** Map node-pty's numeric signal to a name. Zero and absent mean a normal exit. */
+export function signalName(signal: number | undefined): string | null {
+  if (signal === undefined || signal === 0) return null;
+  for (const [name, value] of Object.entries(os.constants.signals)) {
+    if (value === signal) return name;
+  }
+  return String(signal);
 }
 
 function defaultSpawn(
@@ -120,7 +130,7 @@ export class PtyManager {
       this.onOutput?.(spec.sessionId, data);
     });
     handle.onExit((event: { exitCode: number; signal?: number }) => {
-      record.exit = { exitCode: event.exitCode, signal: event.signal === undefined ? null : String(event.signal) };
+      record.exit = { exitCode: event.exitCode, signal: signalName(event.signal) };
       this.onExit?.(spec.sessionId, record.exit);
     });
     this.sessions.set(spec.sessionId, { handle, record });
