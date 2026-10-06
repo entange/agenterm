@@ -21,9 +21,17 @@ export function ActivityRail({ sessions }: { sessions: SessionRecord[] }): React
   const [showFiles, setShowFiles] = React.useState(false);
   const byId = new Map(sessions.map((session) => [session.id, session]));
   const effectiveScope: Scope = selectedId === null ? 'all' : scope;
+  const seenConflicts = new Set<string>();
   const events = feed
     .filter((event) => (effectiveScope === 'all' ? true : event.sessionId === selectedId))
     .filter((event) => showFiles || event.kind !== 'file.changed')
+    // Each new session in a shared folder re-announces the overlap; keep only the newest per folder.
+    .filter((event) => {
+      if (event.kind !== 'workspace.conflict') return true;
+      if (seenConflicts.has(event.cwd)) return false;
+      seenConflicts.add(event.cwd);
+      return true;
+    })
     .slice(0, 150);
 
   return (

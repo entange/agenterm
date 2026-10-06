@@ -120,7 +120,20 @@ export function Sidebar({
         <Kbd className="ml-auto">⇧⌘H</Kbd>
       </button>
 
-      <nav aria-label="Sessions" className="scroll-thin flex-1 overflow-y-auto px-2 pb-3">
+      <nav
+        aria-label="Sessions"
+        className="scroll-thin flex-1 overflow-y-auto px-2 pb-3"
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+          const strips = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[data-strip]')];
+          const index = strips.findIndex((strip) => strip === document.activeElement);
+          if (index === -1) return;
+          event.preventDefault();
+          const next = strips[Math.min(strips.length - 1, Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1)))];
+          next?.focus();
+          next?.click();
+        }}
+      >
         {sessions.length === 0 ? (
           <div className="mt-6 px-3 text-center text-[12.5px] text-ink-muted">
             <p>No sessions yet.</p>
@@ -196,6 +209,7 @@ function Strip({
   return (
     <button
       type="button"
+      data-strip
       onClick={onSelect}
       aria-current={selected ? 'true' : undefined}
       className={cn(
