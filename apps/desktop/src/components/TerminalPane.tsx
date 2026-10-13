@@ -82,6 +82,8 @@ function isFindShortcut(event: KeyboardEvent): boolean {
 }
 
 const TAIL_BYTES = 512 * 1024;
+/** Output older than this is history: terminal queries in it were answered long ago. */
+const REPLAY_AGE_MS = 2000;
 
 /**
  * Live terminal for one session.
@@ -90,6 +92,10 @@ const TAIL_BYTES = 512 * 1024;
  * page in the full retained scrollback, then flush only buffered chunks
  * newer than what was written. After a reconnect, catch up from the last
  * written seq and say so if the ring already dropped some of it.
+ *
+ * Replayed history can contain terminal queries (cursor position, device
+ * attributes). xterm answers them through onData, so answers to old
+ * output are dropped instead of being typed into the program.
  */
 export function TerminalPane({
   session,
@@ -103,8 +109,15 @@ export function TerminalPane({
   const termRef = React.useRef<Terminal | null>(null);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [findSeed, setFindSeed] = React.useState('');
+  const [findNonce, setFindNonce] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
   const sessionId = session.id;
+  // Read through a ref so a session ending does not tear down and reload the terminal.
+  const interactiveRef = React.useRef(interactive);
+  interactiveRef.current = interactive;
+  const pendingFind = useUi((state) =>
+    state.pendingFind !== null && state.pendingFind.sessionId === sessionId ? state.pendingFind.text : null
+  );
 
   React.useEffect(() => {
     const host = hostRef.current;
@@ -113,16 +126,17 @@ export function TerminalPane({
     let disposed = false;
     let ready = false;
     let lastSeq = 0;
-    let buffered: Array<{ seq: number; data: string }> = [];
+    let buffered: Array<{ seq: number; data: string; createdAtMs: number }> = [];
+    let muted = 0;
     const term = new Terminal({
       fontFamily: "'JetBrains Mono Variable', ui-monospace, Menlo, monospace",
       fontSize: 12.5,
       lineHeight: 1.22,
       letterSpacing: 0,
-      cursorBlink: interactive,
-      cursorStyle: interactive ? 'block' : 'underline',
+      cursorBlink: interactiveRef.current,
+      cursorStyle: interactiveRef.current ? 'block' : 'underline',
       cursorInactiveStyle: 'outline',
-      disableStdin: !interactive,
+      disableStdin: !interactiveRef.current,
       scrollback: 20_000,
       allowProposedApi: true,
       macOptionIsMeta: true,
@@ -148,10 +162,18 @@ export function TerminalPane({
       return !isAppShortcut(event);
     });
 
-    const write = (chunk: { seq: number; data: string }): void => {
+    const write = (chunk: { seq: number; data: string; createdAtMs?: number }): void => {
       if (chunk.seq <= lastSeq) return;
-      term.write(chunk.data);
       lastSeq = chunk.seq;
+      if (chunk.createdAtMs !== undefined && Date.now() - chunk.createdAtMs > REPLAY_AGE_MS) {
+        // xterm parses writes in order and calls back once this one is parsed.
+        muted += 1;
+        term.write(chunk.data, () => {
+          muted -= 1;
+        });
+        return;
+      }
+      term.write(chunk.data);
     };
 
     const pageFrom = async (cursor: number | null): Promise<void> => {
@@ -175,13 +197,13 @@ export function TerminalPane({
     const offEvent = bridge.onEvent((event: AgentermEvent) => {
       if (event.kind !== 'terminal.output' || event.sessionId !== sessionId) return;
       if (!ready) {
-        buffered.push({ seq: event.seq, data: event.data });
+        buffered.push({ seq: event.seq, data: event.data, createdAtMs: event.createdAtMs });
         return;
       }
       if (event.seq > lastSeq + 1) {
         // A gap means events were missed; fetch it in order.
         ready = false;
-        buffered.push({ seq: event.seq, data: event.data });
+        buffered.push({ seq: event.seq, data: event.data, createdAtMs: event.createdAtMs });
         void catchUp();
         return;
       }
@@ -215,13 +237,10 @@ export function TerminalPane({
       buffered = [];
       ready = true;
       setLoading(false);
-      // Arriving from output search: open Find on the searched text.
-      const pending = useUi.getState().pendingFind;
-      if (pending !== null) {
-        useUi.getState().setPendingFind(null);
-        setFindSeed(pending);
-        setSearchOpen(true);
-      } else if (interactive) term.focus();
+      // Take focus only when nothing else has it, so typing elsewhere during the load is not stolen.
+      const active = document.activeElement;
+      const idle = active === null || active === document.body || host.contains(active);
+      if (interactiveRef.current && idle && useUi.getState().pendingFind === null) term.focus();
     })();
 
     const offConnection = useLive.subscribe((state, previous) => {
@@ -231,10 +250,12 @@ export function TerminalPane({
       }
     });
 
-    const inputDisposable = interactive ? term.onData((data) => bridge.sendInput(sessionId, data)) : null;
+    const inputDisposable = term.onData((data) => {
+      if (muted === 0 && interactiveRef.current) bridge.sendInput(sessionId, data);
+    });
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const resizeDisposable = term.onResize(({ cols, rows }) => {
-      if (!interactive) return;
+      if (!interactiveRef.current) return;
       if (resizeTimer !== null) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         void api('resize', sessionId, { cols, rows }).catch(() => undefined);
@@ -259,7 +280,7 @@ export function TerminalPane({
       offEvent();
       offConnection();
       bridge.unsubscribeOutput(sessionId);
-      inputDisposable?.dispose();
+      inputDisposable.dispose();
       resizeDisposable.dispose();
       if (resizeTimer !== null) clearTimeout(resizeTimer);
       cancelAnimationFrame(frame);
@@ -269,7 +290,24 @@ export function TerminalPane({
       termRef.current = null;
       term.dispose();
     };
-  }, [sessionId, interactive]);
+  }, [sessionId]);
+
+  React.useEffect(() => {
+    const term = termRef.current;
+    if (term === null) return;
+    term.options.disableStdin = !interactive;
+    term.options.cursorBlink = interactive;
+    term.options.cursorStyle = interactive ? 'block' : 'underline';
+  }, [interactive]);
+
+  // Arriving from output search: open Find on the searched text once the scrollback is in.
+  React.useEffect(() => {
+    if (loading || pendingFind === null) return;
+    useUi.getState().setPendingFind(null);
+    setFindSeed(pendingFind);
+    setFindNonce((nonce) => nonce + 1);
+    setSearchOpen(true);
+  }, [loading, pendingFind]);
 
   return (
     <div className="relative h-full min-h-0 bg-term">
@@ -277,6 +315,7 @@ export function TerminalPane({
       {loading ? <div className="absolute top-3 right-4 text-[11px] text-ink-faint">Loading scrollback…</div> : null}
       {searchOpen ? (
         <TerminalSearch
+          key={findNonce}
           initial={findSeed}
           search={searchRef.current}
           onClose={() => {

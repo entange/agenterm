@@ -54,7 +54,7 @@ function devBridge(): Plugin {
             }
             try {
               const client = link.client() as unknown as Record<string, (...rest: unknown[]) => Promise<unknown>>;
-              const value = await client[method]?.apply(client, args);
+              const value = await client[method]?.(...args);
               response.end(JSON.stringify({ ok: true, value }));
             } catch (error) {
               const record = error as { status?: number; code?: string; message?: string; hint?: string };

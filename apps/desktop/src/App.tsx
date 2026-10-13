@@ -3,7 +3,8 @@ import { EmptyState, TooltipProvider } from '@agenterm/ui';
 import * as React from 'react';
 import type { AppCommand } from '../shared/bridge.js';
 import { ActivityRail } from './components/ActivityRail.js';
-import { ConnectionBanner, TitleBar, Toaster } from './components/chrome.js';
+import { ErrorBoundary } from './components/ErrorBoundary.js';
+import { ConnectionBanner, SessionsErrorBanner, TitleBar, Toaster } from './components/chrome.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { NewSessionDialog, PendingDialogs } from './components/dialogs.js';
 import { Home } from './components/Home.js';
@@ -11,6 +12,7 @@ import { Sidebar } from './components/Sidebar.js';
 import { buildRows } from './lib/board.js';
 import { SessionView } from './components/SessionView.js';
 import { getBridge } from './lib/bridge.js';
+import { useLive } from './lib/live.js';
 import { useAttention, useSessions } from './lib/queries.js';
 import { useUi, useWideLayout } from './lib/ui.js';
 import { useDaemonWiring } from './lib/wiring.js';
@@ -34,6 +36,8 @@ export function App(): React.JSX.Element {
   useThemeClass();
   const sessionsQuery = useSessions();
   const sessions = React.useMemo(() => sessionsQuery.data ?? [], [sessionsQuery.data]);
+  const online = useLive((state) => state.connection.state === 'online');
+  const loading = sessionsQuery.data === undefined && online && !sessionsQuery.isError;
   const attention = useAttention(sessions);
   const selectedId = useUi((state) => state.selectedId);
   const railOpen = useUi((state) => state.railOpen);
@@ -52,14 +56,23 @@ export function App(): React.JSX.Element {
     [setNewSessionOpen]
   );
 
-  // Sidebar order (same grouping, nothing collapsed) drives ⌘1-9, cycling, and the palette.
+  // Sidebar order drives the palette; ⌘1-9 and cycling follow only the rows the sidebar shows.
   const groupBy = useUi((state) => state.groupBy);
+  const filter = useUi((state) => state.filter);
+  const collapsed = useUi((state) => state.collapsed);
   const ordered = React.useMemo(
     () =>
       buildRows(sessions, attention, { groupBy, collapsed: new Set(), filter: '', showAllEnded: true }).flatMap(
         (row) => (row.kind === 'session' ? [row.session] : [])
       ),
     [sessions, attention, groupBy]
+  );
+  const visible = React.useMemo(
+    () =>
+      buildRows(sessions, attention, { groupBy, collapsed: new Set(collapsed), filter, showAllEnded: true }).flatMap(
+        (row) => (row.kind === 'session' ? [row.session] : [])
+      ),
+    [sessions, attention, groupBy, collapsed, filter]
   );
 
   const onCommand = (command: AppCommand): void => {
@@ -81,15 +94,15 @@ export function App(): React.JSX.Element {
         ui.select(command.sessionId);
         break;
       case 'jump-session': {
-        const target = ordered[command.index];
+        const target = visible[command.index];
         if (target !== undefined) ui.select(target.id);
         break;
       }
       case 'cycle-session': {
-        if (ordered.length === 0) break;
-        const index = ordered.findIndex((session) => session.id === ui.selectedId);
-        const next = index === -1 ? 0 : (index + command.delta + ordered.length) % ordered.length;
-        const target = ordered[next];
+        if (visible.length === 0) break;
+        const index = visible.findIndex((session) => session.id === ui.selectedId);
+        const next = index === -1 ? 0 : (index + command.delta + visible.length) % visible.length;
+        const target = visible[next];
         if (target !== undefined) ui.select(target.id);
         break;
       }
@@ -122,13 +135,20 @@ export function App(): React.JSX.Element {
       <div className="flex h-full flex-col">
         <TitleBar />
         <ConnectionBanner />
+        {online && sessionsQuery.isError ? (
+          <SessionsErrorBanner error={sessionsQuery.error} retry={() => void sessionsQuery.refetch()} />
+        ) : null}
         <div className="relative flex min-h-0 flex-1">
-          <Sidebar sessions={sessions} attention={attention} onNewSession={() => openNewSession()} />
+          <Sidebar sessions={sessions} attention={attention} loading={loading} onNewSession={() => openNewSession()} />
           <main className="flex min-w-0 flex-1 flex-col">
             {selected === null ? (
-              <Home sessions={sessions} attention={attention} onNewSession={openNewSession} />
+              <ErrorBoundary title="The control room hit an error">
+                <Home sessions={sessions} attention={attention} loading={loading} onNewSession={openNewSession} />
+              </ErrorBoundary>
             ) : (
-              <SessionView key={selected.id} session={selected} attention={attention.get(selected.id)} />
+              <ErrorBoundary key={selected.id} title="This session's view hit an error">
+                <SessionView session={selected} attention={attention.get(selected.id)} />
+              </ErrorBoundary>
             )}
           </main>
           {wide ? (

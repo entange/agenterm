@@ -45,6 +45,21 @@ export function TitleBar(): React.JSX.Element {
   );
 }
 
+/** The daemon is up but the session list keeps failing to load. */
+export function SessionsErrorBanner({ error, retry }: { error: unknown; retry: () => void }): React.JSX.Element {
+  return (
+    <div role="alert" className="flex items-center gap-3 border-b border-fail/30 bg-fail/10 px-4 py-2 text-[12.5px]">
+      <span className="size-1.5 rounded-full bg-fail" />
+      <span className="flex-1 text-ink">
+        Could not load sessions: {error instanceof Error ? error.message : String(error)}
+      </span>
+      <Button size="sm" tone="secondary" onClick={retry}>
+        Retry
+      </Button>
+    </div>
+  );
+}
+
 /** Shown whenever the daemon is not online, with the way back. */
 export function ConnectionBanner(): React.JSX.Element | null {
   const connection = useLive((state) => state.connection);

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
+import { ErrorBoundary } from './components/ErrorBoundary.js';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -22,7 +23,9 @@ if (host !== null) {
   createRoot(host).render(
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
-        <App />
+        <ErrorBoundary title="agenterm hit an error">
+          <App />
+        </ErrorBoundary>
       </QueryClientProvider>
     </React.StrictMode>
   );

@@ -91,7 +91,17 @@ export function useDaemonWiring(onCommand: (command: AppCommand) => void): void 
       if (usage.status === 'fulfilled') live.seedUsage(usage.value);
     };
 
+    // Spend reports can arrive many times a second across a fleet; fold them into the clock tick.
+    let pendingUsage: Record<string, { costUsd: number; inputTokens: number; outputTokens: number }> = {};
     const onEvent = (event: AgentermEvent): void => {
+      if (event.kind === 'session.usage') {
+        pendingUsage[event.sessionId] = {
+          costUsd: event.costUsd,
+          inputTokens: event.inputTokens,
+          outputTokens: event.outputTokens
+        };
+        return;
+      }
       live.pushEvent(event);
       const id = event.sessionId;
       switch (event.kind) {
@@ -129,6 +139,11 @@ export function useDaemonWiring(onCommand: (command: AppCommand) => void): void 
       const incoming = pending;
       pending = {};
       useLive.getState().step(incoming, Date.now());
+      if (Object.keys(pendingUsage).length > 0) {
+        const usage = pendingUsage;
+        pendingUsage = {};
+        useLive.getState().applyUsage(usage);
+      }
     }, 1000);
 
     const offEvent = bridge.onEvent(onEvent);

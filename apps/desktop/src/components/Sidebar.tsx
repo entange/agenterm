@@ -37,10 +37,13 @@ const HEIGHTS = { group: 30, more: 28, comfortable: 78, compact: 34 };
 export function Sidebar({
   sessions,
   attention,
+  loading,
   onNewSession
 }: {
   sessions: SessionRecord[];
   attention: Map<string, Attention>;
+  /** The session list has not arrived yet. */
+  loading: boolean;
   onNewSession: () => void;
 }): React.JSX.Element {
   const filter = useUi((state) => state.filter);
@@ -77,6 +80,15 @@ export function Sidebar({
     overscan: 10
   });
   React.useEffect(() => virtualizer.measure(), [virtualizer, density]);
+
+  // Whatever selected a session (shortcut, palette, notification), bring its row into view.
+  const rowsRef = React.useRef(rows);
+  rowsRef.current = rows;
+  React.useEffect(() => {
+    if (selectedId === null) return;
+    const index = rowsRef.current.findIndex((row) => row.kind === 'session' && row.session.id === selectedId);
+    if (index !== -1) virtualizer.scrollToIndex(index, { align: 'auto' });
+  }, [selectedId, virtualizer]);
 
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -197,7 +209,9 @@ export function Sidebar({
         onKeyDown={onListKey}
         className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 pb-3 outline-none"
       >
-        {sessions.length === 0 ? (
+        {loading ? (
+          <p className="mt-6 px-3 text-center text-[12.5px] text-ink-faint">Loading…</p>
+        ) : sessions.length === 0 ? (
           <div className="mt-6 px-3 text-center text-[12.5px] text-ink-muted">
             <p>No sessions yet.</p>
             <Button tone="secondary" size="sm" className="mt-3" onClick={onNewSession}>

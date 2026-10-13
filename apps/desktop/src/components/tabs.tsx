@@ -18,6 +18,9 @@ import { useLive } from '../lib/live.js';
 import { useDiff } from '../lib/queries.js';
 
 function Loading(): React.JSX.Element {
+  // Queries wait while the daemon is away; say so instead of spinning.
+  const online = useLive((state) => state.connection.state === 'online');
+  if (!online) return <EmptyState title="Waiting for the daemon" detail="This view loads once it is back." />;
   return (
     <div className="flex h-40 items-center justify-center">
       <Spinner />

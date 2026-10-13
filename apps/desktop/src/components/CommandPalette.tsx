@@ -37,6 +37,11 @@ export function CommandPalette({
   const [query, setQuery] = React.useState('');
   const [hits, setHits] = React.useState<Array<{ sessionId: string; line: number; text: string }>>([]);
 
+  // Each opening starts clean.
+  React.useEffect(() => {
+    if (!open) setQuery('');
+  }, [open]);
+
   // Output search runs alongside the session and action filter, debounced.
   React.useEffect(() => {
     const text = query.trim();
@@ -68,7 +73,7 @@ export function CommandPalette({
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/35" />
-        <DialogPrimitive.Content className="fixed top-[12vh] left-1/2 z-50 w-[600px] -translate-x-1/2 overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl">
+        <DialogPrimitive.Content className="fixed top-[12vh] left-1/2 z-50 w-[min(600px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl">
           <DialogPrimitive.Title className="sr-only">Command palette</DialogPrimitive.Title>
           <DialogPrimitive.Description className="sr-only">
             Jump to a session or run an action
@@ -118,7 +123,7 @@ export function CommandPalette({
                         value={`${query} output ${hit.sessionId} ${hit.line} ${hit.text}`}
                         onSelect={() =>
                           run(() => {
-                            setPendingFind(query.trim());
+                            setPendingFind({ sessionId: hit.sessionId, text: query.trim() });
                             select(hit.sessionId, 'terminal');
                           })
                         }

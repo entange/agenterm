@@ -7,6 +7,8 @@ import type { ActivityTick, ConnectionInfo } from '../../shared/bridge.js';
 export const TRACE_SAMPLES = 120;
 
 const FEED_LIMIT = 400;
+/** How far back a file save looks for an earlier save of the same file to replace. */
+const FILE_REPEAT_WINDOW = 60;
 
 export const EMPTY_TRACE: number[] = Array.from({ length: TRACE_SAMPLES }, () => 0);
 
@@ -35,6 +37,8 @@ interface LiveState {
   seedActivity: (snapshot: ActivityResponse) => void;
   seedUsage: (snapshot: UsageResponse) => void;
   pushEvent: (event: AgentermEvent) => void;
+  /** Fold a batch of spend reports in with one update. */
+  applyUsage: (batch: Record<string, Spend>) => void;
   seedFeed: (events: AgentermEvent[]) => void;
   forget: (sessionId: string) => void;
 }
@@ -114,22 +118,26 @@ export const useLive = create<LiveState>((set) => ({
     }),
   pushEvent: (event) =>
     set((state) => {
-      if (event.kind === 'session.usage') {
-        return {
-          usage: {
-            ...state.usage,
-            [event.sessionId]: {
-              costUsd: event.costUsd,
-              inputTokens: event.inputTokens,
-              outputTokens: event.outputTokens
-            }
-          }
-        };
+      if (event.kind === 'session.usage' || event.kind === 'terminal.output' || event.kind === 'terminal.input') {
+        return state;
       }
-      if (event.kind === 'terminal.output' || event.kind === 'terminal.input') return state;
       if (state.feed.some((entry) => entry.id === event.id)) return state;
-      return { feed: [event, ...state.feed].slice(0, FEED_LIMIT) };
+      let feed = state.feed;
+      if (event.kind === 'file.changed') {
+        // Repeated saves of one file collapse into its newest entry, so an agent
+        // rewriting files cannot push status changes out of the feed.
+        const repeat = feed.findIndex(
+          (entry, index) =>
+            index < FILE_REPEAT_WINDOW &&
+            entry.kind === 'file.changed' &&
+            entry.sessionId === event.sessionId &&
+            entry.path === event.path
+        );
+        if (repeat !== -1) feed = [...feed.slice(0, repeat), ...feed.slice(repeat + 1)];
+      }
+      return { feed: [event, ...feed].slice(0, FEED_LIMIT) };
     }),
+  applyUsage: (batch) => set((state) => ({ usage: { ...state.usage, ...batch } })),
   seedFeed: (events) =>
     set((state) => {
       const seen = new Set(state.feed.map((event) => event.id));
@@ -140,7 +148,11 @@ export const useLive = create<LiveState>((set) => ({
   forget: (sessionId) =>
     set((state) => {
       const traces = { ...state.traces };
+      const lastLine = { ...state.lastLine };
+      const lastOutputAt = { ...state.lastOutputAt };
       delete traces[sessionId];
-      return { traces };
+      delete lastLine[sessionId];
+      delete lastOutputAt[sessionId];
+      return { traces, lastLine, lastOutputAt };
     })
 }));

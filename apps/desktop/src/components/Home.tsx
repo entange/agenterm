@@ -2,7 +2,7 @@ import type { AgentProvider, SessionRecord } from '@agenterm/core';
 import { Button, cn, signalBg, signalText, type Signal } from '@agenterm/ui';
 import { ArrowRight, Eye, Plus, RotateCcw } from 'lucide-react';
 import * as React from 'react';
-import type { Attention, AttentionGroup } from '../../shared/attention.js';
+import { acknowledgementKey, type Attention, type AttentionGroup } from '../../shared/attention.js';
 import { callsign } from '../../shared/callsign.js';
 import { useActions } from '../lib/actions.js';
 import { GROUP_LABELS, projectKey } from '../lib/board.js';
@@ -34,10 +34,13 @@ const BUSIEST = 8;
 export function Home({
   sessions,
   attention,
+  loading,
   onNewSession
 }: {
   sessions: SessionRecord[];
   attention: Map<string, Attention>;
+  /** The session list has not arrived yet. */
+  loading: boolean;
   onNewSession: (provider?: AgentProvider) => void;
 }): React.JSX.Element {
   const select = useUi((state) => state.select);
@@ -77,7 +80,9 @@ export function Home({
           </div>
         </div>
 
-        {sessions.length === 0 ? (
+        {loading ? (
+          <p className="mt-8 text-[12.5px] text-ink-faint">Loading sessions…</p>
+        ) : sessions.length === 0 ? (
           <div className="mt-8">
             <QuickStart onNewSession={onNewSession} />
           </div>
@@ -158,12 +163,25 @@ const NeedsYou = React.memo(function NeedsYou({
   attention: Map<string, Attention>;
 }): React.JSX.Element {
   const select = useUi((state) => state.select);
+  const acknowledgeAll = useUi((state) => state.acknowledgeAll);
   const act = useActions();
   const [all, setAll] = React.useState(false);
   const shown = all ? sessions : sessions.slice(0, NEEDS_PREVIEW);
+  const finished = sessions.filter((session) => !isLive(session));
   return (
     <section className="mt-7">
-      <h2 className="eyebrow mb-2 text-attn">Needs you · {sessions.length}</h2>
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <h2 className="eyebrow text-attn">Needs you · {sessions.length}</h2>
+        {finished.length > 1 ? (
+          <button
+            type="button"
+            onClick={() => acknowledgeAll(finished.map(acknowledgementKey))}
+            className="text-[12px] text-ink-faint hover:text-ink"
+          >
+            Dismiss {finished.length} ended
+          </button>
+        ) : null}
+      </div>
       <div className="overflow-hidden rounded-lg border border-line bg-panel">
         {shown.map((session, i) => {
           const info = attention.get(session.id);
@@ -196,6 +214,11 @@ const NeedsYou = React.memo(function NeedsYou({
                 {ended && session.origin === 'spawned' ? (
                   <Button size="sm" tone="quiet" onClick={() => void act.restart(session)}>
                     <RotateCcw className="size-3.5" /> Restart
+                  </Button>
+                ) : null}
+                {ended ? (
+                  <Button size="sm" tone="quiet" onClick={() => acknowledgeAll([acknowledgementKey(session)])}>
+                    Dismiss
                   </Button>
                 ) : null}
                 <Button size="sm" tone="secondary" onClick={() => select(session.id)}>

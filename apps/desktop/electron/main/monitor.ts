@@ -3,6 +3,15 @@ import { app, Notification } from 'electron';
 import { callsign } from '../../shared/callsign.js';
 import type { DaemonLink } from './daemonLink.js';
 
+const MONITORED = new Set<AgentermEvent['kind']>([
+  'session.created',
+  'session.attached',
+  'session.updated',
+  'session.exited',
+  'session.detached',
+  'agent.status'
+]);
+
 /**
  * Watches daemon events for moments that need the user.
  *
@@ -44,7 +53,8 @@ export class AttentionMonitor {
   }
 
   private handle(event: AgentermEvent): void {
-    if (event.kind === 'terminal.output' || event.kind === 'terminal.input' || event.kind === 'file.changed') return;
+    // The tray and badge only track lifecycle and status; spend, ports, and file edits are noise here.
+    if (!MONITORED.has(event.kind)) return;
     this.scheduleRefresh(1500);
     const session = this.find(event.sessionId);
     const name = session === undefined ? 'An agent' : `${callsign(session)} · ${session.title}`;

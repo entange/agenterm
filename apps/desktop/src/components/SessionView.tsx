@@ -35,18 +35,15 @@ export function SessionView({
 }): React.JSX.Element {
   const tab = useUi((state) => state.tab);
   const setTab = useUi((state) => state.setTab);
-  const acknowledge = useUi((state) => state.acknowledge);
+  const setViewingAck = useUi((state) => state.setViewingAck);
   const [gitPath, setGitPath] = React.useState<string | null>(null);
   const live = isLive(session);
   const spawned = session.origin === 'spawned';
 
   // Opening a session that ended badly counts as having seen it. The acknowledgement lands when
-  // you move on, so the strip does not jump to another group while you are reading it.
+  // you select something else, so the strip does not jump to another group while you read it.
   const ackKey = live ? null : acknowledgementKey(session);
-  React.useEffect(() => {
-    if (ackKey === null) return;
-    return () => acknowledge(ackKey);
-  }, [acknowledge, ackKey]);
+  React.useEffect(() => setViewingAck(ackKey), [setViewingAck, ackKey]);
 
   React.useEffect(() => setGitPath(null), [session.id]);
 
@@ -133,10 +130,10 @@ function SessionHeader({
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(session.title);
 
+  // Follow title changes from elsewhere, but never while the user is typing a new one.
   React.useEffect(() => {
-    setEditing(false);
-    setDraft(session.title);
-  }, [session.id, session.title]);
+    if (!editing) setDraft(session.title);
+  }, [editing, session.title]);
 
   const commitRename = (): void => {
     setEditing(false);

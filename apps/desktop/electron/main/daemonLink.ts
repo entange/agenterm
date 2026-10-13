@@ -74,6 +74,10 @@ export class DaemonLink {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private retryDelayMs = 500;
   private userStopped = false;
+  private ensuring: Promise<ConnectionInfo> | null = null;
+  /** Input sent over HTTP while the socket is down, kept in order with what follows. */
+  private inputChain: Promise<void> = Promise.resolve();
+  private pendingInputs = 0;
   /** Terminal-output subscriptions with reference counts across windows. */
   private readonly outputs = new Map<string, number>();
   private readonly eventHandlers = new Set<(event: AgentermEvent) => void>();
@@ -153,9 +157,18 @@ export class DaemonLink {
     }
   }
 
-  /** Make sure a daemon is running and connected. Starts one when needed. */
-  async ensure(): Promise<ConnectionInfo> {
+  /** Make sure a daemon is running and connected. Starts one when needed. Concurrent calls share one attempt. */
+  ensure(): Promise<ConnectionInfo> {
     this.userStopped = false;
+    if (this.ensuring === null) {
+      this.ensuring = this.ensureOnce().finally(() => {
+        this.ensuring = null;
+      });
+    }
+    return this.ensuring;
+  }
+
+  private async ensureOnce(): Promise<ConnectionInfo> {
     if (this.socket !== null && this.info.state === 'online') return this.info;
     const lock = readLock();
     let version = lock !== null && pidAlive(lock.pid) ? await this.healthy() : null;
@@ -184,12 +197,14 @@ export class DaemonLink {
                 ...spec.args
               ]
             };
+      if (this.userStopped) return this.info;
       const child = spawn(launch.command, launch.args, { detached: true, stdio: 'ignore', env: spec.env });
       child.unref();
       for (let i = 0; i < 80 && version === null; i++) {
         await new Promise((resolve) => setTimeout(resolve, 100));
         if (readLock() !== null) version = await this.healthy();
       }
+      if (this.userStopped) return this.info;
       if (version === null) {
         this.setInfo({
           state: 'offline',
@@ -200,6 +215,7 @@ export class DaemonLink {
         return this.info;
       }
     }
+    if (this.userStopped) return this.info;
     this.openSocket(version);
     return this.info;
   }
@@ -215,6 +231,8 @@ export class DaemonLink {
             .health()
             .catch(() => null);
     this.userStopped = true;
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     this.closeSocket();
     if (lock === null || !pidAlive(lock.pid) || health?.pid !== lock.pid) {
       this.setInfo({ state: 'stopped', version: null, detail: 'The daemon is stopped.' });
@@ -229,13 +247,25 @@ export class DaemonLink {
   }
 
   sendInput(sessionId: string, data: string): void {
-    if (this.socket !== null && this.socket.readyState === WebSocket.OPEN) {
+    // Once a keystroke goes over HTTP, later ones queue behind it so they cannot overtake it on the socket.
+    if (this.pendingInputs === 0 && this.socket !== null && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify({ kind: 'terminal.input', sessionId, data }));
       return;
     }
-    void this.client()
-      .sendInput(sessionId, { data })
-      .catch(() => undefined);
+    this.pendingInputs += 1;
+    this.inputChain = this.inputChain
+      .then(async () => {
+        const socket = this.socket;
+        if (socket !== null && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ kind: 'terminal.input', sessionId, data }));
+          return;
+        }
+        await this.client().sendInput(sessionId, { data });
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        this.pendingInputs -= 1;
+      });
   }
 
   private openSocket(version: string): void {

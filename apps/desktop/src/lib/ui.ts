@@ -3,6 +3,9 @@ import * as React from 'react';
 import { create } from 'zustand';
 
 /** Confirmations that name exactly what will happen before it happens. */
+/** Enough for a fleet of ended sessions; older acknowledgements belong to sessions long closed. */
+const MAX_ACKNOWLEDGED = 5000;
+
 export type PendingDialog = { kind: 'kill'; session: SessionRecord } | { kind: 'attach'; candidate: DiscoverCandidate };
 
 export type SessionTab = 'terminal' | 'commands' | 'git' | 'files' | 'processes' | 'activity';
@@ -71,8 +74,9 @@ interface UiState extends Persisted {
   railPeek: boolean;
   openDialog: (dialog: PendingDialog | null) => void;
   /** Text the terminal should find once it opens, set by output search. */
-  pendingFind: string | null;
-  setPendingFind: (text: string | null) => void;
+  /** Text to open Find on once the session's terminal has loaded its scrollback. */
+  pendingFind: { sessionId: string; text: string } | null;
+  setPendingFind: (pending: { sessionId: string; text: string } | null) => void;
   select: (id: string | null, tab?: SessionTab) => void;
   setTab: (tab: SessionTab) => void;
   setFilter: (filter: string) => void;
@@ -81,6 +85,10 @@ interface UiState extends Persisted {
   toggleRail: () => void;
   setTheme: (theme: ThemePreference) => void;
   acknowledge: (key: string) => void;
+  /** Acknowledgement owed for the ended session on screen, paid when the selection moves on. */
+  viewingAck: string | null;
+  setViewingAck: (key: string | null) => void;
+  acknowledgeAll: (keys: string[]) => void;
   rememberCwd: (cwd: string) => void;
   setGroupBy: (groupBy: GroupBy) => void;
   setDensity: (density: Density) => void;
@@ -118,8 +126,16 @@ export const useUi = create<UiState>((set, get) => {
     openDialog: (dialog) => set({ dialog }),
     pendingFind: null,
     setPendingFind: (pendingFind) => set({ pendingFind }),
-    select: (selectedId, tab) =>
-      set((state) => ({ selectedId, tab: tab ?? (selectedId === state.selectedId ? state.tab : 'terminal') })),
+    select: (selectedId, tab) => {
+      const { viewingAck, selectedId: current } = get();
+      if (selectedId !== current && viewingAck !== null) {
+        get().acknowledgeAll([viewingAck]);
+        set({ viewingAck: null });
+      }
+      set((state) => ({ selectedId, tab: tab ?? (selectedId === state.selectedId ? state.tab : 'terminal') }));
+    },
+    viewingAck: null,
+    setViewingAck: (viewingAck) => set({ viewingAck }),
     setTab: (tab) => set({ tab }),
     setFilter: (filter) => set({ filter }),
     setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
@@ -137,9 +153,13 @@ export const useUi = create<UiState>((set, get) => {
       set({ theme });
       persist({ theme });
     },
-    acknowledge: (key) => {
-      if (get().acknowledged.includes(key)) return;
-      const acknowledged = [...get().acknowledged, key].slice(-500);
+    acknowledge: (key) => get().acknowledgeAll([key]),
+    acknowledgeAll: (keys) => {
+      const current = get().acknowledged;
+      const seen = new Set(current);
+      const added = keys.filter((key) => !seen.has(key));
+      if (added.length === 0) return;
+      const acknowledged = [...current, ...added].slice(-MAX_ACKNOWLEDGED);
       set({ acknowledged });
       persist({ acknowledged });
     },
