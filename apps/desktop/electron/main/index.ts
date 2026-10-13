@@ -440,14 +440,17 @@ app.on('before-quit', () => {
   link.dispose();
 });
 
-await app.whenReady();
-preferences = readPreferences();
-app.setName('agenterm');
-if (isMac) app.dock?.setIcon(resource('icon.png'));
-electronSession.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-registerIpc();
-buildAppMenu();
-createTray();
-mainWindow = createWindow();
-void link.ensure();
-startUpdater();
+// Never top-level await here: Electron fires 'ready' only after the ESM entry finishes
+// evaluating, so awaiting it in the entry deadlocks with a bouncing dock icon.
+void app.whenReady().then(() => {
+  preferences = readPreferences();
+  app.setName('agenterm');
+  if (isMac) app.dock?.setIcon(resource('icon.png'));
+  electronSession.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  registerIpc();
+  buildAppMenu();
+  createTray();
+  mainWindow = createWindow();
+  void link.ensure();
+  startUpdater();
+});
