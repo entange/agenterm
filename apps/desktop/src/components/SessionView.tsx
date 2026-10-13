@@ -40,10 +40,13 @@ export function SessionView({
   const live = isLive(session);
   const spawned = session.origin === 'spawned';
 
-  // Opening a session that ended badly counts as having seen it.
+  // Opening a session that ended badly counts as having seen it. The acknowledgement lands when
+  // you move on, so the strip does not jump to another group while you are reading it.
+  const ackKey = live ? null : acknowledgementKey(session);
   React.useEffect(() => {
-    if (!live) acknowledge(acknowledgementKey(session));
-  }, [acknowledge, live, session]);
+    if (ackKey === null) return;
+    return () => acknowledge(ackKey);
+  }, [acknowledge, ackKey]);
 
   React.useEffect(() => setGitPath(null), [session.id]);
 

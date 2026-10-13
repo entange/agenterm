@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAge, formatCost, formatDuration, formatTokens, shortPath, splitArgs } from './format.js';
+import { compactCommand, formatAge, formatCost, formatDuration, formatTokens, shortPath, splitArgs } from './format.js';
 
 describe('format', () => {
   it('formats ages and durations', () => {
@@ -34,5 +34,11 @@ describe('format', () => {
     ]);
     expect(splitArgs('  ')).toEqual([]);
     expect(splitArgs('""')).toEqual(['']);
+  });
+
+  it('drops the executable directory from process commands', () => {
+    expect(compactCommand('/opt/homebrew/bin/python3 -m http.server 8765')).toBe('python3 -m http.server 8765');
+    expect(compactCommand('node server.js')).toBe('node server.js');
+    expect(compactCommand('')).toBe('');
   });
 });

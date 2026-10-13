@@ -12,7 +12,7 @@ import { buildRows } from './lib/board.js';
 import { SessionView } from './components/SessionView.js';
 import { getBridge } from './lib/bridge.js';
 import { useAttention, useSessions } from './lib/queries.js';
-import { useUi } from './lib/ui.js';
+import { useUi, useWideLayout } from './lib/ui.js';
 import { useDaemonWiring } from './lib/wiring.js';
 
 /** Apply the theme preference to <html>, following the OS when set to system. */
@@ -37,6 +37,8 @@ export function App(): React.JSX.Element {
   const attention = useAttention(sessions);
   const selectedId = useUi((state) => state.selectedId);
   const railOpen = useUi((state) => state.railOpen);
+  const railPeek = useUi((state) => state.railPeek);
+  const wide = useWideLayout();
   const newSessionOpen = useUi((state) => state.newSessionOpen);
   const setNewSessionOpen = useUi((state) => state.setNewSessionOpen);
   const [initialProvider, setInitialProvider] = React.useState<AgentProvider | undefined>(undefined);
@@ -120,7 +122,7 @@ export function App(): React.JSX.Element {
       <div className="flex h-full flex-col">
         <TitleBar />
         <ConnectionBanner />
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1">
           <Sidebar sessions={sessions} attention={attention} onNewSession={() => openNewSession()} />
           <main className="flex min-w-0 flex-1 flex-col">
             {selected === null ? (
@@ -129,7 +131,15 @@ export function App(): React.JSX.Element {
               <SessionView key={selected.id} session={selected} attention={attention.get(selected.id)} />
             )}
           </main>
-          {railOpen ? <ActivityRail sessions={sessions} /> : null}
+          {wide ? (
+            railOpen ? (
+              <ActivityRail sessions={sessions} />
+            ) : null
+          ) : railPeek ? (
+            <div className="absolute inset-y-0 right-0 z-20 flex shadow-2xl shadow-black/40">
+              <ActivityRail sessions={sessions} />
+            </div>
+          ) : null}
         </div>
       </div>
       <NewSessionDialog

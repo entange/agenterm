@@ -97,7 +97,6 @@ export function useDaemonWiring(onCommand: (command: AppCommand) => void): void 
       switch (event.kind) {
         case 'session.created':
         case 'session.attached':
-        case 'workspace.conflict':
           refreshList();
           break;
         case 'session.exited':

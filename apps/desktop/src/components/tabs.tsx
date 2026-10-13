@@ -13,7 +13,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { ExternalLink, FileDiff, FolderGit2, GitBranch, Radio, TerminalSquare } from 'lucide-react';
 import * as React from 'react';
 import { api, getBridge } from '../lib/bridge.js';
-import { describeEvent, formatAge, formatBytes, formatClock, formatDuration } from '../lib/format.js';
+import { compactCommand, describeEvent, formatAge, formatBytes, formatClock, formatDuration } from '../lib/format.js';
 import { useLive } from '../lib/live.js';
 import { useDiff } from '../lib/queries.js';
 
@@ -375,7 +375,7 @@ export function ProcessesTab({
                   title={process.command}
                 >
                   <span className="text-ink-faint">{depth > 0 ? `${'  '.repeat(depth - 1)}└ ` : ''}</span>
-                  {process.command || '(exited)'}
+                  {compactCommand(process.command) || '(exited)'}
                 </td>
               </tr>
             ))}
@@ -394,9 +394,25 @@ const EVENT_TONE: Partial<Record<AgentermEvent['kind'], string>> = {
   'agent.status': 'bg-attn',
   'port.opened': 'bg-ok',
   'port.closed': 'bg-idle',
-  'workspace.conflict': 'bg-attn',
+  'workspace.conflict': 'bg-idle',
   'file.changed': 'bg-line-strong'
 };
+
+const OVERLAY_TONE: Record<string, string> = {
+  working: 'bg-work',
+  waiting_input: 'bg-attn',
+  waiting_permission: 'bg-attn',
+  completed: 'bg-ok',
+  failed: 'bg-fail'
+};
+
+function eventTone(event: AgentermEvent): string {
+  if (event.kind === 'session.exited') {
+    return event.exitSignal !== null || (event.exitCode !== null && event.exitCode !== 0) ? 'bg-fail' : 'bg-idle';
+  }
+  if (event.kind === 'agent.status') return OVERLAY_TONE[event.overlay] ?? 'bg-idle';
+  return EVENT_TONE[event.kind] ?? 'bg-idle';
+}
 
 /** One line of the activity feed. */
 export function EventRow({
@@ -408,16 +424,9 @@ export function EventRow({
   label?: string | undefined;
   onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
-  const failed =
-    event.kind === 'session.exited' && (event.exitSignal !== null || (event.exitCode !== null && event.exitCode !== 0));
   return (
     <li className="group flex gap-2.5 py-1.5">
-      <span
-        className={cn(
-          'mt-[7px] size-1.5 shrink-0 rounded-full',
-          failed ? 'bg-fail' : (EVENT_TONE[event.kind] ?? 'bg-idle')
-        )}
-      />
+      <span className={cn('mt-[7px] size-1.5 shrink-0 rounded-full', eventTone(event))} />
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 text-[12.5px] leading-snug break-words text-ink" title={describeEvent(event)}>
           {describeEvent(event)}

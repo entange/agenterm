@@ -4,13 +4,14 @@ import * as React from 'react';
 import { getBridge } from '../lib/bridge.js';
 import { useLive } from '../lib/live.js';
 import { useToasts } from '../lib/toast.js';
-import { useUi } from '../lib/ui.js';
+import { useUi, useWideLayout } from '../lib/ui.js';
 import { shortcut } from '../lib/shortcuts.js';
 
 /** Inset title bar: drag region, palette trigger, activity toggle. */
 export function TitleBar(): React.JSX.Element {
   const setPaletteOpen = useUi((state) => state.setPaletteOpen);
-  const railOpen = useUi((state) => state.railOpen);
+  const wide = useWideLayout();
+  const railOpen = useUi((state) => (wide ? state.railOpen : state.railPeek));
   const toggleRail = useUi((state) => state.toggleRail);
   const mac = getBridge()?.platform === 'darwin';
   return (

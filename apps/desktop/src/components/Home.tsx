@@ -60,10 +60,10 @@ export function Home({
       : `${plural(live.length, 'session is', 'sessions are')} running${needsYou.length > 0 ? `; ${plural(needsYou.length, 'needs', 'need')} you.` : '.'}`;
 
   return (
-    <div className="scroll-thin h-full overflow-y-auto">
+    <div className="scroll-thin @container h-full overflow-y-auto">
       <div className="mx-auto max-w-[1120px] px-8 pt-7 pb-12">
         <div className="eyebrow text-ink-faint">Control room</div>
-        <div className="mt-1 flex items-end justify-between gap-6">
+        <div className="mt-1 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
           <h1 className="text-[22px] font-semibold tracking-tight text-ink">{headline}</h1>
           <div className="flex shrink-0 items-center gap-4 pb-1 text-[12px] text-ink-muted">
             {spend > 0 ? (
@@ -173,7 +173,7 @@ const NeedsYou = React.memo(function NeedsYou({
             <div
               key={session.id}
               className={cn(
-                'relative grid grid-cols-[92px_minmax(0,0.9fr)_minmax(0,1.3fr)_minmax(0,0.8fr)_auto] items-center gap-3 py-2 pr-3 pl-4',
+                'relative grid grid-cols-[84px_minmax(0,1fr)_auto] items-center gap-3 py-2 pr-3 pl-4 @3xl:grid-cols-[92px_minmax(0,0.9fr)_minmax(0,1.3fr)_minmax(0,0.6fr)_auto]',
                 i > 0 && 'border-t border-line'
               )}
             >
@@ -182,11 +182,16 @@ const NeedsYou = React.memo(function NeedsYou({
                 className={cn('absolute inset-y-0 left-0 w-[3px]', signalBg[signal], !ended && 'attn-breathe')}
               />
               <span className={cn('callsign truncate text-[11px]', signalText[signal])}>{callsign(session)}</span>
-              <span className="truncate text-[13px] font-medium text-ink">{session.title}</span>
-              <span className={cn('truncate text-[12.5px]', signalText[signal])} title={info?.reason}>
-                {info?.reason}
+              <span className="min-w-0 @3xl:contents">
+                <span className="block truncate text-[13px] font-medium text-ink">{session.title}</span>
+                <span className={cn('block truncate text-[12.5px]', signalText[signal])} title={info?.reason}>
+                  {info?.reason}
+                </span>
               </span>
-              <span className="truncate font-mono text-[11px] text-ink-faint">{shortPath(session.cwd)}</span>
+              <span className="hidden truncate text-[12px] text-ink-faint @3xl:block" title={session.cwd}>
+                {folderName(session.cwd)}
+                {session.branch === null ? null : <span className="font-mono text-[11px]"> · {session.branch}</span>}
+              </span>
               <span className="flex items-center gap-1">
                 {ended && session.origin === 'spawned' ? (
                   <Button size="sm" tone="quiet" onClick={() => void act.restart(session)}>
@@ -230,9 +235,9 @@ const Fleet = React.memo(function Fleet({
   }, [sessions]);
   return (
     <section className="mt-8">
-      <div className="mb-2 flex items-baseline justify-between">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="eyebrow text-ink-faint">Fleet · every live session</h2>
-        <span className="flex items-center gap-3 text-[11.5px] text-ink-faint">
+        <span className="flex items-center gap-3 text-[11.5px] whitespace-nowrap text-ink-faint">
           <Legend signal="attn" label="needs you" />
           <Legend signal="work" label="working" />
           <Legend signal="idle" label="quiet" />
@@ -242,7 +247,7 @@ const Fleet = React.memo(function Fleet({
       <div className="rounded-lg border border-line bg-panel px-4 py-3">
         {groups.map(([dir, members]) => (
           <div key={dir} className="flex items-start gap-4 py-1.5">
-            <div className="w-40 shrink-0 pt-px" title={dir}>
+            <div className="w-28 shrink-0 pt-px @3xl:w-40" title={dir}>
               <div className="truncate text-[12.5px] text-ink">{folderName(dir)}</div>
               <div className="font-mono text-[10.5px] text-ink-faint">{members.length}</div>
             </div>
@@ -357,7 +362,7 @@ function BoardRow({
       type="button"
       onClick={onOpen}
       className={cn(
-        'relative grid w-full grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_200px_52px] items-center gap-4 py-2.5 pr-4 pl-5 text-left hover:bg-raised',
+        'relative grid w-full grid-cols-[minmax(0,1fr)_96px_44px] items-center gap-3 py-2.5 pr-4 pl-5 text-left hover:bg-raised @3xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_200px_52px] @3xl:gap-4',
         !first && 'border-t border-line'
       )}
     >
@@ -374,7 +379,7 @@ function BoardRow({
       </span>
       <span
         className={cn(
-          'truncate font-mono text-[11.5px]',
+          'hidden truncate font-mono text-[11.5px] @3xl:block',
           attention?.group === 'needs-you' ? signalText[signal] : 'text-ink-muted'
         )}
       >
@@ -429,13 +434,13 @@ const Projects = React.memo(function Projects({
     <section className="mt-8">
       <h2 className="eyebrow mb-2 text-ink-faint">Projects</h2>
       <div className="overflow-hidden rounded-lg border border-line bg-panel">
-        <div className="eyebrow grid grid-cols-[minmax(0,1.4fr)_70px_70px_70px_minmax(0,1fr)_60px] gap-3 border-b border-line px-4 py-2 text-ink-faint">
+        <div className="eyebrow grid grid-cols-[minmax(0,1fr)_64px_64px_64px] @3xl:grid-cols-[minmax(0,1.4fr)_70px_70px_70px_minmax(0,1fr)_60px] gap-3 border-b border-line px-4 py-2 text-ink-faint">
           <span>Folder</span>
           <span className="text-right">Running</span>
           <span className="text-right">Waiting</span>
           <span className="text-right">Busy</span>
-          <span>Branches</span>
-          <span className="text-right">Latest</span>
+          <span className="hidden @3xl:block">Branches</span>
+          <span className="hidden text-right @3xl:block">Latest</span>
         </div>
         {rows.slice(0, 30).map((row) => (
           <button
@@ -446,7 +451,7 @@ const Projects = React.memo(function Projects({
               setGroupBy('project');
               setFilter(folderName(row.dir));
             }}
-            className="grid w-full grid-cols-[minmax(0,1.4fr)_70px_70px_70px_minmax(0,1fr)_60px] items-center gap-3 border-t border-line px-4 py-2 text-left first-of-type:border-t-0 hover:bg-raised"
+            className="grid w-full grid-cols-[minmax(0,1fr)_64px_64px_64px] @3xl:grid-cols-[minmax(0,1.4fr)_70px_70px_70px_minmax(0,1fr)_60px] items-center gap-3 border-t border-line px-4 py-2 text-left first-of-type:border-t-0 hover:bg-raised"
           >
             <span className="min-w-0">
               <span className="block truncate text-[12.5px] text-ink">{folderName(row.dir)}</span>
@@ -462,8 +467,12 @@ const Projects = React.memo(function Projects({
             <span className={cn('text-right font-mono text-[12px]', row.working > 0 ? 'text-work' : 'text-ink-faint')}>
               {row.working}
             </span>
-            <span className="truncate font-mono text-[11px] text-ink-muted">{row.branches.join(', ') || '—'}</span>
-            <span className="text-right font-mono text-[11px] text-ink-faint">{formatAge(row.lastStart)}</span>
+            <span className="hidden truncate font-mono text-[11px] text-ink-muted @3xl:block">
+              {row.branches.join(', ') || '—'}
+            </span>
+            <span className="hidden text-right font-mono text-[11px] text-ink-faint @3xl:block">
+              {formatAge(row.lastStart)}
+            </span>
           </button>
         ))}
       </div>

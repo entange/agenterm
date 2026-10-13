@@ -61,6 +61,12 @@ export function shortPath(cwd: string): string {
 }
 
 /** Last path segment, for compact labels. */
+/** A process command line with its executable's directory dropped, so arguments stay visible. */
+export function compactCommand(command: string): string {
+  const match = /^(\/\S*\/)(\S+)/.exec(command);
+  return match === null ? command : command.slice(match[1]?.length ?? 0);
+}
+
 export function folderName(cwd: string): string {
   const parts = cwd.split(/[\\/]/).filter((part) => part.length > 0);
   return parts[parts.length - 1] ?? cwd;
