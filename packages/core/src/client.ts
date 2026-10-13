@@ -39,6 +39,8 @@ export interface ApiClientOptions {
   baseUrl: string;
   token: string;
   fetchImpl?: typeof fetch;
+  /** Give up on a request after this long. A wedged daemon must not hang the CLI or MCP. Default 30s. */
+  timeoutMs?: number;
 }
 
 /**
@@ -102,21 +104,42 @@ export class AgentermClient {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs: number;
 
   constructor(options: ApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.token = options.token;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    // Wrapped so the global fetch is never called with this client as its receiver.
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+    this.timeoutMs = options.timeoutMs ?? 30_000;
   }
 
-  private async request<T>(method: string, pathname: string, payload?: unknown): Promise<T> {
+  private async request<T>(
+    method: string,
+    pathname: string,
+    payload?: unknown,
+    timeoutMs = this.timeoutMs
+  ): Promise<T> {
     const headers: Record<string, string> = { Authorization: `Bearer ${this.token}` };
-    const init: RequestInit = { method, headers };
+    const init: RequestInit = { method, headers, signal: AbortSignal.timeout(timeoutMs) };
     if (payload !== undefined) {
       headers['Content-Type'] = 'application/json';
       init.body = JSON.stringify(payload);
     }
-    const response = await this.fetchImpl(`${this.baseUrl}${pathname}`, init);
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${pathname}`, init);
+    } catch (error) {
+      if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+        throw new AgentermApiError(
+          504,
+          'timeout',
+          `the daemon did not answer ${method} ${pathname} within ${Math.round(timeoutMs / 1000)}s`,
+          'It may be overloaded or stuck; `agenterm daemon logs` shows what it is doing.'
+        );
+      }
+      throw error;
+    }
     const body = await readJson(response);
     ensureOk(response, body);
     return body as T;
@@ -127,7 +150,7 @@ export class AgentermClient {
   }
 
   health(): Promise<HealthResponse> {
-    return this.request('GET', '/health');
+    return this.request('GET', '/health', undefined, Math.min(this.timeoutMs, 5000));
   }
 
   discover(): Promise<DiscoverResponse> {

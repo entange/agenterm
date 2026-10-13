@@ -90,8 +90,24 @@ export function startDaemonProcess(entry: string): void {
 /** Last lines of the daemon log, oldest first. */
 export function daemonLogTail(lines: number): string[] {
   try {
-    const text = fs.readFileSync(path.join(dataDir(), 'daemon.log'), 'utf8');
-    return text.trimEnd().split('\n').slice(-lines);
+    // Read only the end of the file; the log is never rotated and can be large.
+    const file = path.join(dataDir(), 'daemon.log');
+    const fd = fs.openSync(file, 'r');
+    let text: string;
+    try {
+      const size = fs.fstatSync(fd).size;
+      const length = Math.min(size, Math.max(64 * 1024, lines * 1024));
+      const buffer = Buffer.alloc(length);
+      fs.readSync(fd, buffer, 0, length, size - length);
+      text = buffer.toString('utf8');
+      if (length < size) text = text.slice(text.indexOf('\n') + 1);
+    } finally {
+      fs.closeSync(fd);
+    }
+    return text
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .slice(-lines);
   } catch {
     return [];
   }

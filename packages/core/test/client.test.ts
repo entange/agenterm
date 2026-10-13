@@ -56,3 +56,14 @@ describe('AgentermClient session methods', () => {
     await expect(client.spawn({ provider: 'generic', command: 'x', cwd: '/tmp' })).rejects.toThrow('missing');
   });
 });
+
+describe('client timeouts', () => {
+  it('turns a daemon that never answers into a timeout error', async () => {
+    const fetchImpl = ((_input: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      })) as typeof fetch;
+    const client = new AgentermClient({ baseUrl: 'http://127.0.0.1:1', token: 't', fetchImpl, timeoutMs: 30 });
+    await expect(client.listSessions()).rejects.toMatchObject({ code: 'timeout', status: 504 });
+  });
+});

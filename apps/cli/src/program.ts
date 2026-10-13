@@ -30,6 +30,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Thrown for user-facing failures that need no stack trace. */
 export class CliError extends Error {}
 
+/** Parse a whole-number option or fail with the option's name. */
+function positiveInt(text: string, name: string): number {
+  const value = Number(text);
+  if (!Number.isInteger(value) || value < 1) throw new CliError(`${name} must be a positive integer`);
+  return value;
+}
+
 /** Compact age like 45s, 12m, 3h, 2d. */
 export function formatAge(fromMs: number, nowMs = Date.now()): string {
   const seconds = Math.max(0, Math.floor((nowMs - fromMs) / 1000));
@@ -78,9 +85,12 @@ function shortPath(cwd: string): string {
  * Fails with the candidates listed when the prefix is ambiguous.
  */
 export async function resolveSessionId(client: AgentermClient, idOrPrefix: string): Promise<SessionRecord> {
+  idOrPrefix = idOrPrefix.trim();
+  // An empty prefix would match every session.
+  if (idOrPrefix.length === 0) throw new CliError('a session id or prefix is required');
   const { sessions } = await client.listSessions();
   if (UUID.test(idOrPrefix)) {
-    const exact = sessions.find((session) => session.id === idOrPrefix);
+    const exact = sessions.find((session) => session.id === idOrPrefix.toLowerCase());
     if (exact === undefined) throw new CliError(`no session ${idOrPrefix}`);
     return exact;
   }
@@ -224,16 +234,27 @@ export function buildProgram(deps: CliDeps): Command {
   const stopDaemon = async (opts: { yes?: boolean }): Promise<void> => {
     const lock = await runningDaemon();
     if (lock === null) {
+      const stale = readLock();
+      if (stale !== null && pidAlive(stale.pid)) {
+        // Could be a wedged daemon or a recycled pid; only the user can tell which.
+        throw new CliError(
+          `the lock names pid ${stale.pid}, but no daemon answers on port ${stale.port}. ` +
+            `If that pid is agentermd, stop it with \`kill ${stale.pid}\`.`
+        );
+      }
       deps.out('daemon not running.');
       return;
     }
     if (opts.yes !== true && !(await confirm('Stopping the daemon ends every spawned session. Continue?'))) {
       deps.out('cancelled.');
+      process.exitCode = 1;
       return;
     }
     process.kill(lock.pid, 'SIGTERM');
-    for (let i = 0; i < 50 && pidAlive(lock.pid); i++) await deps.sleep(100);
-    deps.out(pidAlive(lock.pid) ? `signaled daemon pid=${lock.pid}; still exiting.` : 'daemon stopped.');
+    // The daemon allows itself 4s to end sessions before it exits regardless.
+    for (let i = 0; i < 80 && pidAlive(lock.pid); i++) await deps.sleep(100);
+    if (pidAlive(lock.pid)) throw new CliError(`daemon pid ${lock.pid} is still running after 8s`);
+    deps.out('daemon stopped.');
   };
 
   daemon
@@ -248,7 +269,9 @@ export function buildProgram(deps: CliDeps): Command {
     .option('-n, --lines <n>', 'line count', '40')
     .action(
       run((opts: { lines: string }) => {
-        const lines = daemonLogTail(Number(opts.lines) || 40);
+        const count = Number(opts.lines);
+        if (!Number.isInteger(count) || count < 1) throw new CliError('--lines must be a positive integer');
+        const lines = daemonLogTail(count);
         if (lines.length === 0) deps.out('daemon log is empty.');
         for (const line of lines) deps.out(line);
       })
@@ -335,6 +358,7 @@ export function buildProgram(deps: CliDeps): Command {
         if (!Number.isInteger(pid) || pid <= 0) throw new CliError('pid must be a positive integer');
         if (opts.yes !== true && !(await confirm(`Attach to pid ${pid} read-only?`))) {
           deps.out('cancelled.');
+          process.exitCode = 1;
           return;
         }
         const req: AttachSessionRequest = { pid, cwd: typeof opts.cwd === 'string' ? path.resolve(opts.cwd) : null };
@@ -389,10 +413,8 @@ export function buildProgram(deps: CliDeps): Command {
           // Run from inside an agenterm terminal (an agent starting helpers): nest under it.
           const parent = process.env['AGENTERM_SESSION_ID'];
           if (parent !== undefined && UUID.test(parent)) req.parentSessionId = parent;
-          const cols = Number(opts.cols);
-          const rows = Number(opts.rows);
-          if (Number.isInteger(cols)) req.cols = cols;
-          if (Number.isInteger(rows)) req.rows = rows;
+          req.cols = positiveInt(opts.cols ?? '120', '--cols');
+          req.rows = positiveInt(opts.rows ?? '32', '--rows');
           const out = await deps.client().spawn(req);
           deps.out(`spawned ${out.session.id.slice(0, 8)} pid=${out.session.pid} ${out.session.title}`);
         }
@@ -444,7 +466,7 @@ export function buildProgram(deps: CliDeps): Command {
       run(async (idText: string, opts: { limit?: string }) => {
         const client = deps.client();
         const session = await resolveSessionId(client, idText);
-        const limit = Number(opts.limit ?? '100');
+        const limit = positiveInt(opts.limit ?? '100', '--limit');
         const out = await client.commands(session.id, Number.isInteger(limit) ? { limit } : {});
         if (out.commands.length === 0) {
           deps.out('No commands recorded yet.');
@@ -494,6 +516,7 @@ export function buildProgram(deps: CliDeps): Command {
           ...(opts.confirmPid === undefined ? {} : { confirmPid: Number(opts.confirmPid) })
         });
         deps.out(`${out.signal} ${out.signaled ? 'sent to' : 'could not reach'} pid ${out.pid}`);
+        if (!out.signaled) process.exitCode = 1;
       })
     );
 
@@ -522,6 +545,7 @@ export function buildProgram(deps: CliDeps): Command {
           !(await confirm(`Kill "${session.title}" (pid ${session.pid}) and its children?`))
         ) {
           deps.out('cancelled.');
+          process.exitCode = 1;
           return;
         }
         const out = await client.deleteSession(session.id, {
@@ -642,7 +666,10 @@ export function buildProgram(deps: CliDeps): Command {
         const client = deps.client();
         const sessionId = opts.session === undefined ? undefined : (await resolveSessionId(client, opts.session)).id;
         const [result, { sessions }] = await Promise.all([
-          client.search(text, { ...(sessionId === undefined ? {} : { sessionId }), limit: Number(opts.limit) || 100 }),
+          client.search(text, {
+            ...(sessionId === undefined ? {} : { sessionId }),
+            limit: positiveInt(opts.limit ?? '100', '--limit')
+          }),
           client.listSessions()
         ]);
         if (result.matches.length === 0) {
@@ -699,7 +726,7 @@ export function buildProgram(deps: CliDeps): Command {
       run(async (opts: { session?: string; limit?: string }) => {
         const client = deps.client();
         const sessionId = opts.session === undefined ? undefined : (await resolveSessionId(client, opts.session)).id;
-        const limit = Number(opts.limit ?? '50');
+        const limit = positiveInt(opts.limit ?? '50', '--limit');
         const { events } = await client.events({
           ...(sessionId === undefined ? {} : { sessionId }),
           limit: Number.isInteger(limit) ? limit : 50

@@ -85,7 +85,8 @@ codex mcp add agenterm -- agenterm mcp
 
 Tools: `list_sessions`, `get_session`, `read_output` (plain text, secrets redacted, resumable), `search_output`,
 `send_input`,
-`interrupt`, `kill_session` (requires the exact pid), and `recent_activity`.
+`interrupt`, `kill_session` (requires the exact pid; refuses sessions attached from elsewhere unless
+`AGENTERM_MCP_ALLOW_KILL=1`), and `recent_activity`.
 
 ## Agent integration and privacy
 

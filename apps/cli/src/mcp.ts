@@ -62,10 +62,17 @@ function text(args: Record<string, unknown>, key: string): string {
   return value;
 }
 
+/** The resolved session when session_id was given, otherwise undefined. */
+async function optionalSession(client: AgentermClient, args: Record<string, unknown>): Promise<string | undefined> {
+  return args['session_id'] === undefined ? undefined : (await resolve(client, text(args, 'session_id'))).id;
+}
+
 /** Bad tool arguments; reported to the model as a tool error. */
 class ToolInputError extends Error {}
 
-async function resolve(client: AgentermClient, idOrPrefix: string): Promise<SessionRecord> {
+async function resolve(client: AgentermClient, raw: string): Promise<SessionRecord> {
+  const idOrPrefix = raw.trim();
+  if (idOrPrefix.length === 0) throw new ToolInputError('session_id must be a non-empty string');
   const { sessions } = await client.listSessions();
   const matches = sessions.filter(
     (session) => session.id === idOrPrefix || session.id.startsWith(idOrPrefix.toLowerCase())
@@ -167,8 +174,7 @@ export const TOOLS: Tool[] = [
       required: ['text']
     },
     run: async (client, args) => {
-      const sessionId =
-        typeof args['session_id'] === 'string' ? (await resolve(client, args['session_id'])).id : undefined;
+      const sessionId = await optionalSession(client, args);
       const result = await client.search(text(args, 'text'), {
         ...(sessionId === undefined ? {} : { sessionId }),
         limit: typeof args['limit'] === 'number' ? args['limit'] : 50
@@ -179,19 +185,22 @@ export const TOOLS: Tool[] = [
   {
     name: 'send_input',
     description:
-      'Type text into a running session started by agenterm, as if at its keyboard. Presses Enter afterwards unless press_enter is false.',
+      'Type text into a running session started by agenterm, as if at its keyboard. Presses Enter afterwards unless press_enter is false. An empty text with press_enter just presses Enter. Control keys are plain characters, for example "\\u0003" for Ctrl+C or "\\u001b" for Escape.',
     inputSchema: {
       type: 'object',
       properties: {
         session_id: SESSION_ARG,
-        text: { type: 'string', description: 'Text to type.' },
+        text: { type: 'string', description: 'Text to type. May be empty to press Enter alone.' },
         press_enter: { type: 'boolean', description: 'Press Enter after the text. Default true.' }
       },
       required: ['session_id', 'text']
     },
     run: async (client, args) => {
       const session = await resolve(client, text(args, 'session_id'));
-      const data = text(args, 'text') + (args['press_enter'] === false ? '' : '\r');
+      const typed = args['text'];
+      if (typeof typed !== 'string') throw new ToolInputError('text must be a string');
+      const data = typed + (args['press_enter'] === false ? '' : '\r');
+      if (data.length === 0) throw new ToolInputError('nothing to type: text is empty and press_enter is false');
       const result = await client.sendInput(session.id, { data });
       return `Typed ${result.acceptedBytes} bytes into ${session.title}.`;
     }
@@ -209,7 +218,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'kill_session',
     description:
-      'End a running session and every process it started. To prevent mistakes, confirm_pid must equal the session pid from list_sessions.',
+      'End a running session agenterm started, and every process it started. To prevent mistakes, confirm_pid must equal the session pid from list_sessions. Sessions attached from another terminal are refused unless AGENTERM_MCP_ALLOW_KILL=1.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -220,6 +229,11 @@ export const TOOLS: Tool[] = [
     },
     run: async (client, args) => {
       const session = await resolve(client, text(args, 'session_id'));
+      if (session.origin === 'attached' && process.env['AGENTERM_MCP_ALLOW_KILL'] !== '1') {
+        throw new ToolInputError(
+          `"${session.title}" was started outside agenterm; ask the user to end it themselves. Nothing was killed.`
+        );
+      }
       if (args['confirm_pid'] !== session.pid) {
         throw new ToolInputError(`confirm_pid must be ${session.pid} for "${session.title}"; nothing was killed`);
       }
@@ -238,8 +252,7 @@ export const TOOLS: Tool[] = [
       }
     },
     run: async (client, args) => {
-      const sessionId =
-        typeof args['session_id'] === 'string' ? (await resolve(client, args['session_id'])).id : undefined;
+      const sessionId = await optionalSession(client, args);
       const limit = typeof args['limit'] === 'number' ? args['limit'] : 50;
       const { events } = await client.events({ ...(sessionId === undefined ? {} : { sessionId }), limit });
       return redactText(JSON.stringify(events, null, 2));
@@ -270,17 +283,23 @@ export async function handleMcpMessage(client: AgentermClient, line: string, ver
   } catch {
     return failure(null, -32700, 'parse error');
   }
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    Array.isArray(parsed) ||
-    typeof (parsed as Request).method !== 'string'
-  ) {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return failure(null, -32600, 'invalid request: expected one JSON-RPC request object');
   }
-  const request = parsed as Request;
-  const id = request.id ?? null;
-  const isNotification = request.id === undefined;
+  const message = parsed as Partial<Request> & { result?: unknown; error?: unknown };
+  // Responses from the client (to requests this server never sends) are ignored.
+  if (message.method === undefined && ('result' in message || 'error' in message)) return null;
+  const rawId: unknown = message.id;
+  if (rawId !== undefined && rawId !== null && typeof rawId !== 'string' && typeof rawId !== 'number') {
+    return failure(null, -32600, 'invalid request: id must be a string or number');
+  }
+  if (typeof message.method !== 'string') {
+    return rawId === undefined ? null : failure(rawId, -32600, 'invalid request: method must be a string');
+  }
+  // Notifications never get a reply, and never run tools.
+  if (rawId === undefined) return null;
+  const request = message as Request;
+  const id = rawId;
   switch (request.method) {
     case 'initialize': {
       const asked = request.params?.['protocolVersion'];
@@ -321,7 +340,6 @@ export async function handleMcpMessage(client: AgentermClient, line: string, ver
       }
     }
     default:
-      if (isNotification) return null;
       return failure(id, -32601, `method not found: ${request.method}`);
   }
 }

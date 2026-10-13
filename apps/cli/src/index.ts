@@ -2,7 +2,7 @@
 import readline from 'node:readline/promises';
 import { AgentermClient, daemonBaseUrl } from '@agenterm/core';
 import { readPort, readToken } from './local.js';
-import { buildProgram } from './program.js';
+import { buildProgram, CliError } from './program.js';
 
 function makeClient(): AgentermClient {
   // An empty token still reaches the daemon and earns a clear 401 or a connection error.
@@ -10,7 +10,10 @@ function makeClient(): AgentermClient {
 }
 
 async function ask(question: string): Promise<string> {
-  if (!process.stdin.isTTY) return '';
+  // Scripts and agents have no terminal to answer on; refusing beats a silent "cancelled" with exit 0.
+  if (!process.stdin.isTTY) {
+    throw new CliError('this needs confirmation and there is no terminal to ask on; pass --yes (or --confirm-pid)');
+  }
   const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
   try {
     return (await rl.question(question)).trim();

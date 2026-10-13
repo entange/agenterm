@@ -26,7 +26,7 @@ const live: SessionRecord = {
   exitSignal: null
 };
 
-function client(calls: Array<{ method: string; path: string; body?: unknown }>) {
+function client(calls: Array<{ method: string; path: string; body?: unknown }>, sessions: SessionRecord[] = [live]) {
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input));
     const method = init?.method ?? 'GET';
@@ -36,7 +36,7 @@ function client(calls: Array<{ method: string; path: string; body?: unknown }>) 
       body: init?.body === undefined ? undefined : JSON.parse(String(init.body))
     });
     const routes: Record<string, unknown> = {
-      'GET /sessions': { sessions: [live] },
+      'GET /sessions': { sessions },
       [`GET /sessions/${live.id}/output`]: {
         sessionId: live.id,
         chunks: [{ seq: 7, data: '\x1b[32mok\x1b[0m 40%\r100%\r\ntoken sk-abcdefghijklmnop\r\n', createdAtMs: 0 }],
@@ -113,6 +113,46 @@ describe('MCP bridge', () => {
     const killed = await call('kill_session', { session_id: live.id, confirm_pid: 4242 }, calls);
     expect(killed.result.content[0]?.text).toContain('Killed');
     expect(calls.find((entry) => entry.method === 'DELETE')?.body).toEqual({ killTree: true, confirmPid: 4242 });
+  });
+
+  it('never runs notifications and ignores client responses', async () => {
+    const calls: Array<{ method: string; path: string; body?: unknown }> = [];
+    const notification = JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'tools/call',
+      params: { name: 'send_input', arguments: { session_id: live.id, text: 'rm -rf' } }
+    });
+    expect(await handleMcpMessage(client(calls), notification, '0.1.0')).toBe(null);
+    expect(calls).toEqual([]);
+    expect(await handleMcpMessage(client([]), '{"jsonrpc":"2.0","id":5,"result":{}}', '0.1.0')).toBe(null);
+    expect(await handleMcpMessage(client([]), '{"jsonrpc":"2.0","id":{},"method":"ping"}', '0.1.0')).toContain(
+      '-32600'
+    );
+  });
+
+  it('presses Enter alone, and refuses to kill attached sessions', async () => {
+    const calls: Array<{ method: string; path: string; body?: unknown }> = [];
+    await call('send_input', { session_id: live.id, text: '' }, calls);
+    expect(calls.find((entry) => entry.method === 'POST')?.body).toEqual({ data: '\r' });
+    const nothing = await call('send_input', { session_id: live.id, text: '', press_enter: false });
+    expect(nothing.result.isError).toBe(true);
+    const blank = await call('get_session', { session_id: '  ' });
+    expect(blank.result.content[0]?.text).toContain('non-empty');
+
+    const attached = { ...live, origin: 'attached' as const };
+    const killCalls: Array<{ method: string; path: string; body?: unknown }> = [];
+    const line = await handleMcpMessage(
+      client(killCalls, [attached]),
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 9,
+        method: 'tools/call',
+        params: { name: 'kill_session', arguments: { session_id: live.id, confirm_pid: 4242 } }
+      }),
+      '0.1.0'
+    );
+    expect(line).toContain('started outside agenterm');
+    expect(killCalls.some((entry) => entry.method === 'DELETE')).toBe(false);
   });
 
   it('reports unknown sessions as tool errors, not protocol errors', async () => {
