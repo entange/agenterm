@@ -63,8 +63,12 @@ const REDACT_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
   [/(?<![A-Za-z0-9])AIza[0-9A-Za-z_-]{30,}/g, MASK],
   [/(?<![A-Za-z0-9])xox[baprs]-[A-Za-z0-9-]{8,}/g, MASK],
   [/(?<![A-Za-z0-9])eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, MASK],
-  // A credential has a digit or symbol in it, which keeps prose like "Bearer authentication" intact.
-  [/\bBearer\s+(?=[A-Za-z0-9\-._~+/=]*[0-9\-._~+/=])[A-Za-z0-9\-._~+/=]{8,}/g, `Bearer ${MASK}`],
+  // A credential has a digit or symbol in it, or is longer than a word, which keeps prose like
+  // "Bearer authentication" intact.
+  [
+    /\bBearer\s+(?:(?=[A-Za-z0-9\-._~+/=]*[0-9\-._~+/=])[A-Za-z0-9\-._~+/=]{8,}|[A-Za-z0-9\-._~+/=]{16,})/g,
+    `Bearer ${MASK}`
+  ],
   [/\b(Authorization:\s*Basic)\s+[A-Za-z0-9+/=]{8,}/gi, `$1 ${MASK}`],
   // Credentials inside URLs: scheme://user:password@host
   [/\b([a-z][a-z0-9+.-]*:\/\/[^/\s:@]+):[^/\s@]+@/gi, `$1:${MASK}@`],

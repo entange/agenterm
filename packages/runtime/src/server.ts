@@ -223,6 +223,11 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     });
   const inputSeq = new Map<string, number>();
   const trackers = new Map<string, CommandTracker>();
+  /**
+   * Launch options a restart must replay. Held in memory only, so env values never
+   * reach disk; after a daemon restart, restart falls back to the defaults.
+   */
+  const launchOptions = new Map<string, { env: Record<string, string>; statusHooks: boolean }>();
   const fileChanges = new Map<string, Map<string, FileChangeRecord>>();
   const commandsDb = options.commandsDb;
   const watch = options.watch ?? new HarnessWatch({ enabled: harnessWatchEnabled(), dataDir, store, bus });
@@ -480,6 +485,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       }
       return { status: 500, code: 'spawn_failed', message };
     }
+    launchOptions.set(id, { env: input.env, statusHooks: input.statusHooks });
     const session = store.createSpawned({
       id,
       provider: input.provider,
@@ -544,6 +550,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     activity.forget(session.id);
     usage.forget(session.id);
     hooks.forget(session.id);
+    launchOptions.delete(session.id);
     store.remove(session.id);
   };
 
@@ -886,6 +893,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       return;
     }
     const [command, ...args] = session.commandLine;
+    const options = launchOptions.get(session.id) ?? { env: {}, statusHooks: true };
     const result = await spawnSession({
       provider: session.provider,
       // Keep a custom binary for agents too (for example a pinned claude path).
@@ -895,8 +903,8 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       title: session.title,
       cols: session.cols,
       rows: session.rows,
-      env: {},
-      statusHooks: true,
+      env: options.env,
+      statusHooks: options.statusHooks,
       parentSessionId: session.parentSessionId
     });
     if ('status' in result) {

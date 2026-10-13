@@ -45,6 +45,7 @@ describe('redactText', () => {
     expect(redactText('key sk-abcdefgh12345678 end')).toContain('[REDACTED]');
     expect(redactText('token ghp_abcdefgh12345678 end')).toContain('[REDACTED]');
     expect(redactText('auth Bearer abcdefgh12345678 end')).toContain('[REDACTED]');
+    expect(redactText('auth Bearer abcdefghijklmnopqrstu end')).not.toContain('abcdefghijklmnopqrstu');
   });
 
   it('masks common credential formats', () => {

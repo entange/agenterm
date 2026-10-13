@@ -150,6 +150,15 @@ describe('rename, restart, and history', () => {
     expect(store.get(session.id)).toBe(null);
   });
 
+  it('replays the original env on restart', async () => {
+    const { app, spawn, last } = rig();
+    const session = await spawn({ env: { EXTRA: 'kept' } });
+    last()?.emitExit(0);
+    const res = await app.inject({ method: 'POST', url: `/sessions/${session.id}/restart`, headers, payload: {} });
+    expect(res.statusCode).toBe(201);
+    expect(last()?.spawnEnv['EXTRA']).toBe('kept');
+  });
+
   it('serves scrollback from terminal.log after the PTY is forgotten', async () => {
     const { app, spawn, last, pty, dataDir } = rig();
     const session = await spawn();
