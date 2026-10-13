@@ -105,6 +105,8 @@ export class HarnessWatch {
     const record = this.store.get(sessionId);
     if (record === null) return;
     if (record.lifecycle === 'exited' || record.lifecycle === 'killed') return;
+    // The agent reports its own status through hooks; a transcript guess must not overwrite it.
+    if (record.overlaySource === 'hooks') return;
     const adapter = adapterFor(record.provider);
     if (adapter === null) return;
     const roots = rootsFor(grants, adapter.provider);

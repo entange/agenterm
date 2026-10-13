@@ -34,6 +34,9 @@ function splitPrompt(line: string): string | null {
   // Prompt marker within the first 200 chars: bounded search, no backtracking across long lines.
   const match = /^([^\n]{0,200}?[$%#>])\s+(.+)$/.exec(clean);
   if (match === null) return null;
+  // A bare `#` or `>` at the start of a line is a markdown heading or quote, not a prompt.
+  const prefix = (match[1] ?? '').trim();
+  if (prefix === '#' || prefix === '>') return null;
   const text = redactText((match[2] ?? '').trim()).slice(0, MAX_TEXT);
   return text.length > 0 ? text : null;
 }

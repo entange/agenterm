@@ -12,7 +12,17 @@ describe('secret env blocklist', () => {
     expect(isSecretEnvKey('ANTHROPIC_KEY')).toBe(true);
   });
 
+  it('flags secret name segments and connection strings', () => {
+    for (const key of ['PGPASSWD', 'DB_PASS', 'CREDENTIALS', 'AUTH_COOKIE', 'REDIS_URL', 'MONGO_URI', 'SENTRY_DSN']) {
+      expect(isSecretEnvKey(key)).toBe(true);
+    }
+  });
+
   it('allows safe keys', () => {
+    expect(isSecretEnvKey('KEYBOARD')).toBe(false);
+    expect(isSecretEnvKey('PWD')).toBe(false);
+    expect(isSecretEnvKey('SSH_AUTH_SOCK')).toBe(false);
+    expect(isSecretEnvKey('XDG_SESSION_TYPE')).toBe(false);
     expect(isSecretEnvKey('PATH')).toBe(false);
     expect(isSecretEnvKey('TERM')).toBe(false);
     expect(isSecretEnvKey('AGENTERM_SESSION_ID')).toBe(false);
@@ -37,8 +47,35 @@ describe('redactText', () => {
     expect(redactText('auth Bearer abcdefgh12345678 end')).toContain('[REDACTED]');
   });
 
+  it('masks common credential formats', () => {
+    const secrets = [
+      'AKIAIOSFODNN7EXAMPLE',
+      'github_pat_11ABCDEFG0123456789_abcdefghijk',
+      'ghs_abcdefghijklmnop1234',
+      'glpat-abcdefghij1234567890',
+      'npm_abcdefghijklmnopqrstuvwxyz0123456789',
+      'sk_live_abcdefghijklmnop1234',
+      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U',
+      '-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----'
+    ];
+    for (const secret of secrets) expect(redactText(`x ${secret} y`)).toBe('x [REDACTED] y');
+    expect(redactText('postgres://user:hunter2@db/x')).toBe('postgres://user:[REDACTED]@db/x');
+    expect(redactText('PASSWORD=hunter22 next')).toBe('PASSWORD=[REDACTED] next');
+    expect(redactText('{"api_key": "abcd1234efgh"}')).toBe('{"api_key": "[REDACTED]"}');
+    expect(redactText('Authorization: Basic dXNlcjpwYXNzd29yZA==')).toBe('Authorization: Basic [REDACTED]');
+  });
+
   it('leaves plain text alone', () => {
     expect(redactText('hello world')).toBe('hello world');
+    for (const text of [
+      'task-management-system',
+      'disk-usage-summary',
+      'Bearer authentication is used',
+      'Tokens: 12,345 used',
+      'https://example.com/a'
+    ]) {
+      expect(redactText(text)).toBe(text);
+    }
   });
 
   it('never throws on odd input', () => {

@@ -18,6 +18,17 @@ describe('sessions at scale', () => {
     expect(bad.statusCode).toBe(400);
   });
 
+  it('does not flag sub-sessions sharing their parent folder as a collision', async () => {
+    const r = rig();
+    const lead = await r.spawn({ title: 'lead agent' });
+    await r.spawn({ title: 'helper 1', parentSessionId: lead.id });
+    const helper = (await r.spawn({ title: 'helper 2', parentSessionId: lead.id })) as { id: string };
+    await r.spawn({ title: 'grandchild', parentSessionId: helper.id });
+    expect(r.seen.filter((event) => event.kind === 'workspace.conflict')).toHaveLength(0);
+    await r.spawn({ title: 'unrelated agent' });
+    expect(r.seen.filter((event) => event.kind === 'workspace.conflict')).toHaveLength(1);
+  });
+
   it('frees an ended session ring once its log is on disk, and still serves scrollback', async () => {
     const r = rig();
     const session = await r.spawn();

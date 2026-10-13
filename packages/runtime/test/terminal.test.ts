@@ -102,4 +102,22 @@ describe('readLogTail', () => {
     expect(readLogTail(file, 20)).toBe('second line\r\nthird');
     expect(readLogTail(path.join(dir, 'missing.log'))).toBe(null);
   });
+
+  it('rotates terminal.log past its cap and reads across the rotation', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agenterm-rotate-'));
+    const file = path.join(dir, 'terminal.log');
+    const log = new TerminalLog({ file, maxFileBytes: 100 });
+    for (let i = 0; i < 30; i++) log.append(`line ${String(i).padStart(2, '0')}\r\n`);
+    await log.close();
+    const { readLogTail, readLogTailAsync } = await import('../src/terminal.js');
+    expect(fs.statSync(file).size).toBeLessThanOrEqual(100);
+    expect(fs.statSync(`${file}.1`).size).toBeLessThanOrEqual(100);
+    const tail = readLogTail(file, 150) ?? '';
+    expect(tail.endsWith('line 29\r\n')).toBe(true);
+    expect(tail.length).toBeGreaterThan(fs.statSync(file).size);
+    expect(await readLogTailAsync(file, 150)).toBe(tail);
+  });
 });

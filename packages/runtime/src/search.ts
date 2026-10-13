@@ -20,7 +20,10 @@ export function searchTerminalText(raw: string, query: string, limit: number): T
   const needle = query.toLowerCase();
   if (needle.length === 0) return [];
   const out: TextMatch[] = [];
-  const lines = raw.replace(ANSI, '').split('\n');
+  const plain = raw.replace(ANSI, '');
+  // Most sessions do not contain the text at all; skip splitting them into lines.
+  if (!plain.toLowerCase().includes(needle)) return out;
+  const lines = plain.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const segments = (lines[i] ?? '').split('\r').filter((segment) => segment.length > 0);
     const visible = (segments[segments.length - 1] ?? '').replace(CONTROL, '').trim();

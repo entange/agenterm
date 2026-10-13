@@ -43,7 +43,7 @@ import { PtyManager } from './ptyManager.js';
 import { isLiveSession, SessionStore } from './sessionStore.js';
 import { Supervisor, type SupervisorProbes } from './supervisor.js';
 import { searchTerminalText } from './search.js';
-import { readLogTail } from './terminal.js';
+import { readLogTailAsync } from './terminal.js';
 
 /** Options injected for tests. Production wires the real lister and store. */
 export interface CreateAppOptions {
@@ -163,6 +163,23 @@ const SIGNAL_TO_OS: Record<SessionSignalName, NodeJS.Signals> = {
 
 /** Recent file changes kept per session for the Files tab. */
 const MAX_FILE_CHANGES = 300;
+
+/** Map with at most `limit` calls in flight. Keeps per-process probes from forking hundreds at once. */
+async function mapLimit<T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next++;
+      out[index] = await run(items[index] as T);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+/** Characters one output search reads before it stops and reports truncation. */
+const SEARCH_BYTE_BUDGET = 200 * 1024 * 1024;
 
 interface SpawnInput {
   provider: AgentProvider;
@@ -319,6 +336,8 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     } catch {
       // Heuristic input never breaks the stream.
     }
+    // Rows are saved as they close, so the database serves them from here on.
+    if (commandsDb !== undefined) trackers.delete(sessionId);
     if (record === null) return;
     store.markExited(sessionId, exit.exitCode, exit.signal);
     bus.publish({
@@ -373,7 +392,22 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
   };
 
   const publishConflicts = (session: SessionRecord): void => {
-    const live = store.list().filter((entry) => isLiveSession(entry));
+    const all = store.list();
+    const byId = new Map(all.map((entry) => [entry.id, entry]));
+    // Sub-sessions an agent started in its own folder are deliberate, not a collision.
+    const familyOf = (id: string): string => {
+      let current = byId.get(id);
+      for (let hops = 0; hops < 64; hops++) {
+        const parentId = current?.parentSessionId;
+        if (parentId === null || parentId === undefined) break;
+        const parent = byId.get(parentId);
+        if (parent === undefined) break;
+        current = parent;
+      }
+      return current?.id ?? id;
+    };
+    const family = familyOf(session.id);
+    const live = all.filter((entry) => isLiveSession(entry) && familyOf(entry.id) !== family);
     const peers = sharedCwdSessions(session.id, session.cwd, live);
     if (peers.length === 0) return;
     bus.publish({
@@ -473,15 +507,18 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     } else {
       startTracking(session);
     }
-    trackers.set(
-      id,
-      new CommandTracker({
-        sessionId: id,
-        cwd: session.cwd,
-        pid,
-        save: commandsDb === undefined ? undefined : (record) => commandsDb.save(record)
-      })
-    );
+    // Prompt-shaped lines only mean commands in a shell; agent TUIs would fill the table with noise.
+    if (session.provider === 'generic') {
+      trackers.set(
+        id,
+        new CommandTracker({
+          sessionId: id,
+          cwd: session.cwd,
+          pid,
+          save: commandsDb === undefined ? undefined : (record) => commandsDb.save(record)
+        })
+      );
+    }
     bus.publish({
       id: '',
       sessionId: id,
@@ -543,13 +580,13 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
         .filter((session) => isLiveSession(session))
         .map((session) => [session.pid, session.id] as const)
     );
-    const resolved = await Promise.all(
-      candidates.map(async (candidate) => ({
-        ...candidate,
-        cwd: candidate.cwd ?? (await cwdResolver(candidate.pid)),
-        sessionId: byPid.get(candidate.pid) ?? null
-      }))
-    );
+    // Sessions agenterm already tracks know their folder; resolve the rest a few lsof calls at a time.
+    const known = new Map(store.list().map((session) => [session.pid, session.cwd] as const));
+    const resolved = await mapLimit(candidates, 8, async (candidate) => ({
+      ...candidate,
+      cwd: candidate.cwd ?? known.get(candidate.pid) ?? (await cwdResolver(candidate.pid)),
+      sessionId: byPid.get(candidate.pid) ?? null
+    }));
     return { candidates: resolved, scannedAtMs: Date.now() };
   });
 
@@ -569,16 +606,24 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     const only = typeof query['sessionId'] === 'string' ? query['sessionId'] : null;
     const matches: Array<{ sessionId: string; line: number; text: string }> = [];
     let truncated = false;
+    let scanned = 0;
     for (const session of store.list()) {
       if (only !== null && session.id !== only) continue;
+      if (scanned > SEARCH_BYTE_BUDGET) {
+        truncated = true;
+        break;
+      }
       const managed = pty.get(session.id);
       const text =
         managed !== null && !managed.log.isReleased()
           ? managed.log.text()
           : dataDir !== undefined
-            ? readLogTail(terminalLogPath(session.id, dataDir), 2 * 1024 * 1024)
+            ? await readLogTailAsync(terminalLogPath(session.id, dataDir), 2 * 1024 * 1024)
             : null;
       if (text === null) continue;
+      scanned += text.length;
+      // Let PTY output and socket frames through between sessions.
+      await new Promise((resolve) => setImmediate(resolve));
       for (const match of searchTerminalText(text, q, limit)) {
         if (matches.length >= limit) {
           truncated = true;
@@ -668,6 +713,8 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     await reply.code(201).send(result);
   });
 
+  /** Pids with an attach in flight, so two concurrent requests cannot both create a session. */
+  const attaching = new Set<number>();
   app.post('/sessions/attach', async (request, reply) => {
     const parsed = parseAttachSessionRequest(request.body ?? {});
     if (!parsed.ok) {
@@ -685,13 +732,20 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       });
       return;
     }
-    if (store.hasPid(match.pid)) {
+    if (store.hasPid(match.pid) || attaching.has(match.pid)) {
       await fail(reply, { status: 409, code: 'already_attached', message: 'pid is already attached to a session' });
       return;
     }
-    const resolvedCwd = parsed.value.cwd ?? match.cwd ?? (await cwdResolver(match.pid));
-    const cwd = resolvedCwd !== null && cwdExists(resolvedCwd) ? resolvedCwd : '/';
-    const git = cwd === '/' ? { branch: null, worktreeRoot: null } : await gitReader(cwd);
+    attaching.add(match.pid);
+    let cwd: string;
+    let git: { branch: string | null; worktreeRoot: string | null };
+    try {
+      const resolvedCwd = parsed.value.cwd ?? match.cwd ?? (await cwdResolver(match.pid));
+      cwd = resolvedCwd !== null && cwdExists(resolvedCwd) ? resolvedCwd : '/';
+      git = cwd === '/' ? { branch: null, worktreeRoot: null } : await gitReader(cwd);
+    } finally {
+      attaching.delete(match.pid);
+    }
     const session = store.createAttached({
       pid: match.pid,
       commandLine: match.commandLine,
@@ -983,7 +1037,7 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
     }
     const tail =
       session.origin === 'spawned' && dataDir !== undefined
-        ? readLogTail(terminalLogPath(session.id, dataDir), parsed.value.tailBytes)
+        ? await readLogTailAsync(terminalLogPath(session.id, dataDir), parsed.value.tailBytes)
         : null;
     if (tail === null) {
       await fail(reply, {

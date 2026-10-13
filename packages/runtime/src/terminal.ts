@@ -34,21 +34,77 @@ export class TerminalLog {
   private seq = 0;
   private readonly maxBytes: number;
   private file: fs.WriteStream | null = null;
+  private readonly filePath: string | null;
+  private readonly maxFileBytes: number;
+  private fileBytes = 0;
+  /** Bytes not mirrored because the disk fell behind; noted in the log once it catches up. */
+  private skippedBytes = 0;
 
-  constructor(options: { maxBytes?: number | undefined; file?: string | undefined } = {}) {
+  constructor(
+    options: { maxBytes?: number | undefined; file?: string | undefined; maxFileBytes?: number | undefined } = {}
+  ) {
     this.maxBytes = options.maxBytes ?? 1024 * 1024;
-    if (typeof options.file === 'string') {
+    this.maxFileBytes = options.maxFileBytes ?? MAX_LOG_FILE_BYTES;
+    this.filePath = typeof options.file === 'string' ? options.file : null;
+    if (this.filePath !== null) {
       try {
-        fs.mkdirSync(path.dirname(options.file), { recursive: true, mode: 0o700 });
-        const stream = fs.createWriteStream(options.file, { flags: 'a', encoding: 'utf8', mode: 0o600 });
-        stream.on('error', () => {
-          if (this.file === stream) this.file = null;
-        });
-        this.file = stream;
+        fs.mkdirSync(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
+        try {
+          this.fileBytes = fs.statSync(this.filePath).size;
+        } catch {
+          this.fileBytes = 0;
+        }
+        this.file = this.openMirror(this.filePath);
       } catch {
         this.file = null;
       }
     }
+  }
+
+  private openMirror(file: string): fs.WriteStream {
+    // Opened synchronously so the file exists (and can rotate) before the first write lands.
+    const fd = fs.openSync(file, 'a', 0o600);
+    const stream = fs.createWriteStream(file, { fd, encoding: 'utf8' });
+    stream.on('error', () => {
+      if (this.file === stream) this.file = null;
+    });
+    return stream;
+  }
+
+  /**
+   * Append to terminal.log. Past maxFileBytes the file rotates to
+   * terminal.log.1 (replacing the previous one), so disk use per session
+   * stays under twice the cap. When the disk cannot keep up, bytes are
+   * skipped rather than buffered without bound.
+   */
+  private mirror(data: string, bytes: number): void {
+    const file = this.file;
+    if (file === null || this.filePath === null) return;
+    if (file.writableLength > MAX_PENDING_WRITE_BYTES) {
+      this.skippedBytes += bytes;
+      return;
+    }
+    let text = data;
+    let size = bytes;
+    if (this.skippedBytes > 0) {
+      const note = `\r\n[agenterm: ${this.skippedBytes} bytes of output were not saved to disk]\r\n`;
+      this.skippedBytes = 0;
+      text = note + data;
+      size += Buffer.byteLength(note, 'utf8');
+    }
+    if (this.fileBytes + size > this.maxFileBytes && this.fileBytes > 0) {
+      try {
+        // An open stream keeps writing to the renamed file until it is ended.
+        fs.renameSync(this.filePath, `${this.filePath}.1`);
+        file.end();
+        this.file = this.openMirror(this.filePath);
+        this.fileBytes = 0;
+      } catch {
+        // Rotation is best effort (Windows cannot rename an open file).
+      }
+    }
+    this.file?.write(text);
+    this.fileBytes += size;
   }
 
   /** Append one output chunk. Assigns the following sequence number. */
@@ -60,7 +116,8 @@ export class TerminalLog {
     };
     this.seq = chunk.seq;
     this.chunks.push(chunk);
-    this.heldBytes += Buffer.byteLength(data, 'utf8');
+    const bytes = Buffer.byteLength(data, 'utf8');
+    this.heldBytes += bytes;
     let drop = 0;
     while (drop < this.chunks.length - 1 && this.heldBytes > this.maxBytes) {
       const dropped = this.chunks[drop];
@@ -68,7 +125,7 @@ export class TerminalLog {
       drop++;
     }
     if (drop > 0) this.chunks.splice(0, drop);
-    this.file?.write(data);
+    this.mirror(data, bytes);
     return chunk;
   }
 
@@ -150,6 +207,12 @@ export class TerminalLog {
   }
 }
 
+/** terminal.log rotates past this size; one previous generation is kept. */
+export const MAX_LOG_FILE_BYTES = 16 * 1024 * 1024;
+
+/** Mirror bytes waiting on the disk beyond which new output is skipped. */
+const MAX_PENDING_WRITE_BYTES = 8 * 1024 * 1024;
+
 /**
  * Read the tail of a terminal.log mirror from disk.
  *
@@ -159,19 +222,55 @@ export class TerminalLog {
  * is not a torn escape sequence.
  */
 export function readLogTail(file: string, maxBytes = 65_536): string | null {
+  return tailText(file, maxBytes, (fd, buffer, position) => fs.readSync(fd, buffer, 0, buffer.length, position));
+}
+
+/** readLogTail without blocking the event loop, for scans across many sessions. */
+export async function readLogTailAsync(file: string, maxBytes = 65_536): Promise<string | null> {
+  let handle: fs.promises.FileHandle | null = null;
+  try {
+    handle = await fs.promises.open(file, 'r');
+    const size = (await handle.stat()).size;
+    const length = Math.min(size, maxBytes);
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, size - length);
+    const text = buffer.toString('utf8');
+    if (length < maxBytes && !file.endsWith('.1')) {
+      const before = await readLogTailAsync(`${file}.1`, maxBytes - length);
+      if (before !== null) return before + text;
+    }
+    return fromLineBoundary(text, length < size);
+  } catch {
+    return null;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+function fromLineBoundary(text: string, clipped: boolean): string {
+  if (!clipped) return text;
+  const newline = text.indexOf('\n');
+  return newline !== -1 && newline < text.length - 1 ? text.slice(newline + 1) : text;
+}
+
+function tailText(
+  file: string,
+  maxBytes: number,
+  read: (fd: number, buffer: Buffer, position: number) => number
+): string | null {
   let fd: number | null = null;
   try {
     fd = fs.openSync(file, 'r');
     const size = fs.fstatSync(fd).size;
     const length = Math.min(size, maxBytes);
     const buffer = Buffer.alloc(length);
-    fs.readSync(fd, buffer, 0, length, size - length);
-    let text = buffer.toString('utf8');
-    if (length < size) {
-      const newline = text.indexOf('\n');
-      if (newline !== -1 && newline < text.length - 1) text = text.slice(newline + 1);
+    read(fd, buffer, size - length);
+    const text = buffer.toString('utf8');
+    if (length < maxBytes && !file.endsWith('.1')) {
+      const before = tailText(`${file}.1`, maxBytes - length, read);
+      if (before !== null) return before + text;
     }
-    return text;
+    return fromLineBoundary(text, length < size);
   } catch {
     return null;
   } finally {

@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import si from 'systeminformation';
 import treeKill from 'tree-kill';
-import type { PortRecord, ProcessSnapshot } from '@agenterm/core';
+import { redactText, type PortRecord, type ProcessSnapshot } from '@agenterm/core';
 
 /** One OS process as seen by the poller. */
 export interface ProcEntry {
@@ -103,6 +103,29 @@ export function parseLsofListeners(stdout: string): SockEntry[] {
 }
 
 /**
+ * A command line safe and short enough to show: secrets masked, and the
+ * inline `--settings {...}` JSON agenterm passes to Claude Code (which
+ * carries the session's ingest token) folded to `{…}`.
+ */
+export function displayCommand(command: string): string {
+  let out = command;
+  const start = out.indexOf('--settings {');
+  if (start !== -1) {
+    let depth = 0;
+    let end = -1;
+    for (let i = start + '--settings '.length; i < out.length; i++) {
+      if (out[i] === '{') depth++;
+      else if (out[i] === '}' && --depth === 0) {
+        end = i;
+        break;
+      }
+    }
+    out = `${out.slice(0, start)}--settings {…}${end === -1 ? '' : out.slice(end + 1)}`;
+  }
+  return redactText(out);
+}
+
+/**
  * Listening TCP sockets. POSIX asks lsof for listeners only, which is a
  * fraction of the cost of a full connection scan.
  */
@@ -115,9 +138,11 @@ async function defaultSockets(): Promise<SockEntry[]> {
       });
       return parseLsofListeners(stdout);
     } catch (error) {
-      // lsof exits 1 when nothing is listening.
-      const stdout = (error as { stdout?: string }).stdout;
-      if (typeof stdout === 'string') return parseLsofListeners(stdout);
+      const failure = error as { stdout?: string; code?: unknown; killed?: boolean };
+      // lsof exits 1 when nothing is listening. A timeout leaves partial output that would
+      // read as ports closing, so it fails the probe and the previous snapshot stands.
+      if (failure.killed === true) throw error;
+      if (failure.code === 1 && typeof failure.stdout === 'string') return parseLsofListeners(failure.stdout);
     }
   }
   const result = await si.networkConnections();
@@ -286,7 +311,7 @@ export class Supervisor {
         pid,
         ppid: entry?.ppid ?? 0,
         sessionId,
-        command: entry?.command ?? '',
+        command: displayCommand(entry?.command ?? ''),
         cwd: null,
         cpuPercent: entry?.cpuPercent ?? null,
         rssBytes: entry?.rssBytes ?? null,

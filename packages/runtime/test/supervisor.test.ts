@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { Supervisor } from '../src/supervisor.js';
+import { displayCommand, Supervisor } from '../src/supervisor.js';
 
 const stubProbes = {
   processes: async () => [
@@ -110,5 +110,14 @@ describe('parseLsofListeners', () => {
       { port: 60384, pid: 653, address: '127.0.0.1' },
       { port: 5432, pid: 653, address: '::1' }
     ]);
+  });
+
+  it('folds the hook settings JSON and masks secrets in shown commands', () => {
+    const settings = JSON.stringify({
+      hooks: { Stop: [{ hooks: [{ command: "curl -H 'Authorization: Bearer abc123def456'" }] }] }
+    });
+    expect(displayCommand(`claude --settings ${settings} --model opus`)).toBe('claude --settings {…} --model opus');
+    expect(displayCommand('deploy --token=ghp_abcdefghijklmnop1234')).toBe('deploy --token=[REDACTED]');
+    expect(displayCommand('node server.js')).toBe('node server.js');
   });
 });

@@ -92,3 +92,13 @@ describe('readGitDiff', () => {
     expect(safeRelativePath('/repo', 'src/a.ts')).toBe('src/a.ts');
   });
 });
+
+describe('a folder that no longer exists', () => {
+  it('reads as not a repository instead of throwing', async () => {
+    const gone = path.join(os.tmpdir(), `agenterm-gone-${process.pid}-${Date.now()}`);
+    const status = await readGitStatus(gone);
+    expect(status.branch).toBe(null);
+    expect(status.files).toEqual([]);
+    expect(await readGitDiff(gone, 'a.txt')).toBe(null);
+  });
+});

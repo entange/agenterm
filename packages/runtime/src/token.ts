@@ -13,22 +13,47 @@ import { tokenPath } from './paths.js';
 export function loadOrCreateToken(dir?: string): string {
   const file = tokenPath(dir);
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  // Two first-time starters (the app and the CLI) can race here. Creation is exclusive,
+  // and the loser reads the winner's token once it is written.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const existing = readToken(file);
+    if (existing !== null) return existing;
+    const token = crypto.randomBytes(32).toString('hex');
+    try {
+      const stat = fs.statSync(file, { throwIfNoEntry: false });
+      if (stat !== undefined && Date.now() - stat.mtimeMs < 2000) {
+        // Another starter is writing it right now.
+        throw Object.assign(new Error('token being written'), { code: 'EEXIST' });
+      }
+      if (stat !== undefined) {
+        // Present but unusable: replace it atomically.
+        const temp = `${file}.${process.pid}.tmp`;
+        fs.writeFileSync(temp, `${token}\n`, { mode: 0o600 });
+        fs.renameSync(temp, file);
+      } else {
+        fs.writeFileSync(file, `${token}\n`, { mode: 0o600, flag: 'wx' });
+      }
+      try {
+        fs.chmodSync(file, 0o600);
+      } catch {
+        // Best effort on platforms without POSIX modes.
+      }
+      return token;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+  throw new Error(`could not create or read the token at ${file}`);
+}
+
+function readToken(file: string): string | null {
   try {
     const existing = fs.readFileSync(file, 'utf8').trim();
-    if (existing.length >= 16) {
-      return existing;
-    }
+    return existing.length >= 16 ? existing : null;
   } catch {
-    // Missing file falls through to creation.
+    return null;
   }
-  const token = crypto.randomBytes(32).toString('hex');
-  fs.writeFileSync(file, `${token}\n`, { mode: 0o600 });
-  try {
-    fs.chmodSync(file, 0o600);
-  } catch {
-    // Best effort on platforms without POSIX modes.
-  }
-  return token;
 }
 
 /** Short hash of the token for lock-file display without exposing secrets. */

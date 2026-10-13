@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { simpleGit, type FileStatusResult, type SimpleGit } from 'simple-git';
+import { gitAt } from './gitInfo.js';
 
 /** One changed file with staged and unstaged states. */
 export interface GitFileState {
@@ -79,8 +80,8 @@ function fileStates(entries: readonly FileStatusResult[]): GitFileState[] {
  * any failure yield the empty status, never a throw.
  */
 export async function readGitStatus(cwd: string, git?: SimpleGit): Promise<GitStatus> {
-  const client = git ?? simpleGit(cwd);
   try {
+    const client = git ?? gitAt(cwd);
     const [status, summary, rootRaw] = await Promise.all([
       client.status(),
       // Against HEAD so staged and unstaged edits both count; fresh repos have no HEAD.
@@ -131,16 +132,17 @@ export async function readGitDiff(
   file: string,
   git?: SimpleGit
 ): Promise<{ path: string; diff: string; truncated: boolean } | null> {
-  const client = git ?? simpleGit(cwd);
   let root: string;
+  let rooted: SimpleGit;
   try {
+    const client = git ?? gitAt(cwd);
     root = (await client.revparse(['--show-toplevel'])).trim();
+    rooted = git === undefined ? gitAt(root) : simpleGit(root);
   } catch {
     return null;
   }
   const relative = safeRelativePath(root, file);
   if (relative === null) return null;
-  const rooted = simpleGit(root);
   let diff = '';
   try {
     diff = await rooted.raw(['diff', '--no-color', 'HEAD', '--', relative]);
