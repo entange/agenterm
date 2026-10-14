@@ -164,7 +164,7 @@ export class AgentermClient {
     return this.request('POST', this.taskPath(id, '/input'), request);
   }
 
-  resize(id: string, request: TaskResizeRequest): Promise<TaskResizeRequest> {
+  resize(id: string, request: TaskResizeRequest): Promise<TaskResponse> {
     return this.request('POST', this.taskPath(id, '/resize'), request);
   }
 
