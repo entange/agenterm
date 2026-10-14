@@ -8,6 +8,7 @@ import { useLive } from '../lib/live.js';
 import { keys, useHealth, useSettings } from '../lib/queries.js';
 import { toastError } from '../lib/toast.js';
 import { useUi, type ThemePreference } from '../lib/ui.js';
+import { ConnectAgent } from './ConnectAgent.js';
 import { Segmented, Switch } from './controls.js';
 
 const THEMES: Array<{ value: ThemePreference; label: string }> = [
@@ -25,7 +26,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-/** The few choices there are: what happens when an agent exits, notifications, theme, and the daemon. */
+/** How to connect an agent, then the few choices there are: what happens when an agent exits, notifications, theme, and the daemon. */
 export function SettingsDialog(): React.JSX.Element {
   const open = useUi((state) => state.settingsOpen);
   const setOpen = useUi((state) => state.setSettingsOpen);
@@ -64,7 +65,10 @@ export function SettingsDialog(): React.JSX.Element {
 
   return (
     <Dialog open={open} onOpenChange={setOpen} title="Settings">
-      <DialogBody>
+      <DialogBody className="scroll-thin max-h-[68vh] overflow-y-auto">
+        <Section title="Connect an agent">
+          <ConnectAgent />
+        </Section>
         <Section title="Tasks">
           <Switch
             label="Stop a task when the agent that started it exits"

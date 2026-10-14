@@ -32,9 +32,11 @@ Requirements: macOS or Linux, [Bun](https://bun.sh) 1.3+, Node 22+.
 ```sh
 bun install
 bun run build
-alias agenterm="node $PWD/apps/cli/dist/index.js"
+(cd apps/cli && npm link)              # puts `agenterm` on your PATH
 agenterm run "npm run dev"             # starts the daemon on first use
 ```
+
+Agents start `agenterm mcp` themselves, so it has to be on your PATH. A shell alias is not enough.
 
 The desktop app:
 
@@ -64,12 +66,21 @@ can be named by its id, its title, or a unique id prefix.
 ## For agents (MCP)
 
 ```sh
-claude mcp add agenterm -- agenterm mcp
-codex mcp add agenterm -- agenterm mcp
+claude mcp add --scope user agenterm -- agenterm mcp   # Claude Code, every project
+codex mcp add agenterm -- agenterm mcp                 # Codex
 ```
 
-Any other agent: add `agenterm mcp` as a stdio MCP server. The tools match the CLI: `run`, `list`, `logs`, `input`,
-`stop`, and `remove`. Output comes back as plain text with secrets redacted.
+Cursor, Claude Desktop, and most other agents take the same server in their MCP config file:
+
+```json
+{ "mcpServers": { "agenterm": { "command": "agenterm", "args": ["mcp"] } } }
+```
+
+Apps opened from the Dock may not see your shell's PATH; use the full path from `which agenterm` as the command if
+they cannot find it. The app shows all of this under Settings → Connect an agent.
+
+The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, and `remove`. Output comes back as plain text with
+secrets redacted.
 
 Agents can also just call the CLI. Either way, giving each command an id (`--id web`) is what keeps an agent from
 starting the same server twice.

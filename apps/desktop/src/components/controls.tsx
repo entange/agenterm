@@ -93,3 +93,17 @@ export function CopyField({ text, label }: { text: string; label: string }): Rea
     </div>
   );
 }
+
+/** A multi-line snippet the user is meant to copy, such as a config file entry. */
+export function CopyBlock({ text, label }: { text: string; label: string }): React.JSX.Element {
+  return (
+    <div className="relative rounded-md border border-line bg-sunken">
+      <pre className="selectable scroll-thin overflow-x-auto py-2 pr-10 pl-3 font-mono text-[12px] leading-[1.6] text-ink">
+        {text}
+      </pre>
+      <IconButton label={`Copy ${label}`} onClick={() => copyText(text, label)} className="absolute top-1 right-1">
+        <Copy className="size-3.5" />
+      </IconButton>
+    </div>
+  );
+}

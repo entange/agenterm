@@ -7,6 +7,7 @@ import { copyText, removeTask, stopTask } from '../lib/actions.js';
 import { getBridge } from '../lib/bridge.js';
 import { runtimeText, shortPath, signalOf } from '../lib/format.js';
 import { taskLabel } from '../../shared/label.js';
+import { ConnectAgent } from './ConnectAgent.js';
 import { CopyField } from './controls.js';
 import { TerminalPane } from './TerminalPane.js';
 
@@ -155,13 +156,8 @@ export function Welcome({ hasTasks }: { hasTasks: boolean }): React.JSX.Element 
           </p>
         </section>
         <section className="mt-6 space-y-2">
-          <h2 className="eyebrow text-ink-faint">For agents (MCP)</h2>
-          <CopyField text="claude mcp add agenterm -- agenterm mcp" label="Claude Code setup" />
-          <CopyField text="codex mcp add agenterm -- agenterm mcp" label="Codex setup" />
-          <p className="text-[12px] text-ink-muted">
-            Any other agent: add <code className="font-mono">agenterm mcp</code> as a stdio MCP server. Agents get the
-            same run, list, logs, input, stop, and remove the CLI has.
-          </p>
+          <h2 className="eyebrow text-ink-faint">Connect your agent</h2>
+          <ConnectAgent />
         </section>
       </div>
     </div>
