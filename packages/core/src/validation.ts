@@ -1,408 +1,166 @@
-import { AGENT_PROVIDERS, type AgentProvider } from './agent.js';
 import type {
-  AttachSessionRequest,
-  DeleteSessionRequest,
-  EventsQuery,
-  ListSessionsQuery,
-  SessionInputRequest,
-  SessionOutputQuery,
-  SessionResizeRequest,
-  SessionSignalRequest,
-  SpawnSessionRequest,
-  UpdateSessionRequest
+  RunTaskRequest,
+  Settings,
+  StopTaskRequest,
+  TaskInputRequest,
+  TaskOutputQuery,
+  TaskResizeRequest
 } from './api.js';
-import type { SessionLifecycleStatus, SessionOverlayStatus } from './session.js';
+import { TASK_ID_PATTERN } from './task.js';
 
 /**
- * Validation outcome.
- *
- * ok true carries the cleaned value. ok false carries a machine readable
- * code plus a redacted human message. Validators never throw for malformed
- * input; they return the failure shape so routes can map to status codes.
+ * Validation outcome. Validators never throw for malformed input; they
+ * return a code and a message so routes can map them to a 400.
  */
 export type ValidationResult<T> = { ok: true; value: T } | { ok: false; code: string; message: string };
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const LIFECYCLES: readonly SessionLifecycleStatus[] = [
-  'created',
-  'starting',
-  'running',
-  'exited',
-  'crashed',
-  'killed'
-] as const;
-
-const OVERLAYS: readonly SessionOverlayStatus[] = [
-  'unknown',
-  'working',
-  'waiting_input',
-  'waiting_permission',
-  'completed',
-  'failed'
-] as const;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
 /** POSIX absolute paths plus Windows drive and UNC paths. */
 function isAbsolutePath(value: unknown): value is string {
-  if (typeof value !== 'string' || value.length < 2) return false;
+  if (typeof value !== 'string' || value.length < 1) return false;
   return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\');
 }
 
-function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID_PATTERN.test(value);
-}
-
-function isPid(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 4_194_304;
-}
-
-function isPort(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 65_535;
-}
-
-function isDims(value: unknown, min: number, max: number): value is number {
+function isInt(value: unknown, min: number, max: number): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
 }
 
-/** Check provider key against the known list. */
-export function parseAgentProvider(value: unknown): ValidationResult<AgentProvider> {
-  if (typeof value !== 'string') {
-    return { ok: false, code: 'invalid_provider', message: 'provider must be a string' };
-  }
-  const found = (AGENT_PROVIDERS as readonly string[]).includes(value);
-  if (!found) {
+const MAX_COMMAND_LENGTH = 32 * 1024;
+const MAX_ENV_ENTRIES = 2000;
+
+/** Normalize and check a task id: trimmed, lowercased, safe characters only. */
+export function parseTaskId(value: unknown): ValidationResult<string> {
+  const id = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (!TASK_ID_PATTERN.test(id)) {
     return {
       ok: false,
-      code: 'invalid_provider',
-      message: 'provider must be one of claude, codex, gemini, opencode, generic'
+      code: 'invalid_id',
+      message: 'task id must be 1-64 characters: letters, digits, ".", "_" or "-", starting with a letter or digit'
     };
   }
-  return { ok: true, value: value as AgentProvider };
+  return { ok: true, value: id };
 }
 
-/** Validate spawn body with defaults applied. */
-export function parseSpawnSessionRequest(body: unknown): ValidationResult<SpawnSessionRequest> {
-  if (!isPlainRecord(body)) {
-    return { ok: false, code: 'invalid_body', message: 'body must be an object' };
-  }
-  const provider = parseAgentProvider(body['provider']);
-  if (!provider.ok) return provider;
-  const cwd = body['cwd'];
-  if (!isAbsolutePath(cwd)) {
-    return { ok: false, code: 'invalid_cwd', message: 'cwd must be an absolute path' };
-  }
+export function parseRunTaskRequest(body: unknown): ValidationResult<RunTaskRequest> {
+  if (!isPlainRecord(body)) return { ok: false, code: 'invalid_body', message: 'body must be an object' };
   const command = body['command'];
-  if (command !== undefined && !(typeof command === 'string' && command.trim().length > 0)) {
-    return { ok: false, code: 'invalid_command', message: 'command must be a non-empty string when present' };
+  if (typeof command !== 'string' || command.trim().length === 0) {
+    return { ok: false, code: 'invalid_command', message: 'command must be a non-empty string' };
   }
-  const args = body['args'] ?? [];
-  if (!Array.isArray(args) || !args.every((entry) => typeof entry === 'string')) {
-    return { ok: false, code: 'invalid_args', message: 'args must be a string list' };
+  if (command.length > MAX_COMMAND_LENGTH) {
+    return { ok: false, code: 'invalid_command', message: 'command must be at most 32KB' };
   }
-  if (args.length > 200) {
-    return { ok: false, code: 'invalid_args', message: 'args must hold at most 200 entries' };
+  const cwd = body['cwd'];
+  if (!isAbsolutePath(cwd)) return { ok: false, code: 'invalid_cwd', message: 'cwd must be an absolute path' };
+  const out: RunTaskRequest = { command: command.trim(), cwd };
+  if (body['id'] !== undefined) {
+    const id = parseTaskId(body['id']);
+    if (!id.ok) return id;
+    out.id = id.value;
   }
-  const title = body['title'];
-  if (title !== undefined && !(typeof title === 'string' && title.length <= 200)) {
-    return { ok: false, code: 'invalid_title', message: 'title must be a string up to 200 chars' };
+  for (const key of ['title', 'startedBy'] as const) {
+    const value = body[key];
+    if (value === undefined) continue;
+    if (typeof value !== 'string') return { ok: false, code: `invalid_${key}`, message: `${key} must be a string` };
+    const trimmed = value.trim().slice(0, 200);
+    if (trimmed.length > 0) out[key] = trimmed;
   }
-  const cols = body['cols'] ?? 80;
-  const rows = body['rows'] ?? 24;
-  if (!isDims(cols, 1, 500)) {
-    return { ok: false, code: 'invalid_cols', message: 'cols must be an integer 1-500' };
-  }
-  if (!isDims(rows, 1, 200)) {
-    return { ok: false, code: 'invalid_rows', message: 'rows must be an integer 1-200' };
-  }
-  const env = body['env'] ?? {};
-  if (!isPlainRecord(env)) {
-    return { ok: false, code: 'invalid_env', message: 'env must be a string map' };
-  }
-  for (const [key, entry] of Object.entries(env)) {
-    if (typeof entry !== 'string') {
-      return { ok: false, code: 'invalid_env', message: 'env values must be strings' };
+  const startedByPid = body['startedByPid'];
+  if (startedByPid !== undefined) {
+    if (!isInt(startedByPid, 1, 4_194_304)) {
+      return { ok: false, code: 'invalid_startedByPid', message: 'startedByPid must be a pid' };
     }
-    if (key.length === 0 || key.length > 256 || entry.length > 32_768) {
-      return { ok: false, code: 'invalid_env', message: 'env key or value out of range' };
+    out.startedByPid = startedByPid;
+  }
+  const env = body['env'];
+  if (env !== undefined) {
+    if (!isPlainRecord(env) || Object.keys(env).length > MAX_ENV_ENTRIES) {
+      return { ok: false, code: 'invalid_env', message: 'env must be an object of strings' };
     }
-  }
-  const parentSessionId = body['parentSessionId'];
-  if (parentSessionId !== undefined && !isUuid(parentSessionId)) {
-    return { ok: false, code: 'invalid_parentSessionId', message: 'parentSessionId must be a session id' };
-  }
-  const statusHooks = body['statusHooks'];
-  if (statusHooks !== undefined && typeof statusHooks !== 'boolean') {
-    return { ok: false, code: 'invalid_statusHooks', message: 'statusHooks must be a boolean' };
-  }
-  const spawnValue: SpawnSessionRequest = {
-    provider: provider.value,
-    args: args as string[],
-    cwd,
-    cols,
-    rows,
-    env: env as Record<string, string>
-  };
-  if (typeof command === 'string') {
-    spawnValue.command = command;
-  }
-  if (typeof title === 'string') {
-    spawnValue.title = title;
-  }
-  if (typeof statusHooks === 'boolean') {
-    spawnValue.statusHooks = statusHooks;
-  }
-  if (typeof parentSessionId === 'string') {
-    spawnValue.parentSessionId = parentSessionId;
-  }
-  return {
-    ok: true,
-    value: spawnValue
-  };
-}
-
-/** Validate attach body. */
-export function parseAttachSessionRequest(body: unknown): ValidationResult<AttachSessionRequest> {
-  if (!isPlainRecord(body)) {
-    return { ok: false, code: 'invalid_body', message: 'body must be an object' };
-  }
-  const pid = body['pid'];
-  if (!isPid(pid)) {
-    return { ok: false, code: 'invalid_pid', message: 'pid must be an integer above zero' };
-  }
-  const title = body['title'];
-  if (title !== undefined && !(typeof title === 'string' && title.length <= 200)) {
-    return { ok: false, code: 'invalid_title', message: 'title must be a string up to 200 chars' };
-  }
-  const cwd = body['cwd'] ?? null;
-  if (cwd !== null && !isAbsolutePath(cwd)) {
-    return { ok: false, code: 'invalid_cwd', message: 'cwd must be an absolute path or null' };
-  }
-  const attachValue: AttachSessionRequest = { pid };
-  if (typeof title === 'string') {
-    attachValue.title = title;
-  }
-  if (typeof cwd === 'string') {
-    attachValue.cwd = cwd;
-  } else if (cwd === null) {
-    attachValue.cwd = null;
-  }
-  return { ok: true, value: attachValue };
-}
-
-/** Validate delete body. */
-export function parseDeleteSessionRequest(body: unknown): ValidationResult<DeleteSessionRequest> {
-  if (!isPlainRecord(body)) {
-    return { ok: false, code: 'invalid_body', message: 'body must be an object' };
-  }
-  const killTree = body['killTree'];
-  if (typeof killTree !== 'boolean') {
-    return { ok: false, code: 'invalid_killTree', message: 'killTree must be a boolean' };
-  }
-  const confirmPid = body['confirmPid'];
-  if (confirmPid !== undefined && !isPid(confirmPid)) {
-    return { ok: false, code: 'invalid_confirmPid', message: 'confirmPid must be an integer above zero' };
-  }
-  return { ok: true, value: confirmPid === undefined ? { killTree } : { killTree, confirmPid } };
-}
-
-/** Validate rename body. */
-export function parseUpdateSessionRequest(body: unknown): ValidationResult<UpdateSessionRequest> {
-  if (!isPlainRecord(body)) {
-    return { ok: false, code: 'invalid_body', message: 'body must be an object' };
-  }
-  const title = body['title'];
-  if (typeof title !== 'string' || title.trim().length === 0 || title.trim().length > 200) {
-    return { ok: false, code: 'invalid_title', message: 'title must be 1-200 chars' };
-  }
-  return { ok: true, value: { title: title.trim() } };
-}
-
-function coerceInteger(value: unknown): unknown {
-  if (typeof value === 'string' && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isInteger(parsed) ? parsed : value;
-  }
-  return value;
-}
-
-/** Validate the events feed query. Accepts string-typed query params. */
-export function parseEventsQuery(query: unknown): ValidationResult<EventsQuery> {
-  if (!isPlainRecord(query)) {
-    return { ok: false, code: 'invalid_query', message: 'query must be an object' };
-  }
-  const out: EventsQuery = {};
-  const sessionId = query['sessionId'];
-  if (sessionId !== undefined) {
-    if (!isUuid(sessionId)) {
-      return { ok: false, code: 'invalid_session_id', message: 'session id must be a UUID string' };
+    const clean: Record<string, string> = {};
+    for (const [key, value] of Object.entries(env)) {
+      if (typeof value !== 'string' || key.length === 0 || key.includes('=') || key.includes('\0')) {
+        return { ok: false, code: 'invalid_env', message: 'env must be an object of strings' };
+      }
+      clean[key] = value;
     }
-    out.sessionId = sessionId;
+    out.env = clean;
   }
-  const beforeMs = coerceInteger(query['beforeMs']);
-  if (beforeMs !== undefined) {
-    if (!(typeof beforeMs === 'number' && Number.isInteger(beforeMs) && beforeMs > 0)) {
-      return { ok: false, code: 'invalid_beforeMs', message: 'beforeMs must be a positive integer' };
+  if (body['restart'] !== undefined) {
+    if (typeof body['restart'] !== 'boolean') {
+      return { ok: false, code: 'invalid_restart', message: 'restart must be a boolean' };
     }
-    out.beforeMs = beforeMs;
+    out.restart = body['restart'];
   }
-  const limit = coerceInteger(query['limit']);
-  if (limit !== undefined) {
-    if (!isDims(limit, 1, 500)) {
-      return { ok: false, code: 'invalid_limit', message: 'limit must be an integer 1-500' };
-    }
-    out.limit = limit;
+  if (body['cols'] !== undefined) {
+    if (!isInt(body['cols'], 1, 500)) return { ok: false, code: 'invalid_cols', message: 'cols must be 1-500' };
+    out.cols = body['cols'];
+  }
+  if (body['rows'] !== undefined) {
+    if (!isInt(body['rows'], 1, 200)) return { ok: false, code: 'invalid_rows', message: 'rows must be 1-200' };
+    out.rows = body['rows'];
   }
   return { ok: true, value: out };
 }
 
-/** Validate input body. */
-export function parseSessionInputRequest(body: unknown): ValidationResult<SessionInputRequest> {
-  if (!isPlainRecord(body)) {
-    return { ok: false, code: 'invalid_body', message: 'body must be an object' };
+export function parseStopTaskRequest(body: unknown): ValidationResult<StopTaskRequest> {
+  if (body === undefined || body === null) return { ok: true, value: {} };
+  if (!isPlainRecord(body)) return { ok: false, code: 'invalid_body', message: 'body must be an object' };
+  const force = body['force'];
+  if (force !== undefined && typeof force !== 'boolean') {
+    return { ok: false, code: 'invalid_force', message: 'force must be a boolean' };
   }
+  return { ok: true, value: force === undefined ? {} : { force } };
+}
+
+export function parseTaskInputRequest(body: unknown): ValidationResult<TaskInputRequest> {
+  if (!isPlainRecord(body)) return { ok: false, code: 'invalid_body', message: 'body must be an object' };
   const data = body['data'];
   if (typeof data !== 'string' || data.length === 0) {
     return { ok: false, code: 'invalid_data', message: 'data must be a non-empty string' };
   }
-  if (data.length > 1_048_576) {
-    return { ok: false, code: 'invalid_data', message: 'data must be at most 1MB per call' };
-  }
+  if (data.length > 1_048_576) return { ok: false, code: 'invalid_data', message: 'data must be at most 1MB per call' };
   return { ok: true, value: { data } };
 }
 
-/** Validate resize body. */
-export function parseSessionResizeRequest(body: unknown): ValidationResult<SessionResizeRequest> {
-  if (!isPlainRecord(body)) {
-    return { ok: false, code: 'invalid_body', message: 'body must be an object' };
-  }
+export function parseTaskResizeRequest(body: unknown): ValidationResult<TaskResizeRequest> {
+  if (!isPlainRecord(body)) return { ok: false, code: 'invalid_body', message: 'body must be an object' };
   const cols = body['cols'];
   const rows = body['rows'];
-  if (!isDims(cols, 1, 500)) {
-    return { ok: false, code: 'invalid_cols', message: 'cols must be an integer 1-500' };
-  }
-  if (!isDims(rows, 1, 200)) {
-    return { ok: false, code: 'invalid_rows', message: 'rows must be an integer 1-200' };
-  }
+  if (!isInt(cols, 1, 500)) return { ok: false, code: 'invalid_cols', message: 'cols must be an integer 1-500' };
+  if (!isInt(rows, 1, 200)) return { ok: false, code: 'invalid_rows', message: 'rows must be an integer 1-200' };
   return { ok: true, value: { cols, rows } };
 }
 
-/** Validate signal body. */
-export function parseSessionSignalRequest(body: unknown): ValidationResult<SessionSignalRequest> {
-  if (!isPlainRecord(body)) {
-    return { ok: false, code: 'invalid_body', message: 'body must be an object' };
-  }
-  const signal = body['signal'];
-  if (signal !== 'interrupt' && signal !== 'terminate' && signal !== 'kill') {
-    return { ok: false, code: 'invalid_signal', message: 'signal must be interrupt, terminate, or kill' };
-  }
-  const confirmPid = body['confirmPid'];
-  if (confirmPid !== undefined && !isPid(confirmPid)) {
-    return { ok: false, code: 'invalid_confirmPid', message: 'confirmPid must be an integer above zero' };
-  }
-  return { ok: true, value: confirmPid === undefined ? { signal } : { signal, confirmPid } };
-}
-
-/** Validate output query. Applies defaults. */
-export function parseSessionOutputQuery(query: unknown): ValidationResult<SessionOutputQuery> {
-  if (!isPlainRecord(query)) {
-    return { ok: false, code: 'invalid_query', message: 'query must be an object' };
-  }
-  const tailBytes = query['tailBytes'] ?? 65_536;
-  const sinceSeq = query['sinceSeq'];
-  const limit = query['limit'] ?? 200;
-  if (!isDims(tailBytes, 1, 1_048_576)) {
+/** Output query with defaults applied. Accepts numbers or numeric strings (from a URL). */
+export function parseTaskOutputQuery(query: unknown): ValidationResult<Required<Omit<TaskOutputQuery, 'sinceSeq'>> & { sinceSeq?: number }> {
+  if (!isPlainRecord(query)) return { ok: false, code: 'invalid_query', message: 'query must be an object' };
+  const num = (value: unknown): unknown =>
+    typeof value === 'string' && value.trim().length > 0 && Number.isFinite(Number(value)) ? Number(value) : value;
+  const tailBytes = num(query['tailBytes'] ?? 65_536);
+  const limit = num(query['limit'] ?? 200);
+  const sinceSeq = num(query['sinceSeq']);
+  if (!isInt(tailBytes, 1, 1_048_576)) {
     return { ok: false, code: 'invalid_tailBytes', message: 'tailBytes must be an integer 1-1048576' };
   }
-  if (sinceSeq !== undefined && !(typeof sinceSeq === 'number' && Number.isInteger(sinceSeq) && sinceSeq >= 0)) {
+  if (!isInt(limit, 1, 1000)) return { ok: false, code: 'invalid_limit', message: 'limit must be an integer 1-1000' };
+  if (sinceSeq !== undefined && !isInt(sinceSeq, 0, Number.MAX_SAFE_INTEGER)) {
     return { ok: false, code: 'invalid_sinceSeq', message: 'sinceSeq must be an integer at or above zero' };
   }
-  if (!isDims(limit, 1, 1000)) {
-    return { ok: false, code: 'invalid_limit', message: 'limit must be an integer 1-1000' };
-  }
-  const outputValue: SessionOutputQuery = {
-    tailBytes,
-    limit
-  };
-  if (typeof sinceSeq === 'number') {
-    outputValue.sinceSeq = sinceSeq;
-  }
-  return {
-    ok: true,
-    value: outputValue
-  };
+  return { ok: true, value: sinceSeq === undefined ? { tailBytes, limit } : { tailBytes, limit, sinceSeq } };
 }
 
-/** Validate list filters. All fields optional. */
-export function parseListSessionsQuery(query: unknown): ValidationResult<ListSessionsQuery> {
-  if (!isPlainRecord(query)) {
-    return { ok: false, code: 'invalid_query', message: 'query must be an object' };
-  }
-  const out: ListSessionsQuery = {};
-  if (query['provider'] !== undefined) {
-    const parsed = parseAgentProvider(query['provider']);
-    if (!parsed.ok) return parsed;
-    out.provider = parsed.value;
-  }
-  if (query['lifecycle'] !== undefined) {
-    const raw = query['lifecycle'];
-    if (typeof raw !== 'string' || !(LIFECYCLES as readonly string[]).includes(raw)) {
-      return { ok: false, code: 'invalid_lifecycle', message: 'lifecycle filter is not recognized' };
+export function parseSettingsPatch(body: unknown): ValidationResult<Partial<Settings>> {
+  if (!isPlainRecord(body)) return { ok: false, code: 'invalid_body', message: 'body must be an object' };
+  const out: Partial<Settings> = {};
+  if (body['stopWithAgent'] !== undefined) {
+    if (typeof body['stopWithAgent'] !== 'boolean') {
+      return { ok: false, code: 'invalid_stopWithAgent', message: 'stopWithAgent must be a boolean' };
     }
-    out.lifecycle = raw as SessionLifecycleStatus;
-  }
-  if (query['overlay'] !== undefined) {
-    const raw = query['overlay'];
-    if (typeof raw !== 'string' || !(OVERLAYS as readonly string[]).includes(raw)) {
-      return { ok: false, code: 'invalid_overlay', message: 'overlay filter is not recognized' };
-    }
-    out.overlay = raw as SessionOverlayStatus;
-  }
-  if (query['cwd'] !== undefined) {
-    const raw = query['cwd'];
-    if (!isAbsolutePath(raw)) {
-      return { ok: false, code: 'invalid_cwd', message: 'cwd filter must be an absolute path' };
-    }
-    out.cwd = raw;
+    out.stopWithAgent = body['stopWithAgent'];
   }
   return { ok: true, value: out };
-}
-
-/** Validate session id path param. */
-export function parseSessionIdParam(value: unknown): ValidationResult<string> {
-  if (!isUuid(value)) {
-    return { ok: false, code: 'invalid_session_id', message: 'session id must be a UUID string' };
-  }
-  return { ok: true, value };
-}
-
-/** Validate pid path or body value. Shared helper. */
-export function parsePidValue(value: unknown): ValidationResult<number> {
-  if (!isPid(value)) {
-    return { ok: false, code: 'invalid_pid', message: 'pid must be an integer above zero' };
-  }
-  return { ok: true, value };
-}
-
-/** Validate port value. Shared helper. */
-export function parsePortValue(value: unknown): ValidationResult<number> {
-  if (!isPort(value)) {
-    return { ok: false, code: 'invalid_port', message: 'port must be an integer 1-65535' };
-  }
-  return { ok: true, value };
-}
-
-/** Check a non-empty string helper used by title and command checks. */
-export function parseNonEmptyString(value: unknown, code: string): ValidationResult<string> {
-  if (!isNonEmptyString(value)) {
-    return { ok: false, code, message: 'value must be a non-empty string' };
-  }
-  return { ok: true, value: value.trim() };
 }

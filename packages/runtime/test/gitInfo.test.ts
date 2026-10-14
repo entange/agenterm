@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { simpleGit } from 'simple-git';
 import { describe, expect, it } from 'vitest';
-import { readGitInfo, sharedCwdSessions } from '../src/gitInfo.js';
+import { readGitInfo } from '../src/gitInfo.js';
 
 describe('readGitInfo', () => {
   it('reads branch and root from a scratch repo', async () => {
@@ -25,16 +25,5 @@ describe('readGitInfo', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agenterm-plain-'));
     const info = await readGitInfo(dir);
     expect(info).toEqual({ branch: null, worktreeRoot: null });
-  });
-});
-
-describe('sharedCwdSessions', () => {
-  it('lists other sessions sharing the cwd', () => {
-    const out = sharedCwdSessions('a', '/work', [
-      { id: 'a', cwd: '/work' },
-      { id: 'b', cwd: '/work' },
-      { id: 'c', cwd: '/other' }
-    ]);
-    expect(out).toEqual(['b']);
   });
 });

@@ -47,11 +47,3 @@ export async function readGitInfo(cwd: string, git?: SimpleGit): Promise<GitInfo
     return { branch: null, worktreeRoot: null };
   }
 }
-
-/**
- * List session ids that share a cwd with the given one, excluding the
- * given session itself. Powers the shared-cwd warning badge.
- */
-export function sharedCwdSessions(selfId: string, cwd: string, all: Array<{ id: string; cwd: string }>): string[] {
-  return all.filter((entry) => entry.id !== selfId && entry.cwd === cwd).map((entry) => entry.id);
-}

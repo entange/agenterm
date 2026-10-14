@@ -6,9 +6,9 @@ import { rig, TOKEN } from './helpers.js';
 
 type Frame = {
   kind: string;
-  event?: { kind: string; sessionId: string; seq?: number; data?: string };
+  event?: { kind: string; taskId: string; seq?: number; data?: string; task?: { status: string } };
   code?: string;
-  tick?: { sessions: Record<string, { bytes: number; lastLine: string | null }> };
+  tick?: { tasks: Record<string, { bytes: number; lastLine: string | null }> };
 };
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -62,7 +62,7 @@ describe('EventStream', () => {
   it('survives malformed and hostile frames', async () => {
     const { url, stream } = await listen();
     const { socket, frames } = await connect(url);
-    for (const raw of ['null', '42', '"x"', '[]', '{}', '{"kind":"terminal.input","sessionId":"x"}', 'not json']) {
+    for (const raw of ['null', '42', '"x"', '[]', '{}', '{"kind":"terminal.input","taskId":"x"}', 'not json']) {
       socket.send(raw);
     }
     await until(() => frames.filter((frame) => frame.kind === 'error').length >= 7);
@@ -74,16 +74,18 @@ describe('EventStream', () => {
 
   it('sends terminal bytes only to subscribed clients and replays from a cursor', async () => {
     const { url, spawn, last } = await listen();
-    const session = await spawn();
+    const task = await spawn();
     const watcher = await connect(url);
     const bystander = await connect(url);
     last()?.emitData('before-subscribe');
-    watcher.socket.send(JSON.stringify({ kind: 'subscribe', sessionId: session.id, sinceSeq: 0 }));
+    watcher.socket.send(JSON.stringify({ kind: 'subscribe', taskId: task.id, sinceSeq: 0 }));
     await until(() => watcher.frames.some((frame) => frame.event?.data === 'before-subscribe'));
     last()?.emitData('live');
     await until(() => watcher.frames.some((frame) => frame.event?.data === 'live'));
     last()?.emitExit(0);
-    await until(() => bystander.frames.some((frame) => frame.event?.kind === 'session.exited'));
+    await until(() =>
+      bystander.frames.some((frame) => frame.event?.kind === 'task.updated' && frame.event.task?.status === 'exited')
+    );
     expect(bystander.frames.some((frame) => frame.event?.kind === 'terminal.output')).toBe(false);
     watcher.socket.close();
     bystander.socket.close();
@@ -91,27 +93,27 @@ describe('EventStream', () => {
 
   it('accepts input frames for live PTYs only', async () => {
     const { url, spawn, last } = await listen();
-    const session = await spawn();
+    const task = await spawn();
     const { socket, frames } = await connect(url);
-    socket.send(JSON.stringify({ kind: 'terminal.input', sessionId: session.id, data: 'ls\r' }));
+    socket.send(JSON.stringify({ kind: 'terminal.input', taskId: task.id, data: 'ls\r' }));
     await until(() => (last()?.written.length ?? 0) > 0);
     expect(last()?.written).toEqual(['ls\r']);
     last()?.emitExit(0);
-    socket.send(JSON.stringify({ kind: 'terminal.input', sessionId: session.id, data: 'late' }));
-    await until(() => frames.some((frame) => frame.code === 'no_pty'));
+    socket.send(JSON.stringify({ kind: 'terminal.input', taskId: task.id, data: 'late' }));
+    await until(() => frames.some((frame) => frame.code === 'not_running'));
     socket.close();
   });
 });
 
 describe('EventStream activity frames', () => {
-  it('summarizes every session once per tick without streaming bytes', async () => {
+  it('summarizes every task once per tick without streaming bytes', async () => {
     const { url, spawn, last } = await listen();
-    const session = await spawn();
+    const task = await spawn();
     const { socket, frames } = await connect(url);
     last()?.emitData('\x1b[32mbuilding\x1b[0m\r\n');
     await until(() => frames.some((frame) => frame.kind === 'activity'));
     const tick = frames.find((frame) => frame.kind === 'activity')?.tick;
-    expect(tick?.sessions[session.id]).toEqual({ bytes: 19, lastLine: 'building' });
+    expect(tick?.tasks[task.id]).toEqual({ bytes: 19, lastLine: 'building' });
     expect(frames.some((frame) => frame.event?.kind === 'terminal.output')).toBe(false);
     socket.close();
   });

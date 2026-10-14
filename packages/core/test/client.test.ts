@@ -1,69 +1,65 @@
 import { describe, expect, it } from 'vitest';
 import { AgentermClient } from '../src/client.js';
 
-function stubFetch(routes: Record<string, unknown>): typeof fetch {
-  return (async (input: string | URL | Request) => {
-    const url = String(input);
-    const path = url.replace(/^https?:\/\/[^/]+/, '');
-    const body = routes[path];
+type Call = { method: string; path: string; body: unknown };
+
+function stub(routes: Record<string, unknown>, calls: Call[] = []): typeof fetch {
+  return (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input));
+    const method = init?.method ?? 'GET';
+    calls.push({ method, path: url.pathname + url.search, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) });
+    const body = routes[`${method} ${url.pathname}`];
     if (body === undefined) {
-      return new Response(JSON.stringify({ error: { code: 'not_found', message: 'missing' } }), {
-        status: 404,
-        headers: { ['Content-Type']: 'application/json' }
+      return new Response(JSON.stringify({ error: { code: 'unknown_task', message: 'no task matches', hint: 'list first' } }), {
+        status: 404
       });
     }
-    return new Response(JSON.stringify(body), {
-      status: 200,
-      headers: { ['Content-Type']: 'application/json' }
-    });
+    return new Response(JSON.stringify(body), { status: 200 });
   }) as typeof fetch;
 }
 
-describe('AgentermClient session methods', () => {
-  it('maps spawn, input, resize, signal, output, and delete envelopes', async () => {
-    const session = { id: 's1', pid: 111 };
+describe('AgentermClient', () => {
+  it('maps task routes', async () => {
+    const calls: Call[] = [];
+    const task = { id: 'web', pid: 111 };
     const client = new AgentermClient({
-      baseUrl: 'http://127.0.0.1:1',
+      baseUrl: 'http://127.0.0.1:1/',
       token: 't',
-      fetchImpl: stubFetch({
-        ['/sessions']: { session },
-        [`/sessions/s1/input`]: { acceptedBytes: 5 },
-        [`/sessions/s1/resize`]: { cols: 120, rows: 30 },
-        [`/sessions/s1/signal`]: { signaled: true, pid: 111, signal: 'interrupt' },
-        [`/sessions/s1/output`]: { sessionId: 's1', chunks: [], resumeAfterSeq: null, hasMore: false },
-        [`/sessions/s1/processes`]: { sessionId: 's1', processes: [], sampledAtMs: 0 },
-        [`/sessions/s1/ports`]: { sessionId: 's1', ports: [], sampledAtMs: 0 },
-        [`/sessions/s1`]: { detached: true, killed: false, pid: 111 }
-      })
+      fetchImpl: stub(
+        {
+          'POST /tasks': { task, alreadyRunning: false },
+          'GET /tasks': { tasks: [task] },
+          'POST /tasks/web/stop': { task },
+          'DELETE /tasks/web': { removed: true, stopped: false },
+          'POST /tasks/web/input': { acceptedBytes: 3 },
+          'GET /tasks/web/output': { taskId: 'web', chunks: [], resumeAfterSeq: null, hasMore: false, firstSeq: null, live: true },
+          'PATCH /settings': { stopWithAgent: true }
+        },
+        calls
+      )
     });
-    const spawned = await client.spawn({ provider: 'generic', command: '/bin/echo', cwd: '/tmp' });
-    expect(spawned.session.pid).toBe(111);
-    expect((await client.sendInput('s1', { data: 'hi' })).acceptedBytes).toBe(5);
-    expect((await client.resize('s1', { cols: 120, rows: 30 })).cols).toBe(120);
-    expect((await client.signal('s1', { signal: 'interrupt' })).signaled).toBe(true);
-    expect((await client.output('s1')).chunks).toEqual([]);
-    expect((await client.processes('s1')).processes).toEqual([]);
-    expect((await client.ports('s1')).ports).toEqual([]);
-    expect((await client.deleteSession('s1', { killTree: false })).detached).toBe(true);
+    expect((await client.run({ command: 'npm run dev', cwd: '/tmp' })).task.pid).toBe(111);
+    expect((await client.listTasks()).tasks).toHaveLength(1);
+    expect((await client.stop('web', { force: true })).task.id).toBe('web');
+    expect((await client.remove('web')).removed).toBe(true);
+    expect((await client.sendInput('web', { data: 'y\r' })).acceptedBytes).toBe(3);
+    await client.output('web', { sinceSeq: 4 });
+    expect((await client.updateSettings({ stopWithAgent: true })).stopWithAgent).toBe(true);
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toContain('GET /tasks/web/output?sinceSeq=4');
+    expect(calls.find((call) => call.path === '/tasks/web/stop')?.body).toEqual({ force: true });
   });
 
-  it('throws readable errors on failure envelopes', async () => {
-    const client = new AgentermClient({
-      baseUrl: 'http://127.0.0.1:1',
-      token: 't',
-      fetchImpl: stubFetch({})
-    });
-    await expect(client.spawn({ provider: 'generic', command: 'x', cwd: '/tmp' })).rejects.toThrow('missing');
+  it('throws readable errors with the code and hint', async () => {
+    const client = new AgentermClient({ baseUrl: 'http://127.0.0.1:1', token: 't', fetchImpl: stub({}) });
+    await expect(client.getTask('nope')).rejects.toMatchObject({ code: 'unknown_task', hint: 'list first', status: 404 });
   });
-});
 
-describe('client timeouts', () => {
   it('turns a daemon that never answers into a timeout error', async () => {
     const fetchImpl = ((_input: string | URL | Request, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
       })) as typeof fetch;
     const client = new AgentermClient({ baseUrl: 'http://127.0.0.1:1', token: 't', fetchImpl, timeoutMs: 30 });
-    await expect(client.listSessions()).rejects.toMatchObject({ code: 'timeout', status: 504 });
+    await expect(client.listTasks()).rejects.toMatchObject({ code: 'timeout', status: 504 });
   });
 });

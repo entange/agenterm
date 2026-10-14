@@ -1,26 +1,26 @@
 /**
- * Environment for spawned agents.
+ * Environment for a task.
  *
- * Agents need the user's real login environment: HOME and USER for config
- * and keychain auth, SHELL and LANG for sane tooling, and any provider API
- * keys the user exported. The daemon inherits that environment from the
- * shell or from Electron main (which resolves the login shell env), so
- * spawns start from it. Daemon and Electron internals are removed so they
- * never leak into child tools, request overrides apply on top, and the
- * result is never persisted or logged.
+ * A command should behave as if it ran in the caller's terminal, so the
+ * caller's environment (PATH, HOME, API keys it exported) is the base when
+ * the CLI or MCP server sends it; otherwise the daemon's own, which it
+ * inherited from a login shell. Daemon and Electron internals are removed
+ * so they never leak into child tools. The result is never persisted or
+ * logged.
  */
 
 /** Keys that describe the daemon or its Electron host, not the user. */
 const INTERNAL_KEYS: readonly string[] = [
   'AGENTERM_PORT',
-  'AGENTERM_HARNESS_WATCH',
+  'AGENTERM_TASK_ID',
+  'AGENTERM_SESSION_ID',
   'ELECTRON_RUN_AS_NODE',
   'ELECTRON_NO_ATTACH_CONSOLE',
   'ELECTRON_ENABLE_LOGGING',
   'NODE_CHANNEL_FD'
 ];
 
-/** Build the spawn env from an inherited base plus validated overrides. */
+/** Build the spawn env from a base env plus overrides. */
 export function buildSpawnEnv(base: NodeJS.ProcessEnv, overrides: Record<string, string> = {}): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(base)) {

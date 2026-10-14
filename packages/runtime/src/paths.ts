@@ -24,15 +24,19 @@ export function lockPath(dir?: string): string {
   return path.join(dir ?? dataDir(), 'agentermd.lock');
 }
 
-export function sessionsDir(dir?: string): string {
-  return path.join(dir ?? dataDir(), 'sessions');
+export function settingsPath(dir?: string): string {
+  return path.join(dir ?? dataDir(), 'settings.json');
 }
 
-export function sessionDir(sessionId: string, dir?: string): string {
-  return path.join(sessionsDir(dir), sessionId);
+export function tasksDir(dir?: string): string {
+  return path.join(dir ?? dataDir(), 'tasks');
 }
 
-/** Raw terminal mirror for one session. Survives daemon restarts. */
-export function terminalLogPath(sessionId: string, dir?: string): string {
-  return path.join(sessionDir(sessionId, dir), 'terminal.log');
+export function taskDir(taskId: string, dir?: string): string {
+  return path.join(tasksDir(dir), taskId);
+}
+
+/** Raw terminal mirror for one task. Survives daemon restarts. */
+export function terminalLogPath(taskId: string, dir?: string): string {
+  return path.join(taskDir(taskId, dir), 'terminal.log');
 }

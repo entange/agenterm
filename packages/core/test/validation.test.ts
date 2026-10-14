@@ -1,128 +1,63 @@
 import { describe, expect, it } from 'vitest';
 import {
-  parseAttachSessionRequest,
-  parseListSessionsQuery,
-  parseSessionInputRequest,
-  parseSessionOutputQuery,
-  parseSessionResizeRequest,
-  parseSessionSignalRequest,
-  parseSpawnSessionRequest
+  parseRunTaskRequest,
+  parseStopTaskRequest,
+  parseTaskId,
+  parseTaskInputRequest,
+  parseTaskOutputQuery,
+  parseTaskResizeRequest
 } from '../src/validation.js';
 
-describe('spawn validation', () => {
-  it('accepts a full generic spawn', () => {
-    const out = parseSpawnSessionRequest({
-      provider: 'generic',
-      command: '/bin/echo',
-      args: ['hello'],
-      cwd: '/tmp',
-      title: 'echo check',
-      cols: 80,
-      rows: 24,
-      env: { TERM: 'xterm-256color' }
+describe('run validation', () => {
+  it('accepts a bare command and folder', () => {
+    expect(parseRunTaskRequest({ command: ' npm run dev ', cwd: '/repo' })).toEqual({
+      ok: true,
+      value: { command: 'npm run dev', cwd: '/repo' }
     });
-    expect(out.ok).toBe(true);
   });
 
-  it('rejects relative cwd', () => {
-    const out = parseSpawnSessionRequest({ provider: 'claude', cwd: 'relative/path' });
-    expect(out.ok).toBe(false);
+  it('accepts every optional field and normalizes the id', () => {
+    const out = parseRunTaskRequest({
+      command: 'npm run dev',
+      cwd: '/repo',
+      id: ' Web ',
+      title: 'dev server',
+      startedBy: 'claude',
+      startedByPid: 42,
+      env: { PATH: '/bin', DATABASE_URL: 'postgres://x' },
+      restart: true,
+      cols: 120,
+      rows: 30
+    });
+    expect(out.ok && out.value.id).toBe('web');
+    expect(out.ok && out.value.env?.['DATABASE_URL']).toBe('postgres://x');
   });
 
-  it('rejects unknown provider', () => {
-    const out = parseSpawnSessionRequest({ provider: 'nope', cwd: '/tmp' });
-    expect(out.ok).toBe(false);
-  });
-
-  it('rejects oversized args', () => {
-    const args = Array.from({ length: 201 }, (_, i) => `arg-${i}`);
-    const out = parseSpawnSessionRequest({ provider: 'generic', cwd: '/tmp', args });
-    expect(out.ok).toBe(false);
-  });
-
-  it('rejects bad dims', () => {
-    const out = parseSpawnSessionRequest({ provider: 'generic', cwd: '/tmp', cols: 0 });
-    expect(out.ok).toBe(false);
-  });
-
-  it('rejects non-object body without throwing', () => {
-    expect(parseSpawnSessionRequest(null).ok).toBe(false);
-    expect(parseSpawnSessionRequest('x').ok).toBe(false);
-    expect(parseSpawnSessionRequest([]).ok).toBe(false);
+  it('rejects bad input', () => {
+    expect(parseRunTaskRequest({ command: '', cwd: '/repo' }).ok).toBe(false);
+    expect(parseRunTaskRequest({ command: 'ls', cwd: 'relative' }).ok).toBe(false);
+    expect(parseRunTaskRequest({ command: 'ls', cwd: '/repo', id: '../etc' }).ok).toBe(false);
+    expect(parseRunTaskRequest({ command: 'ls', cwd: '/repo', env: { A: 1 } }).ok).toBe(false);
+    expect(parseRunTaskRequest({ command: 'ls', cwd: '/repo', startedByPid: -1 }).ok).toBe(false);
+    expect(parseRunTaskRequest([]).ok).toBe(false);
   });
 });
 
-describe('attach validation', () => {
-  it('accepts pid with title', () => {
-    const out = parseAttachSessionRequest({ pid: 1234, title: 'codex outer' });
-    expect(out.ok).toBe(true);
-  });
-
-  it('rejects zero pid', () => {
-    expect(parseAttachSessionRequest({ pid: 0 }).ok).toBe(false);
-  });
-
-  it('rejects missing pid', () => {
-    expect(parseAttachSessionRequest({}).ok).toBe(false);
-  });
-
-  it('rejects relative cwd hint', () => {
-    expect(parseAttachSessionRequest({ pid: 10, cwd: 'rel' }).ok).toBe(false);
+describe('task ids', () => {
+  it('allows short safe names only', () => {
+    expect(parseTaskId('npm-run-dev-3f9a')).toEqual({ ok: true, value: 'npm-run-dev-3f9a' });
+    expect(parseTaskId('a.b_c').ok).toBe(true);
+    for (const bad of ['', '-x', 'a/b', 'a b', '.', 'x'.repeat(65)]) expect(parseTaskId(bad).ok).toBe(false);
   });
 });
 
-describe('input resize signal output', () => {
-  it('rejects empty input', () => {
-    expect(parseSessionInputRequest({ data: '' }).ok).toBe(false);
-  });
-
-  it('accepts input bytes', () => {
-    expect(parseSessionInputRequest({ data: 'hello\n' }).ok).toBe(true);
-  });
-
-  it('rejects out of range resize', () => {
-    expect(parseSessionResizeRequest({ cols: 80, rows: 0 }).ok).toBe(false);
-  });
-
-  it('accepts resize', () => {
-    expect(parseSessionResizeRequest({ cols: 120, rows: 30 }).ok).toBe(true);
-  });
-
-  it('rejects unknown signal', () => {
-    expect(parseSessionSignalRequest({ signal: 'hangup' }).ok).toBe(false);
-  });
-
-  it('accepts known signals', () => {
-    expect(parseSessionSignalRequest({ signal: 'interrupt' }).ok).toBe(true);
-    expect(parseSessionSignalRequest({ signal: 'terminate' }).ok).toBe(true);
-    expect(parseSessionSignalRequest({ signal: 'kill' }).ok).toBe(true);
-  });
-
-  it('applies output defaults', () => {
-    const out = parseSessionOutputQuery({});
-    expect(out.ok).toBe(true);
-    if (out.ok) {
-      expect(out.value.tailBytes).toBe(65_536);
-      expect(out.value.limit).toBe(200);
-    }
-  });
-
-  it('rejects bad sinceSeq', () => {
-    expect(parseSessionOutputQuery({ sinceSeq: -1 }).ok).toBe(false);
-  });
-});
-
-describe('list filters', () => {
-  it('accepts empty filters', () => {
-    expect(parseListSessionsQuery({}).ok).toBe(true);
-  });
-
-  it('rejects unknown lifecycle', () => {
-    expect(parseListSessionsQuery({ lifecycle: 'sleeping' }).ok).toBe(false);
-  });
-
-  it('accepts provider filter', () => {
-    const out = parseListSessionsQuery({ provider: 'codex' });
-    expect(out.ok).toBe(true);
+describe('other bodies', () => {
+  it('validates stop, input, resize, and output', () => {
+    expect(parseStopTaskRequest(undefined)).toEqual({ ok: true, value: {} });
+    expect(parseStopTaskRequest({ force: 'yes' }).ok).toBe(false);
+    expect(parseTaskInputRequest({ data: '' }).ok).toBe(false);
+    expect(parseTaskResizeRequest({ cols: 0, rows: 10 }).ok).toBe(false);
+    expect(parseTaskOutputQuery({ sinceSeq: '7' })).toEqual({ ok: true, value: { tailBytes: 65536, limit: 200, sinceSeq: 7 } });
+    expect(parseTaskOutputQuery({ limit: '0' }).ok).toBe(false);
   });
 });

@@ -1,3 +1,5 @@
+import { redactText } from './redaction.js';
+
 const ANSI = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]/g;
 
 /**
@@ -18,4 +20,22 @@ export function lastVisibleLine(text: string): string | null {
     }
   }
   return null;
+}
+
+/**
+ * Terminal bytes as readable text for logs and agents: escape codes
+ * removed, carriage-return redraws (progress bars) collapsed to what the
+ * screen finally showed, and secrets masked.
+ */
+export function plainText(data: string): string {
+  const lines = data.replace(ANSI, '').split('\n');
+  return redactText(
+    lines
+      .map((line) => {
+        const segments = line.split('\r').filter((segment) => segment.length > 0);
+        return segments[segments.length - 1] ?? '';
+      })
+      .join('\n')
+      .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
+  );
 }

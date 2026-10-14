@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { SessionOutputChunk } from '@agenterm/core';
+import type { TaskOutputChunk } from '@agenterm/core';
 
 export interface ReadOutputOptions {
   /** Return chunks with seq greater than this value. Absent means read the tail. */
@@ -12,7 +12,7 @@ export interface ReadOutputOptions {
 }
 
 export interface ReadOutputResult {
-  chunks: SessionOutputChunk[];
+  chunks: TaskOutputChunk[];
   resumeAfterSeq: number | null;
   hasMore: boolean;
   /** Oldest seq still held, or null when empty. A cursor below firstSeq - 1 lost data. */
@@ -20,16 +20,16 @@ export interface ReadOutputResult {
 }
 
 /**
- * Per-session terminal store.
+ * Per-task terminal store.
  *
  * Holds the in-memory ring (capped bytes) plus an append-only file mirror
- * at sessions/<id>/terminal.log. Sequence numbers rise monotonically per
- * session starting at 1. Slow consumers re-fetch with the resume cursor.
+ * at tasks/<id>/terminal.log. Sequence numbers rise monotonically per
+ * task starting at 1. Slow consumers re-fetch with the resume cursor.
  * The PTY writer is never blocked by readers, and a failing mirror (disk
  * full, removed dir) is dropped instead of crashing the daemon.
  */
 export class TerminalLog {
-  private chunks: SessionOutputChunk[] = [];
+  private chunks: TaskOutputChunk[] = [];
   private heldBytes = 0;
   private seq = 0;
   private readonly maxBytes: number;
@@ -73,7 +73,7 @@ export class TerminalLog {
 
   /**
    * Append to terminal.log. Past maxFileBytes the file rotates to
-   * terminal.log.1 (replacing the previous one), so disk use per session
+   * terminal.log.1 (replacing the previous one), so disk use per task
    * stays under twice the cap. When the disk cannot keep up, bytes are
    * skipped rather than buffered without bound.
    */
@@ -108,8 +108,8 @@ export class TerminalLog {
   }
 
   /** Append one output chunk. Assigns the following sequence number. */
-  append(data: string): SessionOutputChunk {
-    const chunk: SessionOutputChunk = {
+  append(data: string): TaskOutputChunk {
+    const chunk: TaskOutputChunk = {
       seq: this.seq + 1,
       data,
       createdAtMs: Date.now()
@@ -132,8 +132,8 @@ export class TerminalLog {
   private released = false;
 
   /**
-   * Drop the in-memory ring of an ended session whose bytes are on disk.
-   * With hundreds of sessions, ended rings would otherwise pin memory.
+   * Drop the in-memory ring of an ended task whose bytes are on disk.
+   * With hundreds of tasks, ended rings would otherwise pin memory.
    */
   release(): void {
     this.released = true;
@@ -216,8 +216,8 @@ const MAX_PENDING_WRITE_BYTES = 8 * 1024 * 1024;
 /**
  * Read the tail of a terminal.log mirror from disk.
  *
- * Backs scrollback for sessions whose PTY is gone (daemon restarted or
- * session ended before the ring was kept). Returns null when the file is
+ * Backs scrollback for tasks whose PTY is gone (daemon restarted or
+ * task ended before the ring was kept). Returns null when the file is
  * missing. Starts on a line boundary where one exists so the first row
  * is not a torn escape sequence.
  */
@@ -225,7 +225,7 @@ export function readLogTail(file: string, maxBytes = 65_536): string | null {
   return tailText(file, maxBytes, (fd, buffer, position) => fs.readSync(fd, buffer, 0, buffer.length, position));
 }
 
-/** readLogTail without blocking the event loop, for scans across many sessions. */
+/** readLogTail without blocking the event loop, for scans across many tasks. */
 export async function readLogTailAsync(file: string, maxBytes = 65_536): Promise<string | null> {
   let handle: fs.promises.FileHandle | null = null;
   try {

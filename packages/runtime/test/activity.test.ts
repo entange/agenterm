@@ -9,20 +9,20 @@ describe('ActivityMeter', () => {
     now += 1000;
     meter.record('s', '\x1b[31mfail\x1b[0m\n');
     now += 500;
-    const snap = meter.snapshot().sessions['s'];
+    const snap = meter.snapshot().tasks['s'];
     expect(snap?.samples).toHaveLength(ACTIVITY_WINDOW_SECONDS);
     expect(snap?.samples.slice(-2)).toEqual([5, 14]);
     expect(snap?.lastLine).toBe('fail');
     expect(snap?.lastOutputAtMs).toBe(1_001_000);
   });
 
-  it('drops buckets that leave the window and forgets closed sessions', () => {
+  it('drops buckets that leave the window and forgets removed tasks', () => {
     let now = 0;
     const meter = new ActivityMeter(() => now);
     meter.record('s', 'x');
     now += (ACTIVITY_WINDOW_SECONDS + 5) * 1000;
-    expect(meter.snapshot().sessions['s']?.samples.every((value) => value === 0)).toBe(true);
+    expect(meter.snapshot().tasks['s']?.samples.every((value) => value === 0)).toBe(true);
     meter.forget('s');
-    expect(meter.snapshot().sessions['s']).toBe(undefined);
+    expect(meter.snapshot().tasks['s']).toBe(undefined);
   });
 });

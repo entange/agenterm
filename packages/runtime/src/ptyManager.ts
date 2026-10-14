@@ -26,7 +26,7 @@ export interface SpawnSpec {
   env: Record<string, string>;
   cols: number;
   rows: number;
-  sessionId: string;
+  taskId: string;
 }
 
 export interface PtyExit {
@@ -35,7 +35,7 @@ export interface PtyExit {
 }
 
 export interface ManagedPty {
-  sessionId: string;
+  taskId: string;
   pid: number;
   log: TerminalLog;
   exit: PtyExit | null;
@@ -68,25 +68,26 @@ function defaultSpawn(
 /**
  * PTY owner. Only the daemon may hold PTYs.
  *
- * Spawns the agent binary in a real pseudo-terminal, funnels output into
- * the per-session ring plus file mirror, and reports exits with code and
- * signal. Attached sessions never receive a PTY.
+ * Spawns a command in a real pseudo-terminal, funnels output into the
+ * per-task ring plus file mirror, and reports exits with code and signal.
+ * A PTY that was forgotten (its task removed or restarted under the same
+ * id) stops reporting, so it can never touch its successor.
  */
 export class PtyManager {
-  private readonly sessions = new Map<string, { handle: PtyHandle; record: ManagedPty }>();
+  private readonly tasks = new Map<string, { handle: PtyHandle; record: ManagedPty }>();
   private readonly spawnFn: SpawnFn;
   private readonly dataDir: string | undefined;
   private readonly maxBytes: number;
-  onOutput: ((sessionId: string, data: string) => void) | undefined;
-  onExit: ((sessionId: string, exit: PtyExit) => void) | undefined;
+  onOutput: ((taskId: string, data: string) => void) | undefined;
+  onExit: ((taskId: string, exit: PtyExit) => void) | undefined;
 
   constructor(
     options: {
       spawnFn?: SpawnFn | undefined;
       dataDir?: string | undefined;
       maxBytes?: number | undefined;
-      onOutput?: ((sessionId: string, data: string) => void) | undefined;
-      onExit?: ((sessionId: string, exit: PtyExit) => void) | undefined;
+      onOutput?: ((taskId: string, data: string) => void) | undefined;
+      onExit?: ((taskId: string, exit: PtyExit) => void) | undefined;
     } = {}
   ) {
     this.spawnFn = options.spawnFn ?? defaultSpawn;
@@ -97,8 +98,8 @@ export class PtyManager {
   }
 
   spawn(spec: SpawnSpec): ManagedPty {
-    if (this.sessions.has(spec.sessionId)) {
-      throw new Error(`session ${spec.sessionId} already owns a PTY`);
+    if (this.tasks.has(spec.taskId)) {
+      throw new Error(`task ${spec.taskId} already owns a PTY`);
     }
     // spec.env is already composed by buildSpawnEnv; only terminal identity is forced here.
     const env: Record<string, string> = {
@@ -106,7 +107,7 @@ export class PtyManager {
       ['TERM']: 'xterm-256color',
       ['COLORTERM']: 'truecolor',
       ['AGENTERM']: '1',
-      ['AGENTERM_SESSION_ID']: spec.sessionId
+      ['AGENTERM_TASK_ID']: spec.taskId
     };
     const handle = this.spawnFn(spec.file, spec.args, {
       cwd: spec.cwd,
@@ -117,64 +118,66 @@ export class PtyManager {
     });
     const logOptions: { maxBytes: number; file?: string | undefined } = { maxBytes: this.maxBytes };
     if (typeof this.dataDir === 'string') {
-      logOptions.file = terminalLogPath(spec.sessionId, this.dataDir);
+      logOptions.file = terminalLogPath(spec.taskId, this.dataDir);
     }
     const record: ManagedPty = {
-      sessionId: spec.sessionId,
+      taskId: spec.taskId,
       pid: handle.pid,
       log: new TerminalLog(logOptions),
       exit: null
     };
+    const current = (): boolean => this.tasks.get(spec.taskId)?.record === record;
     handle.onData((data: string) => {
+      if (!current()) return;
       record.log.append(data);
-      this.onOutput?.(spec.sessionId, data);
+      this.onOutput?.(spec.taskId, data);
     });
     handle.onExit((event: { exitCode: number; signal?: number }) => {
       record.exit = { exitCode: event.exitCode, signal: signalName(event.signal) };
-      this.onExit?.(spec.sessionId, record.exit);
+      if (current()) this.onExit?.(spec.taskId, record.exit);
     });
-    this.sessions.set(spec.sessionId, { handle, record });
+    this.tasks.set(spec.taskId, { handle, record });
     return record;
   }
 
-  get(sessionId: string): ManagedPty | null {
-    return this.sessions.get(sessionId)?.record ?? null;
+  get(taskId: string): ManagedPty | null {
+    return this.tasks.get(taskId)?.record ?? null;
   }
 
-  has(sessionId: string): boolean {
-    return this.sessions.has(sessionId);
+  has(taskId: string): boolean {
+    return this.tasks.has(taskId);
   }
 
-  write(sessionId: string, data: string): void {
-    const entry = this.sessions.get(sessionId);
+  write(taskId: string, data: string): void {
+    const entry = this.tasks.get(taskId);
     if (entry === undefined) {
-      throw new Error(`session ${sessionId} has no owned PTY`);
+      throw new Error(`task ${taskId} has no owned PTY`);
     }
     entry.handle.write(data);
   }
 
-  resize(sessionId: string, cols: number, rows: number): void {
-    const entry = this.sessions.get(sessionId);
+  resize(taskId: string, cols: number, rows: number): void {
+    const entry = this.tasks.get(taskId);
     if (entry === undefined) {
-      throw new Error(`session ${sessionId} has no owned PTY`);
+      throw new Error(`task ${taskId} has no owned PTY`);
     }
     entry.handle.resize(cols, rows);
   }
 
   /** End the PTY leader. Tree cleanup is the supervisor kill-tree path. */
-  kill(sessionId: string, signal = 'SIGTERM'): void {
-    const entry = this.sessions.get(sessionId);
+  kill(taskId: string, signal = 'SIGTERM'): void {
+    const entry = this.tasks.get(taskId);
     if (entry === undefined) {
-      throw new Error(`session ${sessionId} has no owned PTY`);
+      throw new Error(`task ${taskId} has no owned PTY`);
     }
     entry.handle.kill(signal);
   }
 
-  /** Drop the session's PTY record. Resolves after its log file is closed. */
-  forget(sessionId: string): Promise<void> {
-    const entry = this.sessions.get(sessionId);
+  /** Drop the task's PTY record. Resolves after its log file is closed. */
+  forget(taskId: string): Promise<void> {
+    const entry = this.tasks.get(taskId);
     if (entry === undefined) return Promise.resolve();
-    this.sessions.delete(sessionId);
+    this.tasks.delete(taskId);
     return entry.record.log.close();
   }
 }

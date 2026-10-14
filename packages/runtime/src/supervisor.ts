@@ -2,7 +2,6 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import si from 'systeminformation';
 import treeKill from 'tree-kill';
-import { redactText, type PortRecord, type ProcessSnapshot } from '@agenterm/core';
 
 /** One OS process as seen by the poller. */
 export interface ProcEntry {
@@ -103,29 +102,6 @@ export function parseLsofListeners(stdout: string): SockEntry[] {
 }
 
 /**
- * A command line safe and short enough to show: secrets masked, and the
- * inline `--settings {...}` JSON agenterm passes to Claude Code (which
- * carries the session's ingest token) folded to `{…}`.
- */
-export function displayCommand(command: string): string {
-  let out = command;
-  const start = out.indexOf('--settings {');
-  if (start !== -1) {
-    let depth = 0;
-    let end = -1;
-    for (let i = start + '--settings '.length; i < out.length; i++) {
-      if (out[i] === '{') depth++;
-      else if (out[i] === '}' && --depth === 0) {
-        end = i;
-        break;
-      }
-    }
-    out = `${out.slice(0, start)}--settings {…}${end === -1 ? '' : out.slice(end + 1)}`;
-  }
-  return redactText(out);
-}
-
-/**
  * Listening TCP sockets. POSIX asks lsof for listeners only, which is a
  * fraction of the cost of a full connection scan.
  */
@@ -180,17 +156,12 @@ function treeKillAsync(pid: number, signal: string): Promise<void> {
   });
 }
 
-export interface PortChange {
-  opened: PortRecord[];
-  closed: PortRecord[];
-}
-
 /**
  * Skinny supervisor.
  *
- * Polls on an interval scoped to tracked session subtrees. Builds the
+ * Polls on an interval scoped to tracked task subtrees. Builds the
  * pid to child pid mapping, joins listening sockets back to owning pids,
- * and reports port open and close changes. Kill-tree uses the polled PID
+ * and reports when a task's listening ports change. Kill-tree uses the polled PID
  * list first with the portable killer as backup, and only ever touches
  * pids inside the tracked leader subtree.
  */
@@ -199,16 +170,15 @@ export class Supervisor {
   private readonly intervalMs: number;
   private readonly leaders = new Map<string, number>();
   private children = new Map<number, number[]>();
-  private byPid = new Map<number, ProcEntry>();
-  private lastPorts = new Map<string, PortRecord[]>();
+  private lastPorts = new Map<string, number[]>();
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private readonly onPorts: ((sessionId: string, change: PortChange) => void) | undefined;
+  private readonly onPorts: ((taskId: string, ports: number[]) => void) | undefined;
 
   constructor(
     options: {
       probes?: SupervisorProbes | undefined;
       intervalMs?: number | undefined;
-      onPorts?: ((sessionId: string, change: PortChange) => void) | undefined;
+      onPorts?: ((taskId: string, ports: number[]) => void) | undefined;
     } = {}
   ) {
     this.probes = options.probes ?? { processes: defaultProcesses, sockets: defaultSockets };
@@ -216,13 +186,13 @@ export class Supervisor {
     this.onPorts = options.onPorts;
   }
 
-  track(sessionId: string, leaderPid: number): void {
-    this.leaders.set(sessionId, leaderPid);
+  track(taskId: string, leaderPid: number): void {
+    this.leaders.set(taskId, leaderPid);
   }
 
-  untrack(sessionId: string): void {
-    this.leaders.delete(sessionId);
-    this.lastPorts.delete(sessionId);
+  untrack(taskId: string): void {
+    this.leaders.delete(taskId);
+    this.lastPorts.delete(taskId);
   }
 
   /** Direct children of a pid from the most recent poll. */
@@ -261,7 +231,6 @@ export class Supervisor {
     // Skip the system scan entirely while nothing is tracked.
     if (this.leaders.size === 0) {
       this.children = new Map();
-      this.byPid = new Map();
       return;
     }
     try {
@@ -271,76 +240,49 @@ export class Supervisor {
       return;
     }
     const kids = new Map<number, number[]>();
-    const byPid = new Map<number, ProcEntry>();
     for (const entry of procs) {
-      byPid.set(entry.pid, entry);
       const list = kids.get(entry.ppid) ?? [];
       list.push(entry.pid);
       kids.set(entry.ppid, list);
     }
     this.children = kids;
-    this.byPid = byPid;
-    for (const [sessionId, leader] of this.leaders) {
+    for (const [taskId, leader] of this.leaders) {
       const owned = new Set(this.subtreePids(leader));
-      const ports: PortRecord[] = [];
-      for (const sock of socks) {
-        if (!owned.has(sock.pid)) continue;
-        ports.push({ port: sock.port, pid: sock.pid, sessionId, address: sock.address });
-      }
-      ports.sort((a, b) => a.port - b.port);
-      const before = this.lastPorts.get(sessionId) ?? [];
-      const beforeKeys = new Set(before.map((p) => `${p.port}:${p.pid}`));
-      const afterKeys = new Set(ports.map((p) => `${p.port}:${p.pid}`));
-      const opened = ports.filter((p) => !beforeKeys.has(`${p.port}:${p.pid}`));
-      const closed = before.filter((p) => !afterKeys.has(`${p.port}:${p.pid}`));
-      this.lastPorts.set(sessionId, ports);
-      if ((opened.length > 0 || closed.length > 0) && this.onPorts !== undefined) {
-        this.onPorts(sessionId, { opened, closed });
-      }
+      const ports = [...new Set(socks.filter((sock) => owned.has(sock.pid)).map((sock) => sock.port))].sort(
+        (a, b) => a - b
+      );
+      const before = this.lastPorts.get(taskId) ?? [];
+      this.lastPorts.set(taskId, ports);
+      if (this.onPorts !== undefined && ports.join(',') !== before.join(',')) this.onPorts(taskId, ports);
     }
   }
 
-  /** Snapshot of the session subtree from the most recent poll. */
-  snapshot(sessionId: string, sampledAtMs = Date.now()): ProcessSnapshot[] {
-    const leader = this.leaders.get(sessionId);
-    if (leader === undefined) return [];
-    const out: ProcessSnapshot[] = [];
-    for (const pid of this.subtreePids(leader)) {
-      const entry = this.byPid.get(pid);
-      out.push({
-        pid,
-        ppid: entry?.ppid ?? 0,
-        sessionId,
-        command: displayCommand(entry?.command ?? ''),
-        cwd: null,
-        cpuPercent: entry?.cpuPercent ?? null,
-        rssBytes: entry?.rssBytes ?? null,
-        startedAtMs: null,
-        endedAtMs: null,
-        exitCode: null,
-        sampledAtMs
-      });
-    }
-    out.sort((a, b) => a.pid - b.pid);
-    return out;
-  }
-
-  /** Listening ports owned by the session from the most recent poll. */
-  portsFor(sessionId: string): PortRecord[] {
-    return [...(this.lastPorts.get(sessionId) ?? [])];
+  /** Listening ports owned by the task from the most recent poll. */
+  portsFor(taskId: string): number[] {
+    return [...(this.lastPorts.get(taskId) ?? [])];
   }
 
   /**
-   * End a session tree.
+   * End a task's process tree.
    *
    * Signals the leader plus polled descendants with SIGTERM, then SIGKILL
-   * for survivors after a grace wait. Returns the pids that were signaled.
+   * for survivors after a grace wait. With force, SIGKILL right away. Returns the pids that were signaled.
    * Only pids inside the leader subtree are ever touched.
    */
-  async killTree(leaderPid: number): Promise<number[]> {
+  async killTree(leaderPid: number, options: { force?: boolean } = {}): Promise<number[]> {
     await this.poll();
     const targets = this.subtreePids(leaderPid).filter((pid) => pidAlive(pid));
     if (targets.length === 0) return [];
+    if (options.force === true) {
+      for (const pid of targets) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // Exited in between.
+        }
+      }
+      return targets;
+    }
     await treeKillAsync(leaderPid, 'SIGTERM');
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const survivors = targets.filter((pid) => pidAlive(pid));
@@ -361,7 +303,7 @@ export class Supervisor {
 
   /**
    * Poll on a self-scheduling loop: one cycle never overlaps the next, and
-   * the pause grows with the number of tracked trees so hundreds of sessions
+   * the pause grows with the number of tracked trees so hundreds of tasks
    * do not keep ps and lsof busy.
    */
   start(): void {

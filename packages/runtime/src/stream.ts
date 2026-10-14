@@ -1,8 +1,7 @@
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { parseSessionIdParam } from '@agenterm/core';
-import type { AgentermEvent } from '@agenterm/core';
+import { parseTaskId, type AgentermEvent } from '@agenterm/core';
 import { checkBearer } from './auth.js';
 import type { EventBus } from './events.js';
 import { DAEMON_VERSION } from './paths.js';
@@ -17,17 +16,10 @@ const MAX_PAYLOAD_BYTES = 1024 * 1024;
 /** Outbound backlog past which a slow consumer drops frames and re-fetches. */
 const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 
-/** Wildcard subscription that receives terminal bytes for every session. */
-export const ALL_SESSIONS = '*';
-
 interface Client {
   socket: WebSocket;
-  /** Session ids whose terminal bytes this client wants, or the wildcard. */
+  /** Task ids whose terminal bytes this client wants. */
   outputs: Set<string>;
-}
-
-function isTerminalEvent(event: AgentermEvent): boolean {
-  return event.kind === 'terminal.output' || event.kind === 'terminal.input';
 }
 
 function send(socket: WebSocket, payload: unknown): void {
@@ -55,10 +47,9 @@ function asRecord(value: unknown): Record<string, unknown> | null {
  * Authenticated WebSocket fan-out for the event stream.
  *
  * The bearer token is checked before the upgrade completes so rejected
- * peers never get a socket. Lifecycle, port, status, and file events go
- * to every client; terminal bytes only go to clients that subscribed to
- * that session (or to the wildcard), which keeps N busy agents from
- * flooding every window. Malformed frames get an error reply and never
+ * peers never get a socket. Task updates go to every client; terminal
+ * bytes only go to clients subscribed to that task, which keeps hundreds
+ * of busy tasks from flooding every window. Malformed frames get an error reply and never
  * throw out of the listener.
  */
 export class EventStream {
@@ -73,7 +64,7 @@ export class EventStream {
       token: string;
       bus: EventBus;
       pty: PtyManager;
-      onInput?: ((sessionId: string, data: string) => void) | undefined;
+      onInput?: ((taskId: string, data: string) => void) | undefined;
       /** Source of the per-second activity frame sent to every client. */
       activity?: { drain: () => unknown } | undefined;
       activityIntervalMs?: number | undefined;
@@ -149,13 +140,7 @@ export class EventStream {
     }
     const kind = message['kind'];
     if (kind === 'subscribe' || kind === 'unsubscribe') {
-      const target = message['sessionId'];
-      if (target === ALL_SESSIONS) {
-        if (kind === 'subscribe') client.outputs.add(ALL_SESSIONS);
-        else client.outputs.clear();
-        return;
-      }
-      const idParsed = parseSessionIdParam(target);
+      const idParsed = parseTaskId(message['taskId']);
       if (!idParsed.ok) {
         send(socket, { kind: 'error', code: idParsed.code, message: idParsed.message });
         return;
@@ -172,7 +157,7 @@ export class EventStream {
       return;
     }
     if (kind === 'terminal.input') {
-      const idParsed = parseSessionIdParam(message['sessionId']);
+      const idParsed = parseTaskId(message['taskId']);
       if (!idParsed.ok) {
         send(socket, { kind: 'error', code: idParsed.code, message: idParsed.message });
         return;
@@ -184,14 +169,14 @@ export class EventStream {
       }
       const managed = this.options.pty.get(idParsed.value);
       if (managed === null || managed.exit !== null) {
-        send(socket, { kind: 'error', code: 'no_pty', message: 'session exposes no live PTY for input' });
+        send(socket, { kind: 'error', code: 'not_running', message: 'task is not running' });
         return;
       }
       try {
         this.options.pty.write(idParsed.value, data);
         this.options.onInput?.(idParsed.value, data);
       } catch {
-        send(socket, { kind: 'error', code: 'no_pty', message: 'session exposes no live PTY for input' });
+        send(socket, { kind: 'error', code: 'not_running', message: 'task is not running' });
       }
       return;
     }
@@ -199,21 +184,14 @@ export class EventStream {
   }
 
   /** Send every retained chunk after the cursor, paging through the ring. */
-  private replay(socket: WebSocket, sessionId: string, sinceSeq: number): void {
-    const managed = this.options.pty.get(sessionId);
+  private replay(socket: WebSocket, taskId: string, sinceSeq: number): void {
+    const managed = this.options.pty.get(taskId);
     if (managed === null) return;
     let cursor = sinceSeq;
     for (;;) {
       const page = managed.log.read({ sinceSeq: cursor, limit: 500 });
       for (const chunk of page.chunks) {
-        const event: AgentermEvent = {
-          id: '',
-          sessionId,
-          createdAtMs: chunk.createdAtMs,
-          kind: 'terminal.output',
-          seq: chunk.seq,
-          data: chunk.data
-        };
+        const event: AgentermEvent = { kind: 'terminal.output', taskId, seq: chunk.seq, data: chunk.data };
         send(socket, { kind: 'event', event });
       }
       if (!page.hasMore || page.resumeAfterSeq === null) return;
@@ -222,10 +200,10 @@ export class EventStream {
   }
 
   private broadcast(event: AgentermEvent): void {
-    const scoped = isTerminalEvent(event);
+    const scoped = event.kind === 'terminal.output';
     let frame: string | null = null;
     for (const client of this.clients) {
-      if (scoped && !client.outputs.has(ALL_SESSIONS) && !client.outputs.has(event.sessionId)) continue;
+      if (scoped && !client.outputs.has(event.taskId)) continue;
       frame ??= JSON.stringify({ kind: 'event', event });
       sendRaw(client.socket, frame);
     }

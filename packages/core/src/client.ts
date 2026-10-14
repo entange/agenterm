@@ -1,37 +1,19 @@
 import type {
   ActivityResponse,
-  AttachSessionRequest,
-  AttachSessionResponse,
-  DeleteSessionRequest,
-  DeleteSessionResponse,
-  DiscoverResponse,
-  EventsQuery,
-  EventsResponse,
-  FileChangesResponse,
-  GitDiffResponse,
-  GitStatusResponse,
+  ClearTasksResponse,
   HealthResponse,
-  ListSessionsQuery,
-  ListSessionsResponse,
-  SessionDetailResponse,
-  SessionCommandsQuery,
-  SessionCommandsResponse,
-  SessionInputRequest,
-  SessionInputResponse,
-  SessionOutputQuery,
-  SessionOutputResponse,
-  SessionPortsResponse,
-  SessionProcessesResponse,
-  SessionResizeRequest,
-  SessionResizeResponse,
-  SessionSignalRequest,
-  SessionSignalResponse,
-  SpawnSessionRequest,
-  SpawnSessionResponse,
-  UpdateSessionRequest,
-  UpdateSessionResponse,
-  UsageResponse,
-  OutputSearchResponse
+  ListTasksResponse,
+  RemoveTaskResponse,
+  RunTaskRequest,
+  RunTaskResponse,
+  Settings,
+  StopTaskRequest,
+  TaskInputRequest,
+  TaskInputResponse,
+  TaskOutputQuery,
+  TaskOutputResponse,
+  TaskResizeRequest,
+  TaskResponse
 } from './api.js';
 
 /** Client options. Token is read from the agenterm data dir by the caller. */
@@ -45,7 +27,7 @@ export interface ApiClientOptions {
 
 /**
  * Error thrown for non-2xx daemon replies. Carries the envelope code and
- * hint so callers can branch on `missing_binary`, `session_running`, ...
+ * hint so callers can branch on `unknown_task`, `invalid_cwd`, ...
  */
 export class AgentermApiError extends Error {
   readonly status: number;
@@ -95,7 +77,7 @@ function querySuffix(entries: Record<string, string | number | undefined>): stri
 }
 
 /**
- * Typed daemon client shared by the desktop UI and the CLI.
+ * Typed daemon client shared by the desktop app, the CLI, and the MCP server.
  *
  * Thin wrapper over localhost HTTP. Validation lives in the daemon; this
  * layer only maps envelopes to typed results and errors.
@@ -145,120 +127,67 @@ export class AgentermClient {
     return body as T;
   }
 
-  private sessionPath(id: string, suffix = ''): string {
-    return `/sessions/${encodeURIComponent(id)}${suffix}`;
+  private taskPath(id: string, suffix = ''): string {
+    return `/tasks/${encodeURIComponent(id)}${suffix}`;
   }
 
   health(): Promise<HealthResponse> {
     return this.request('GET', '/health', undefined, Math.min(this.timeoutMs, 5000));
   }
 
-  discover(): Promise<DiscoverResponse> {
-    return this.request('GET', '/discover');
+  listTasks(): Promise<ListTasksResponse> {
+    return this.request('GET', '/tasks');
   }
 
-  listSessions(query: ListSessionsQuery = {}): Promise<ListSessionsResponse> {
+  getTask(id: string): Promise<TaskResponse> {
+    return this.request('GET', this.taskPath(id));
+  }
+
+  run(request: RunTaskRequest): Promise<RunTaskResponse> {
+    return this.request('POST', '/tasks', request);
+  }
+
+  /** Resolves once the task has ended (up to about 10 seconds for a graceful stop). */
+  stop(id: string, request: StopTaskRequest = {}): Promise<TaskResponse> {
+    return this.request('POST', this.taskPath(id, '/stop'), request);
+  }
+
+  remove(id: string): Promise<RemoveTaskResponse> {
+    return this.request('DELETE', this.taskPath(id));
+  }
+
+  clearEnded(): Promise<ClearTasksResponse> {
+    return this.request('POST', '/tasks/clear', {});
+  }
+
+  sendInput(id: string, request: TaskInputRequest): Promise<TaskInputResponse> {
+    return this.request('POST', this.taskPath(id, '/input'), request);
+  }
+
+  resize(id: string, request: TaskResizeRequest): Promise<TaskResizeRequest> {
+    return this.request('POST', this.taskPath(id, '/resize'), request);
+  }
+
+  output(id: string, query: TaskOutputQuery = {}): Promise<TaskOutputResponse> {
     return this.request(
       'GET',
-      `/sessions${querySuffix({
-        provider: query.provider,
-        lifecycle: query.lifecycle,
-        overlay: query.overlay,
-        cwd: query.cwd
-      })}`
-    );
-  }
-
-  attach(request: AttachSessionRequest): Promise<AttachSessionResponse> {
-    return this.request('POST', '/sessions/attach', request);
-  }
-
-  sessionDetail(id: string): Promise<SessionDetailResponse> {
-    return this.request('GET', this.sessionPath(id));
-  }
-
-  spawn(request: SpawnSessionRequest): Promise<SpawnSessionResponse> {
-    return this.request('POST', '/sessions', request);
-  }
-
-  deleteSession(id: string, request: DeleteSessionRequest): Promise<DeleteSessionResponse> {
-    return this.request('DELETE', this.sessionPath(id), request);
-  }
-
-  updateSession(id: string, request: UpdateSessionRequest): Promise<UpdateSessionResponse> {
-    return this.request('PATCH', this.sessionPath(id), request);
-  }
-
-  restart(id: string): Promise<UpdateSessionResponse> {
-    return this.request('POST', this.sessionPath(id, '/restart'), {});
-  }
-
-  sendInput(id: string, request: SessionInputRequest): Promise<SessionInputResponse> {
-    return this.request('POST', this.sessionPath(id, '/input'), request);
-  }
-
-  resize(id: string, request: SessionResizeRequest): Promise<SessionResizeResponse> {
-    return this.request('POST', this.sessionPath(id, '/resize'), request);
-  }
-
-  signal(id: string, request: SessionSignalRequest): Promise<SessionSignalResponse> {
-    return this.request('POST', this.sessionPath(id, '/signal'), request);
-  }
-
-  output(id: string, query: SessionOutputQuery = {}): Promise<SessionOutputResponse> {
-    return this.request(
-      'GET',
-      this.sessionPath(
+      this.taskPath(
         id,
         `/output${querySuffix({ tailBytes: query.tailBytes, sinceSeq: query.sinceSeq, limit: query.limit })}`
       )
     );
   }
 
-  processes(id: string): Promise<SessionProcessesResponse> {
-    return this.request('GET', this.sessionPath(id, '/processes'));
-  }
-
-  ports(id: string): Promise<SessionPortsResponse> {
-    return this.request('GET', this.sessionPath(id, '/ports'));
-  }
-
-  commands(id: string, query: SessionCommandsQuery = {}): Promise<SessionCommandsResponse> {
-    return this.request('GET', this.sessionPath(id, `/commands${querySuffix({ limit: query.limit })}`));
-  }
-
-  git(id: string): Promise<GitStatusResponse> {
-    return this.request('GET', this.sessionPath(id, '/git'));
-  }
-
-  gitDiff(id: string, path: string): Promise<GitDiffResponse> {
-    return this.request('GET', this.sessionPath(id, `/git/diff${querySuffix({ path })}`));
-  }
-
-  files(id: string): Promise<FileChangesResponse> {
-    return this.request('GET', this.sessionPath(id, '/files'));
-  }
-
-  search(query: string, options: { sessionId?: string; limit?: number } = {}): Promise<OutputSearchResponse> {
-    return this.request(
-      'GET',
-      `/search${querySuffix({ q: query, sessionId: options.sessionId, limit: options.limit })}`
-    );
-  }
-
-  usage(): Promise<UsageResponse> {
-    return this.request('GET', '/usage');
-  }
-
   activity(): Promise<ActivityResponse> {
     return this.request('GET', '/activity');
   }
 
-  events(query: EventsQuery = {}): Promise<EventsResponse> {
-    return this.request(
-      'GET',
-      `/events${querySuffix({ sessionId: query.sessionId, beforeMs: query.beforeMs, limit: query.limit })}`
-    );
+  settings(): Promise<Settings> {
+    return this.request('GET', '/settings');
+  }
+
+  updateSettings(patch: Partial<Settings>): Promise<Settings> {
+    return this.request('PATCH', '/settings', patch);
   }
 }
 

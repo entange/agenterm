@@ -6,23 +6,13 @@ import { acquireLock, releaseLock } from './lock.js';
 import { dataDir } from './paths.js';
 import { loadOrCreateToken } from './token.js';
 import { createApp } from './server.js';
-import { SessionStore } from './sessionStore.js';
 import { PtyManager } from './ptyManager.js';
 import { Supervisor } from './supervisor.js';
 import { EventBus } from './events.js';
-import {
-  databaseFile,
-  openDatabase,
-  PRIVATE_DIR_MODE,
-  SqliteCommands,
-  SqliteEvents,
-  SqliteSessions
-} from './database.js';
-import { HarnessWatch, harnessWatchEnabled } from './harnessWatch.js';
+import { databaseFile, openDatabase, PRIVATE_DIR_MODE, TaskTable } from './database.js';
 import { EventStream } from './stream.js';
-
-/** Retention pruning cadence while the daemon runs. */
-const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
+import { TaskStore } from './taskStore.js';
+import { isRunning } from '@agenterm/core';
 
 /** Grace for shutdown before the process exits regardless. */
 const SHUTDOWN_GRACE_MS = 4000;
@@ -50,7 +40,7 @@ export function daemonLogPath(dir: string): string {
  * then listens on 127.0.0.1 only with an authenticated WebSocket fan-out
  * for the event stream. A second starter exits as a client. The daemon
  * owns every PTY, so stray exceptions are logged rather than fatal, and
- * shutdown ends owned sessions and releases the lock.
+ * shutdown ends running tasks and releases the lock.
  */
 async function main(): Promise<void> {
   const dir = dataDir();
@@ -82,37 +72,24 @@ async function main(): Promise<void> {
     console.log(`daemon already running on port ${lock.port} (pid ${lock.pid})`);
     return;
   }
-  const { raw, db } = openDatabase(databaseFile(dir));
-  const sessionsTable = new SqliteSessions(db);
-  const eventsTable = new SqliteEvents(db);
-  const commandsTable = new SqliteCommands(db);
-  const prune = (): void => {
-    try {
-      const removed = eventsTable.prune() + commandsTable.prune();
-      if (removed > 0) log.info({ removed }, 'pruned rows past retention');
-    } catch (error) {
-      log.warn({ err: error }, 'prune failed');
-    }
-  };
-  prune();
-  const pruneTimer = setInterval(prune, PRUNE_INTERVAL_MS);
-  pruneTimer.unref();
+  const raw = openDatabase(databaseFile(dir));
+  const table = new TaskTable(raw);
+  // Terminals died with the previous daemon.
+  table.markLost(Date.now());
+  // Session-era output from older builds.
+  fs.rmSync(path.join(dir, 'sessions'), { recursive: true, force: true });
 
-  const store = new SessionStore({ dataDir: dir, table: sessionsTable });
-  const bus = new EventBus({ dataDir: dir, table: eventsTable });
+  const store = new TaskStore(table);
+  const bus = new EventBus();
   const pty = new PtyManager({ dataDir: dir });
   const supervisor = new Supervisor({
-    onPorts: (sessionId, change) => {
-      const now = Date.now();
-      for (const port of change.opened) {
-        bus.publish({ id: '', sessionId, createdAtMs: now, kind: 'port.opened', port: port.port, pid: port.pid });
-      }
-      for (const port of change.closed) {
-        bus.publish({ id: '', sessionId, createdAtMs: now, kind: 'port.closed', port: port.port, pid: port.pid });
+    onPorts: (taskId) => {
+      const task = store.get(taskId);
+      if (task !== null && isRunning(task)) {
+        bus.publish({ kind: 'task.updated', taskId, task: { ...task, ports: supervisor.portsFor(taskId) } });
       }
     }
   });
-  const watch = new HarnessWatch({ enabled: harnessWatchEnabled(), dataDir: dir, store, bus });
   const app = createApp({
     token,
     port: lock.port,
@@ -121,8 +98,6 @@ async function main(): Promise<void> {
     pty,
     supervisor,
     bus,
-    watch,
-    commandsDb: commandsTable,
     dataDir: dir
   });
   await app.listen({ host: '127.0.0.1', port: lock.port });
@@ -131,12 +106,10 @@ async function main(): Promise<void> {
     token,
     bus,
     pty,
-    onInput: (sessionId, data) => app.agenterm.noteInput(sessionId, data),
     activity: app.agenterm.activity
   });
   supervisor.start();
-  watch.start();
-  log.info({ port: lock.port, harnessWatch: watch.isEnabled(), fileLimit: fileLimit() }, 'daemon listening');
+  log.info({ port: lock.port, fileLimit: fileLimit() }, 'daemon listening');
   const limit = fileLimit();
   if (limit !== null && limit < 4096) {
     log.warn({ fileLimit: limit }, 'open-file limit is low; each terminal uses several descriptors');
@@ -154,16 +127,14 @@ async function main(): Promise<void> {
       process.exit(1);
     }, SHUTDOWN_GRACE_MS);
     force.unref();
-    clearInterval(pruneTimer);
     supervisor.stop();
-    watch.stop();
     stream.close();
-    for (const session of store.list()) {
-      const managed = pty.get(session.id);
+    for (const task of store.list()) {
+      const managed = pty.get(task.id);
       if (managed === null || managed.exit !== null) continue;
-      store.markKilled(session.id);
+      store.put({ ...task, status: 'stopped', endedAtMs: Date.now() });
       try {
-        pty.kill(session.id, 'SIGHUP');
+        pty.kill(task.id, 'SIGHUP');
       } catch {
         // Already gone.
       }

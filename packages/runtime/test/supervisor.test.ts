@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { displayCommand, Supervisor } from '../src/supervisor.js';
+import { Supervisor } from '../src/supervisor.js';
 
 const stubProbes = {
   processes: async () => [
@@ -24,51 +24,38 @@ describe('Supervisor with stub probes', () => {
     expect(sup.childrenOf(11)).toEqual([12]);
   });
 
-  it('joins listening sockets back to owning sessions', async () => {
+  it('joins listening sockets back to owning tasks', async () => {
     const sup = new Supervisor({ probes: stubProbes });
     sup.track('s1', 10);
     await sup.poll();
-    const ports = sup.portsFor('s1');
-    expect(ports).toEqual([{ port: 3000, pid: 12, sessionId: 's1', address: '127.0.0.1' }]);
+    expect(sup.portsFor('s1')).toEqual([3000]);
   });
 
-  it('reports port open and close changes', async () => {
-    const changes: Array<{ opened: number[]; closed: number[] }> = [];
+  it('reports when the port list changes', async () => {
+    const changes: number[][] = [];
     let round = 0;
     const sup = new Supervisor({
       probes: {
         processes: stubProbes.processes,
         sockets: async () => (round === 0 ? [] : [{ port: 5000, pid: 11, address: '127.0.0.1' }])
       },
-      onPorts: (_id, change) =>
-        changes.push({ opened: change.opened.map((p) => p.port), closed: change.closed.map((p) => p.port) })
+      onPorts: (_id, ports) => changes.push(ports)
     });
     sup.track('s1', 10);
     await sup.poll();
     round = 1;
     await sup.poll();
-    expect(changes).toEqual([{ opened: [5000], closed: [] }]);
+    await sup.poll();
     round = 0;
     await sup.poll();
-    expect(changes[1]).toEqual({ opened: [], closed: [5000] });
+    expect(changes).toEqual([[5000], []]);
   });
 
-  it('snapshots carry real pid detail', async () => {
-    const sup = new Supervisor({ probes: stubProbes });
-    sup.track('s1', 11);
-    await sup.poll();
-    const rows = sup.snapshot('s1');
-    expect(rows.map((r) => r.pid)).toEqual([11, 12]);
-    expect(rows[0]?.command).toBe('claude');
-    expect(rows[0]?.ppid).toBe(10);
-  });
-
-  it('untrack clears session state', async () => {
+  it('untrack clears task state', async () => {
     const sup = new Supervisor({ probes: stubProbes });
     sup.track('s1', 10);
     await sup.poll();
     sup.untrack('s1');
-    expect(sup.snapshot('s1')).toEqual([]);
     expect(sup.portsFor('s1')).toEqual([]);
   });
 });
@@ -110,14 +97,5 @@ describe('parseLsofListeners', () => {
       { port: 60384, pid: 653, address: '127.0.0.1' },
       { port: 5432, pid: 653, address: '::1' }
     ]);
-  });
-
-  it('folds the hook settings JSON and masks secrets in shown commands', () => {
-    const settings = JSON.stringify({
-      hooks: { Stop: [{ hooks: [{ command: "curl -H 'Authorization: Bearer abc123def456'" }] }] }
-    });
-    expect(displayCommand(`claude --settings ${settings} --model opus`)).toBe('claude --settings {…} --model opus');
-    expect(displayCommand('deploy --token=ghp_abcdefghijklmnop1234')).toBe('deploy --token=[REDACTED]');
-    expect(displayCommand('node server.js')).toBe('node server.js');
   });
 });

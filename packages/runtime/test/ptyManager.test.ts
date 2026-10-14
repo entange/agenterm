@@ -27,7 +27,7 @@ describe('PtyManager with a real PTY', () => {
       onExit: (_id, exit) => exits.push(exit)
     });
     const record = manager.spawn({
-      sessionId: 'echo-check',
+      taskId: 'echo-check',
       file: '/bin/echo',
       args: ['hello-pty'],
       cwd: '/tmp',
@@ -49,7 +49,7 @@ describe('PtyManager with a real PTY', () => {
     const seen: string[] = [];
     const manager = new PtyManager({ onOutput: (_id, data) => seen.push(data) });
     manager.spawn({
-      sessionId: 'shell-check',
+      taskId: 'shell-check',
       file: '/bin/sh',
       args: [],
       cwd: '/tmp',
@@ -64,7 +64,7 @@ describe('PtyManager with a real PTY', () => {
     manager.forget('shell-check');
   });
 
-  it('rejects writes to unknown sessions', () => {
+  it('rejects writes to unknown tasks', () => {
     const manager = new PtyManager();
     expect(() => manager.write('missing', 'x')).toThrow();
     expect(() => manager.resize('missing', 80, 24)).toThrow();
