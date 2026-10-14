@@ -40,5 +40,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/entange/agenterm.git"
-  }
+  },
+  "trustedDependencies": [
+    "esbuild",
+    "node-pty"
+  ]
 }

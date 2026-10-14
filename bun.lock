@@ -145,6 +145,10 @@
       },
     },
   },
+  "trustedDependencies": [
+    "esbuild",
+    "node-pty",
+  ],
   "packages": {
     "@agenterm/config": ["@agenterm/config@workspace:packages/config"],
 
