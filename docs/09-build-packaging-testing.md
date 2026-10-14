@@ -27,6 +27,9 @@ interval at 1s and scope queries to session subtrees).
 
 ## Packaging (electron-builder, latest stable)
 
+As built: the macOS app (`dmg` plus `zip`, arm64 plus x64) and the CLI on npm. Windows is not
+shipped. See `RELEASING.md` for the release flow.
+
 - macOS: `dmg` plus `zip` (arm64 plus x64), hardened runtime, notarize.
 - Windows: `nsis` (x64), signed.
 - Daemon ships inside Electron resources (`resources/agentermd/`) plus a

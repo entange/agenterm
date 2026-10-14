@@ -27,7 +27,8 @@ function manifests() {
 
 function current() {
   const versions = new Map();
-  for (const file of manifests()) versions.set(path.relative(root, file), JSON.parse(fs.readFileSync(file, 'utf8')).version);
+  for (const file of manifests())
+    versions.set(path.relative(root, file), JSON.parse(fs.readFileSync(file, 'utf8')).version);
   versions.set(path.relative(root, versionFile), versionPattern.exec(fs.readFileSync(versionFile, 'utf8'))?.[1]);
   return versions;
 }
@@ -38,7 +39,8 @@ if (args[0] === '--check') {
   const expected = args[1]?.replace(/^v/, '') ?? versions.get('package.json');
   const wrong = [...versions].filter(([, version]) => version !== expected);
   if (wrong.length > 0) {
-    for (const [file, version] of wrong) console.error(`${file} is ${version ?? 'missing a version'}, expected ${expected}`);
+    for (const [file, version] of wrong)
+      console.error(`${file} is ${version ?? 'missing a version'}, expected ${expected}`);
     console.error('Run `node scripts/set-version.mjs <version>` to line them up.');
     process.exit(1);
   }
@@ -49,7 +51,10 @@ if (args[0] === '--check') {
     const text = fs.readFileSync(file, 'utf8');
     fs.writeFileSync(file, text.replace(/("version":\s*)"[^"]+"/, `$1"${version}"`));
   }
-  fs.writeFileSync(versionFile, fs.readFileSync(versionFile, 'utf8').replace(versionPattern, `export const VERSION = '${version}';`));
+  fs.writeFileSync(
+    versionFile,
+    fs.readFileSync(versionFile, 'utf8').replace(versionPattern, `export const VERSION = '${version}';`)
+  );
   console.log(`set version ${version}; commit, then tag v${version} to release`);
 } else {
   console.error('usage: node scripts/set-version.mjs <version> | --check [tag]');

@@ -25,40 +25,61 @@ Agents start dev servers and then lose track of them: they start a second copy, 
 - **Clean stops.** `stop` sends Ctrl+C, then ends the whole process tree if it keeps running. `--force` kills right
   away.
 
-## Quick start
+## Install
 
-Requirements: macOS or Linux, [Bun](https://bun.sh) 1.3+, Node 22+.
+### The CLI (macOS and Linux)
 
-```sh
-bun install
-bun run build
-(cd apps/cli && npm link)              # puts `agenterm` on your PATH
-agenterm run "npm run dev"             # starts the daemon on first use
-```
-
-Agents start `agenterm mcp` themselves, so it has to be on your PATH. A shell alias is not enough.
-
-The desktop app:
+Needs [Node.js](https://nodejs.org) 22 or newer.
 
 ```sh
-bun run --filter agenterm-desktop dev
+npm install -g agenterm --allow-scripts=node-pty
+agenterm run --id hello "echo hello"     # starts the background daemon on first use
 ```
+
+Or run it without installing: `npx agenterm ls`.
+
+`--allow-scripts=node-pty` lets npm 12 and newer build node-pty, the native module behind the terminals. Older npm
+ignores the flag. On Linux, that build needs `python3`, `make`, and a C++ compiler (`sudo apt install
+build-essential python3`). If the build was skipped, agenterm says so and prints the command that fixes it.
+
+### The desktop app (macOS)
+
+Download the DMG for your Mac from the [latest release](https://github.com/entange/agenterm/releases/latest):
+
+- **Apple Silicon** (M1 and later): `agenterm-<version>-arm64-mac.dmg`
+- **Intel**: `agenterm-<version>-x64-mac.dmg`
+
+Open it and drag agenterm into Applications. It runs on macOS 12 or later and brings its own copy of the daemon, so
+it works without the CLI. You need the CLI (or MCP) to start tasks.
+
+**First launch.** Until the app is signed with an Apple Developer ID, macOS blocks the first open with "Apple could
+not verify agenterm". Either:
+
+- open it once, then go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**; or
+- run `xattr -dr com.apple.quarantine /Applications/agenterm.app` in a terminal, then open it normally.
+
+The app tells you when a new version is out. The CLI and app check each other's version, and `agenterm daemon
+restart` swaps in the daemon from the copy you just installed.
+
+### Connect your agent
+
+See [For agents (MCP)](#for-agents-mcp) below, or **Settings → Connect an agent** in the app.
 
 ## CLI
 
-| Command                      | What it does                                                                  |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| `run [--id ID] "<command>"`  | Start a command in a new terminal, or return the one already running         |
-| `ls [--running] [--json]`    | List tasks, running first                                                     |
-| `show <task>`                | One task in detail                                                            |
-| `logs <task> [-n N] [-f]`    | Recent output; `-f` keeps printing until it ends                              |
-| `input <task> <text>`        | Type into a task, then press Enter (unless `--no-enter`)                      |
-| `stop <task...> [--force]`   | Ctrl+C, then end the process tree; `--force` kills right away                 |
-| `rm <task...>`               | Remove tasks and their output, stopping them first                            |
-| `clear`                      | Remove every task that is no longer running                                   |
-| `settings`                   | Show or change settings, e.g. `--stop-with-agent on`                          |
-| `daemon start\|stop\|status` | Manage the background daemon                                                  |
-| `mcp`                        | Serve the same tools over the Model Context Protocol (stdio)                  |
+| Command                               | What it does                                                         |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| `run [--id ID] "<command>"`           | Start a command in a new terminal, or return the one already running |
+| `ls [--running] [--json]`             | List tasks, running first                                            |
+| `show <task>`                         | One task in detail                                                   |
+| `logs <task> [-n N] [-f]`             | Recent output; `-f` keeps printing until it ends                     |
+| `input <task> <text>`                 | Type into a task, then press Enter (unless `--no-enter`)             |
+| `stop <task...> [--force]`            | Ctrl+C, then end the process tree; `--force` kills right away        |
+| `rm <task...>`                        | Remove tasks and their output, stopping them first                   |
+| `clear`                               | Remove every task that is no longer running                          |
+| `settings`                            | Show or change settings, e.g. `--stop-with-agent on`                 |
+| `daemon start\|stop\|restart\|status` | Manage the background daemon                                         |
+| `mcp`                                 | Serve the same tools over the Model Context Protocol (stdio)         |
 
 `run` also takes `-C <dir>`, `-t <title>`, `--agent <name>`, `--restart`, `--wait <seconds>`, and `--json`. A task
 can be named by its id, its title, or a unique id prefix.
@@ -75,6 +96,9 @@ Cursor, Claude Desktop, and most other agents take the same server in their MCP 
 ```json
 { "mcpServers": { "agenterm": { "command": "agenterm", "args": ["mcp"] } } }
 ```
+
+Without a global install, use `"command": "npx", "args": ["-y", "agenterm", "mcp"]` (on Linux, add
+`"--allow-scripts=node-pty"` before `"agenterm"`).
 
 Apps opened from the Dock may not see your shell's PATH; use the full path from `which agenterm` as the command if
 they cannot find it. The app shows all of this under Settings → Connect an agent.
@@ -123,6 +147,18 @@ macOS allows 511 pseudo-terminals system-wide by default, shared with every othe
 sudo sysctl -w kern.tty.ptmx_max=999
 ```
 
+## Where things are stored
+
+| What                                | Where                                                     |
+| ----------------------------------- | --------------------------------------------------------- |
+| Tasks, output, settings, daemon log | `~/.agenterm/` (`AGENTERM_DATA_DIR` moves it)             |
+| App window and theme preferences    | `~/Library/Application Support/agenterm/preferences.json` |
+| The app                             | `/Applications/agenterm.app`                              |
+| The CLI                             | wherever `npm root -g` points                             |
+
+To remove agenterm completely: `agenterm daemon stop`, `npm uninstall -g agenterm`, delete the app, then
+`rm -rf ~/.agenterm ~/Library/Application\ Support/agenterm`.
+
 ## Security and privacy
 
 - The daemon listens on `127.0.0.1` only. Every request needs a 32-byte bearer token stored `0600` in
@@ -147,6 +183,15 @@ over localhost HTTP plus one WebSocket. Data lives in `~/.agenterm/`: `agenterm.
 
 ## Development
 
+Needs [Bun](https://bun.sh) 1.3+ and Node.js 22+.
+
+```sh
+bun install
+bun run build
+(cd apps/cli && npm link)  # puts this checkout's `agenterm` on your PATH
+bun run --filter agenterm-desktop dev
+```
+
 ```sh
 bun run dev          # watch-compile packages
 bun run typecheck && bun run lint && bun run test
@@ -161,11 +206,9 @@ so the UI can be worked on without Electron. It binds to localhost and checks Ho
 
 ```sh
 cd apps/desktop
-node scripts/stage-daemon.mjs --verify   # bundle the daemon, boot it under Electron's Node, drive a real terminal
-npx electron-builder --dir               # unpacked app in release/
-bun run dist                             # installers (dmg/zip, nsis, AppImage/deb)
+node scripts/stage-daemon.mjs --verify   # bundle the daemon, boot it under Electron's Node, run a real terminal
+bun run pack                             # unpacked app for this Mac in release/
+bun run dist                             # DMGs and zips for Apple Silicon and Intel
 ```
 
-Signing and notarization run when `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and
-`APPLE_TEAM_ID` are set. Auto-update reads GitHub releases. Set `publish.owner` and `publish.repo` in
-`apps/desktop/electron-builder.yml` once the repository has a home.
+Releases are built by GitHub Actions from a version tag. See [docs/RELEASING.md](docs/RELEASING.md).
