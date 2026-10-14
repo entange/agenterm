@@ -71,7 +71,7 @@ export function ConnectionBanner(): React.JSX.Element | null {
       <span className="flex-1">
         {connection.detail ?? (starting ? 'Connecting to the daemon…' : 'The daemon is offline.')}
       </span>
-      {connection.state === 'stopped' || connection.state === 'offline' ? (
+      {connection.state === 'stopped' || connection.state === 'offline' || connection.state === 'outdated' ? (
         <Button
           size="sm"
           tone="secondary"
@@ -83,7 +83,13 @@ export function ConnectionBanner(): React.JSX.Element | null {
               .finally(() => setBusy(false));
           }}
         >
-          {busy ? 'Starting…' : 'Start daemon'}
+          {connection.state === 'outdated'
+            ? busy
+              ? 'Restarting…'
+              : 'Restart daemon'
+            : busy
+              ? 'Starting…'
+              : 'Start daemon'}
         </Button>
       ) : null}
     </div>

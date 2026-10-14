@@ -1,5 +1,14 @@
 import path from 'node:path';
-import { AgentermApiError, isRunning, plainText, statusText, type AgentermClient } from '@agenterm/core';
+import {
+  AgentermApiError,
+  API_VERSION,
+  isRunning,
+  plainText,
+  statusText,
+  VERSION,
+  type AgentermClient,
+  type HealthResponse
+} from '@agenterm/core';
 import { Command, Option } from 'commander';
 import type { Caller } from './caller.js';
 import { daemonEntry, daemonLogTail, dataDir, pidAlive, readLock, startDaemonProcess } from './local.js';
@@ -34,7 +43,39 @@ export interface CliDeps {
 }
 
 /** Thrown for user-facing failures that need no stack trace. */
-export class CliError extends Error {}
+export class CliError extends Error {
+  constructor(
+    message: string,
+    readonly hint?: string
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * A daemon from another install (an older CLI, or the app) that speaks a
+ * different API. Older ones are missing routes; newer ones may answer
+ * differently than this CLI expects.
+ */
+function mismatch(health: HealthResponse): 'older' | 'newer' | null {
+  const api = health.api ?? 1;
+  if (api === API_VERSION) return null;
+  return api < API_VERSION ? 'older' : 'newer';
+}
+
+function mismatchError(health: HealthResponse, kind: 'older' | 'newer'): CliError {
+  if (kind === 'newer') {
+    return new CliError(
+      `the agenterm daemon (${health.version}) is newer than this CLI (${VERSION}).`,
+      'update the CLI: `npm install -g agenterm@latest`'
+    );
+  }
+  const running = health.running ?? 0;
+  return new CliError(
+    `the agenterm daemon running now is an older version (${health.version}), with ${running} running ${running === 1 ? 'task' : 'tasks'}.`,
+    '`agenterm daemon restart` updates it. Its running tasks stop.'
+  );
+}
 
 function positiveInt(text: string, name: string): number {
   const value = Number(text);
@@ -59,7 +100,7 @@ export function buildProgram(deps: CliDeps): Command {
   program
     .name('agenterm')
     .description('Run long-running commands in terminals you can watch, type into, and stop from anywhere.')
-    .version('0.1.0')
+    .version(VERSION)
     .enablePositionalOptions()
     .showHelpAfterError()
     .addHelpText(
@@ -85,6 +126,15 @@ the running task instead of starting a second one. Add --restart to replace it.`
         await action(...args);
       } catch (error) {
         process.exitCode = 1;
+        if (error instanceof AgentermApiError && error.status === 404 && error.code === 'http_error') {
+          // A missing route, not a missing task: the daemon is from another version.
+          const health = await deps
+            .client()
+            .health()
+            .catch(() => null);
+          const kind = health === null ? null : mismatch(health);
+          if (health !== null && kind !== null) error = mismatchError(health, kind);
+        }
         if (error instanceof AgentermApiError) {
           deps.err(`error: ${error.message}`);
           if (error.hint !== undefined) deps.err(`hint: ${error.hint}`);
@@ -96,6 +146,7 @@ the running task instead of starting a second one. Add --restart to replace it.`
           return;
         }
         deps.err(`error: ${error instanceof Error ? error.message : String(error)}`);
+        if (error instanceof CliError && error.hint !== undefined) deps.err(`hint: ${error.hint}`);
       }
     };
 
@@ -115,7 +166,19 @@ the running task instead of starting a second one. Add --restart to replace it.`
     return { pid: lock.pid, port: lock.port, version: health.version };
   };
 
-  /** Start the daemon unless it already answers. */
+  /** Signal the daemon and wait for it to exit. */
+  const stopDaemon = async (pid: number): Promise<void> => {
+    process.kill(pid, 'SIGTERM');
+    // The daemon allows itself 4s to end tasks before it exits regardless.
+    for (let i = 0; i < 80 && pidAlive(pid); i++) await deps.sleep(100);
+    if (pidAlive(pid)) throw new CliError(`daemon pid ${pid} is still running after 8s`);
+  };
+
+  /**
+   * Start the daemon unless it already answers. An older daemon with nothing
+   * running is replaced quietly; one with running tasks is left alone and
+   * reported, since replacing it would end them.
+   */
   const ensureDaemon = async (): Promise<{ started: boolean }> => {
     const answers = async (): Promise<boolean> =>
       deps
@@ -123,7 +186,18 @@ the running task instead of starting a second one. Add --restart to replace it.`
         .health()
         .then(() => true)
         .catch(() => false);
-    if (await answers()) return { started: false };
+    const health = await deps
+      .client()
+      .health()
+      .catch(() => null);
+    if (health !== null) {
+      const kind = mismatch(health);
+      if (kind === null) return { started: false };
+      const running = await runningDaemon();
+      if (kind === 'newer' || (health.running ?? 0) > 0 || running === null) throw mismatchError(health, kind);
+      deps.err(`note: replacing the agenterm daemon ${health.version} with ${VERSION}.`);
+      await stopDaemon(running.pid);
+    }
     if (deps.spawnDaemon !== undefined) {
       deps.spawnDaemon();
     } else {
@@ -424,11 +498,21 @@ the running task instead of starting a second one. Add --restart to replace it.`
           deps.out('daemon not running.');
           return;
         }
-        process.kill(lock.pid, 'SIGTERM');
-        // The daemon allows itself 4s to end tasks before it exits regardless.
-        for (let i = 0; i < 80 && pidAlive(lock.pid); i++) await deps.sleep(100);
-        if (pidAlive(lock.pid)) throw new CliError(`daemon pid ${lock.pid} is still running after 8s`);
+        await stopDaemon(lock.pid);
         deps.out('daemon stopped.');
+      })
+    );
+
+  daemon
+    .command('restart')
+    .description('Stop the daemon and start this version of it. Every running task ends.')
+    .action(
+      run(async () => {
+        const lock = await runningDaemon();
+        if (lock !== null) await stopDaemon(lock.pid);
+        await ensureDaemon();
+        const next = readLock();
+        deps.out(`daemon ${VERSION} started${next === null ? '' : ` (pid ${next.pid}, port ${next.port})`}.`);
       })
     );
 
@@ -454,7 +538,7 @@ the running task instead of starting a second one. Add --restart to replace it.`
     .action(async () => {
       await runMcpStdio({
         client: deps.client,
-        version: program.version() ?? '0.1.0',
+        version: VERSION,
         caller: deps.caller,
         cwd: deps.cwd,
         env: deps.env,

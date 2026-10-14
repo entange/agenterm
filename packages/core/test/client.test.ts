@@ -7,12 +7,19 @@ function stub(routes: Record<string, unknown>, calls: Call[] = []): typeof fetch
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input));
     const method = init?.method ?? 'GET';
-    calls.push({ method, path: url.pathname + url.search, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) });
+    calls.push({
+      method,
+      path: url.pathname + url.search,
+      body: init?.body === undefined ? undefined : JSON.parse(String(init.body))
+    });
     const body = routes[`${method} ${url.pathname}`];
     if (body === undefined) {
-      return new Response(JSON.stringify({ error: { code: 'unknown_task', message: 'no task matches', hint: 'list first' } }), {
-        status: 404
-      });
+      return new Response(
+        JSON.stringify({ error: { code: 'unknown_task', message: 'no task matches', hint: 'list first' } }),
+        {
+          status: 404
+        }
+      );
     }
     return new Response(JSON.stringify(body), { status: 200 });
   }) as typeof fetch;
@@ -32,7 +39,14 @@ describe('AgentermClient', () => {
           'POST /tasks/web/stop': { task },
           'DELETE /tasks/web': { removed: true, stopped: false },
           'POST /tasks/web/input': { acceptedBytes: 3 },
-          'GET /tasks/web/output': { taskId: 'web', chunks: [], resumeAfterSeq: null, hasMore: false, firstSeq: null, live: true },
+          'GET /tasks/web/output': {
+            taskId: 'web',
+            chunks: [],
+            resumeAfterSeq: null,
+            hasMore: false,
+            firstSeq: null,
+            live: true
+          },
           'PATCH /settings': { stopWithAgent: true }
         },
         calls
@@ -51,7 +65,11 @@ describe('AgentermClient', () => {
 
   it('throws readable errors with the code and hint', async () => {
     const client = new AgentermClient({ baseUrl: 'http://127.0.0.1:1', token: 't', fetchImpl: stub({}) });
-    await expect(client.getTask('nope')).rejects.toMatchObject({ code: 'unknown_task', hint: 'list first', status: 404 });
+    await expect(client.getTask('nope')).rejects.toMatchObject({
+      code: 'unknown_task',
+      hint: 'list first',
+      status: 404
+    });
   });
 
   it('turns a daemon that never answers into a timeout error', async () => {

@@ -239,7 +239,7 @@ function registerIpc(): void {
     }
   });
   ipcMain.handle(IPC.getConnection, () => link.connection());
-  ipcMain.handle(IPC.startDaemon, (event) => (trusted(event) ? link.ensure() : link.connection()));
+  ipcMain.handle(IPC.startDaemon, (event) => (trusted(event) ? link.ensure(true) : link.connection()));
   ipcMain.handle(IPC.stopDaemon, async (event) => (trusted(event) ? confirmAndStopDaemon() : false));
   ipcMain.handle(IPC.openExternal, async (event, url: unknown) => {
     if (trusted(event) && typeof url === 'string' && /^https?:\/\//.test(url)) await shell.openExternal(url);

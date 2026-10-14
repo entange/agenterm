@@ -1,11 +1,12 @@
 import os from 'node:os';
 import path from 'node:path';
+import { VERSION } from '@agenterm/core';
 
 /** Default daemon port. Clients read the lock file for the actual port. */
 export const DEFAULT_DAEMON_PORT = 37241;
 
 /** Production daemon version. Single source for health output. */
-export const DAEMON_VERSION = '0.1.0';
+export const DAEMON_VERSION = VERSION;
 
 /** Resolve the agenterm data dir. Overridable for tests via env. */
 export function dataDir(): string {

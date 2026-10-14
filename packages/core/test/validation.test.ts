@@ -57,7 +57,10 @@ describe('other bodies', () => {
     expect(parseStopTaskRequest({ force: 'yes' }).ok).toBe(false);
     expect(parseTaskInputRequest({ data: '' }).ok).toBe(false);
     expect(parseTaskResizeRequest({ cols: 0, rows: 10 }).ok).toBe(false);
-    expect(parseTaskOutputQuery({ sinceSeq: '7' })).toEqual({ ok: true, value: { tailBytes: 65536, limit: 200, sinceSeq: 7 } });
+    expect(parseTaskOutputQuery({ sinceSeq: '7' })).toEqual({
+      ok: true,
+      value: { tailBytes: 65536, limit: 200, sinceSeq: 7 }
+    });
     expect(parseTaskOutputQuery({ limit: '0' }).ok).toBe(false);
   });
 });

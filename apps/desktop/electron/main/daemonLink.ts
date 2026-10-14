@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import { AgentermClient, daemonBaseUrl, type AgentermEvent } from '@agenterm/core';
+import { AgentermClient, API_VERSION, daemonBaseUrl, type AgentermEvent, type HealthResponse } from '@agenterm/core';
 import WebSocket from 'ws';
 import type { ActivityTick, ConnectionInfo } from '../../shared/bridge.js';
 
@@ -148,30 +148,66 @@ export class DaemonLink {
       : { command: node, args: [entry], env };
   }
 
-  private async healthy(): Promise<string | null> {
+  private async healthy(): Promise<HealthResponse | null> {
     try {
-      const health = await this.client().health();
-      return health.version;
+      return await this.client().health();
     } catch {
       return null;
     }
   }
 
-  /** Make sure a daemon is running and connected. Starts one when needed. Concurrent calls share one attempt. */
-  ensure(): Promise<ConnectionInfo> {
+  /** SIGTERM a daemon and wait for it to exit; it ends its tasks first. */
+  private async terminate(pid: number): Promise<void> {
+    process.kill(pid, 'SIGTERM');
+    for (let i = 0; i < 50 && pidAlive(pid); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  /**
+   * Make sure a daemon is running and connected. Starts one when needed.
+   * Concurrent calls share one attempt. `replace` is the user's go-ahead to
+   * restart an older daemon that is still running tasks.
+   */
+  ensure(replace = false): Promise<ConnectionInfo> {
     this.userStopped = false;
     if (this.ensuring === null) {
-      this.ensuring = this.ensureOnce().finally(() => {
+      this.ensuring = this.ensureOnce(replace).finally(() => {
         this.ensuring = null;
       });
     }
     return this.ensuring;
   }
 
-  private async ensureOnce(): Promise<ConnectionInfo> {
+  private async ensureOnce(replace: boolean): Promise<ConnectionInfo> {
     if (this.socket !== null && this.info.state === 'online') return this.info;
     const lock = readLock();
-    let version = lock !== null && pidAlive(lock.pid) ? await this.healthy() : null;
+    let health = lock !== null && pidAlive(lock.pid) ? await this.healthy() : null;
+    const api = health?.api ?? 1;
+    if (health !== null && lock !== null && api > API_VERSION) {
+      this.setInfo({
+        state: 'offline',
+        version: health.version,
+        detail: `The agenterm daemon running now (${health.version}) is newer than this app. Update agenterm to use it.`
+      });
+      return this.info;
+    }
+    if (health !== null && lock !== null && api < API_VERSION) {
+      // A daemon from an older install. Idle ones are replaced; busy ones only when the user says so.
+      const running = health.running ?? 0;
+      if (running > 0 && !replace) {
+        this.setInfo({
+          state: 'outdated',
+          version: health.version,
+          detail: `An older agenterm daemon (${health.version}) is running ${running} ${running === 1 ? 'task' : 'tasks'}. Restart it to update; ${running === 1 ? 'that task stops' : 'those tasks stop'}.`
+        });
+        return this.info;
+      }
+      this.setInfo({ state: 'starting', version: null, detail: 'Updating the agenterm daemon…' });
+      await this.terminate(lock.pid);
+      health = null;
+    }
+    let version = health?.version ?? null;
     if (version === null) {
       this.setInfo({ state: 'starting', version: null, detail: 'Starting the agenterm daemon…' });
       const spec = await this.launchSpec();
@@ -202,7 +238,7 @@ export class DaemonLink {
       child.unref();
       for (let i = 0; i < 80 && version === null; i++) {
         await new Promise((resolve) => setTimeout(resolve, 100));
-        if (readLock() !== null) version = await this.healthy();
+        if (readLock() !== null) version = (await this.healthy())?.version ?? null;
       }
       if (this.userStopped) return this.info;
       if (version === null) {
@@ -238,10 +274,7 @@ export class DaemonLink {
       this.setInfo({ state: 'stopped', version: null, detail: 'The daemon is stopped.' });
       return false;
     }
-    process.kill(lock.pid, 'SIGTERM');
-    for (let i = 0; i < 50 && pidAlive(lock.pid); i++) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    await this.terminate(lock.pid);
     this.setInfo({
       state: 'stopped',
       version: null,

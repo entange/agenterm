@@ -136,7 +136,9 @@ export function parseTaskResizeRequest(body: unknown): ValidationResult<TaskResi
 }
 
 /** Output query with defaults applied. Accepts numbers or numeric strings (from a URL). */
-export function parseTaskOutputQuery(query: unknown): ValidationResult<Required<Omit<TaskOutputQuery, 'sinceSeq'>> & { sinceSeq?: number }> {
+export function parseTaskOutputQuery(
+  query: unknown
+): ValidationResult<Required<Omit<TaskOutputQuery, 'sinceSeq'>> & { sinceSeq?: number }> {
   if (!isPlainRecord(query)) return { ok: false, code: 'invalid_query', message: 'query must be an object' };
   const num = (value: unknown): unknown =>
     typeof value === 'string' && value.trim().length > 0 && Number.isFinite(Number(value)) ? Number(value) : value;

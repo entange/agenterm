@@ -1,4 +1,5 @@
 import os from 'node:os';
+import { AgentermApiError, API_VERSION, VERSION, type AgentermClient } from '@agenterm/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildProgram, shellQuote } from '../src/program.js';
 import { daemonRig } from './kit.js';
@@ -143,5 +144,62 @@ describe('shellQuote', () => {
     expect(shellQuote('--port=3000')).toBe('--port=3000');
     expect(shellQuote('a b')).toBe("'a b'");
     expect(shellQuote('$HOME')).toBe("'$HOME'");
+  });
+});
+
+describe('a daemon from another version', () => {
+  function against(health: Record<string, unknown>) {
+    const out: string[] = [];
+    const err: string[] = [];
+    let spawned = 0;
+    const missingRoute = async (): Promise<never> => {
+      throw new AgentermApiError(404, 'http_error', 'request failed with status 404');
+    };
+    const client = { health: async () => ({ ok: true, ...health }), listTasks: missingRoute, run: missingRoute };
+    const program = buildProgram({
+      client: () => client as unknown as AgentermClient,
+      out: (line) => out.push(line),
+      err: (line) => err.push(line),
+      write: () => undefined,
+      sleep: async () => undefined,
+      caller: () => null,
+      cwd: () => os.tmpdir(),
+      env: () => ({}),
+      isTTY: () => false,
+      spawnDaemon: () => void spawned++
+    });
+    program.exitOverride();
+    const run = async (...args: string[]) => {
+      out.length = 0;
+      err.length = 0;
+      await program.parseAsync(['node', 'agenterm', ...args]);
+    };
+    return { run, out, err, spawned: () => spawned };
+  }
+
+  it('explains an older daemon instead of printing a bare 404', async () => {
+    const c = against({ version: '0.0.9', running: 2 });
+    await c.run('ls');
+    expect(c.err).toEqual([
+      'error: the agenterm daemon running now is an older version (0.0.9), with 2 running tasks.',
+      'hint: `agenterm daemon restart` updates it. Its running tasks stop.'
+    ]);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('does not start tasks on an older daemon that is still running some', async () => {
+    const c = against({ version: '0.0.9', running: 1 });
+    await c.run('run', '--wait', '0', 'npm run dev');
+    expect(c.err[0]).toContain('older version (0.0.9), with 1 running task.');
+    expect(c.spawned()).toBe(0);
+  });
+
+  it('asks for a CLI update when the daemon is newer', async () => {
+    const c = against({ version: '9.0.0', api: API_VERSION + 1, running: 0 });
+    await c.run('run', '--wait', '0', 'npm run dev');
+    expect(c.err).toEqual([
+      `error: the agenterm daemon (9.0.0) is newer than this CLI (${VERSION}).`,
+      'hint: update the CLI: `npm install -g agenterm@latest`'
+    ]);
   });
 });

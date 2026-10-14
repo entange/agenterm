@@ -36,7 +36,8 @@ export interface ApiFailure {
 
 export type ApiEnvelope<T> = { ok: true; value: T } | { ok: false; error: ApiFailure };
 
-export type ConnectionState = 'starting' | 'online' | 'offline' | 'stopped';
+/** `outdated`: an older daemon answers but is busy, so it waits for the user to restart it. */
+export type ConnectionState = 'starting' | 'online' | 'offline' | 'stopped' | 'outdated';
 
 export interface ConnectionInfo {
   state: ConnectionState;
@@ -76,6 +77,7 @@ export interface AgentermBridge {
   onConnection(handler: (info: ConnectionInfo) => void): () => void;
   onCommand(handler: (command: AppCommand) => void): () => void;
   connection(): Promise<ConnectionInfo>;
+  /** Start the daemon, or restart an outdated one. */
   startDaemon(): Promise<ConnectionInfo>;
   stopDaemon(): Promise<boolean>;
   openExternal(url: string): Promise<void>;

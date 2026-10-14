@@ -26,6 +26,7 @@ export { isSecretEnvKey, redactEnvForLog, redactText, stripSecretEnv } from './r
 export type { TaskRecord, TaskStatus } from './task.js';
 export { findTask, isRunning, statusText, TASK_ID_PATTERN } from './task.js';
 export { lastVisibleLine, plainText } from './terminalText.js';
+export { API_VERSION, VERSION } from './version.js';
 export type { ValidationResult } from './validation.js';
 export {
   parseRunTaskRequest,

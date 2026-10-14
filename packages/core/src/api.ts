@@ -19,6 +19,8 @@ export interface ErrorEnvelope {
 export interface HealthResponse {
   ok: true;
   version: string;
+  /** API revision (see API_VERSION). Missing on daemons from before it existed. */
+  api?: number;
   uptimeSeconds?: number;
   startedAtMs?: number;
   port?: number;

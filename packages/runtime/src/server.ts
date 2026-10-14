@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import {
+  API_VERSION,
   isRunning,
   parseRunTaskRequest,
   parseSettingsPatch,
@@ -425,11 +426,12 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
 
   app.get('/health', async (request) => {
     if (!checkBearer(authOf(request), options.token)) {
-      return { ok: true as const, version: DAEMON_VERSION };
+      return { ok: true as const, version: DAEMON_VERSION, api: API_VERSION };
     }
     return {
       ok: true as const,
       version: DAEMON_VERSION,
+      api: API_VERSION,
       uptimeSeconds: Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)),
       startedAtMs,
       port: options.port,

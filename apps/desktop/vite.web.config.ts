@@ -96,7 +96,7 @@ function devBridge(): Plugin {
             if (message.kind === 'input' && typeof message.taskId === 'string' && typeof message.data === 'string') {
               link.sendInput(message.taskId, message.data);
             }
-            if (message.kind === 'start') void link.ensure();
+            if (message.kind === 'start') void link.ensure(true);
             if (message.kind === 'subscribe' && typeof message.taskId === 'string' && !mine.has(message.taskId)) {
               mine.add(message.taskId);
               link.subscribe(message.taskId);
