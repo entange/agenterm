@@ -16,7 +16,7 @@
     "dev:web": "vite --config vite.web.config.ts",
     "build:daemon": "vite build --config vite.daemon.config.ts",
     "stage:daemon": "node scripts/stage-daemon.mjs",
-    "dist": "electron-vite build && node scripts/stage-daemon.mjs && electron-builder --publish never"
+    "dist": "electron-vite build && node scripts/stage-daemon.mjs --arch arm64,x64 && electron-builder --mac --publish never"
   },
   "dependencies": {
     "electron-updater": "6.8.9",
@@ -57,7 +57,13 @@
     "vitest": "5.0.2",
     "zustand": "5.0.15"
   },
-  "description": "agenterm desktop: a control room for the AI agents and terminals on this machine",
-  "author": "agenterm",
-  "homepage": "https://github.com/"
+  "description": "agenterm desktop: watch, type into, and stop the terminals you and your agents start",
+  "author": "Entange",
+  "homepage": "https://github.com/entange/agenterm",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/entange/agenterm.git",
+    "directory": "apps/desktop"
+  }
 }

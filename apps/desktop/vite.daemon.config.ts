@@ -14,11 +14,11 @@ const native = ['node-pty', 'better-sqlite3'];
 export default defineConfig({
   build: {
     ssr: resolve(__dirname, '../../packages/runtime/src/index.ts'),
-    outDir: resolve(__dirname, 'build/agentermd'),
+    outDir: resolve(__dirname, 'build/daemon-bundle'),
     emptyOutDir: true,
     target: 'node22',
     minify: false,
-    sourcemap: true,
+    sourcemap: false,
     rollupOptions: {
       external: [...native, ...builtinModules, ...builtinModules.map((name) => `node:${name}`)],
       output: {

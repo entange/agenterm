@@ -1,10 +1,12 @@
 // Stage the daemon for packaging: one bundled ESM file plus the two native
-// modules it loads, trimmed to the target platform's N-API prebuilds (which
-// load under Electron's Node without a rebuild).
+// modules it loads, trimmed to each target's N-API prebuilds (which load
+// under Electron's Node without a rebuild). One folder per target, so a
+// single machine can package every architecture.
 //
-//   node scripts/stage-daemon.mjs            build into build/agentermd
-//   node scripts/stage-daemon.mjs --verify   then boot it with ELECTRON_RUN_AS_NODE,
-//                                            spawn a PTY session, and read it back
+//   node scripts/stage-daemon.mjs                  this machine, into build/daemon/<platform>-<arch>
+//   node scripts/stage-daemon.mjs --arch arm64,x64 several architectures
+//   node scripts/stage-daemon.mjs --verify         then boot this machine's build with ELECTRON_RUN_AS_NODE,
+//                                                  run a task in a PTY, and read it back
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -14,10 +16,11 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = path.resolve(here, '..');
-const out = path.join(app, 'build', 'agentermd');
+const bundle = path.join(app, 'build', 'daemon-bundle');
 const platform = process.env.AGENTERM_TARGET_PLATFORM ?? process.platform;
-const arch = process.env.AGENTERM_TARGET_ARCH ?? process.arch;
-const target = `${platform}-${arch}`;
+const archFlag = process.argv.indexOf('--arch');
+const arches = archFlag === -1 ? [process.arch] : (process.argv[archFlag + 1] ?? '').split(',').filter(Boolean);
+const stagedDir = (arch) => path.join(app, 'build', 'daemon', `${platform}-${arch}`);
 
 execFileSync(
   process.execPath,
@@ -42,36 +45,43 @@ function copy(from, to) {
   });
 }
 
-const modules = path.join(out, 'native');
-fs.rmSync(modules, { recursive: true, force: true });
+fs.rmSync(path.join(app, 'build', 'daemon'), { recursive: true, force: true });
+for (const arch of arches) stage(arch);
 
-const pty = packageDir('node-pty');
-const ptyOut = path.join(modules, 'node-pty');
-copy(path.join(pty, 'package.json'), path.join(ptyOut, 'package.json'));
-copy(path.join(pty, 'lib'), path.join(ptyOut, 'lib'));
-// node-pty ships prebuilds for macOS and Windows; Linux installs compile into build/Release.
-const ptyPrebuild = path.join(pty, 'prebuilds', target);
-const ptyCompiled = path.join(pty, 'build', 'Release');
-const ptyBinaries = fs.existsSync(ptyPrebuild)
-  ? { from: ptyPrebuild, to: path.join(ptyOut, 'prebuilds', target) }
-  : fs.existsSync(path.join(ptyCompiled, 'pty.node'))
-    ? { from: ptyCompiled, to: path.join(ptyOut, 'build', 'Release') }
-    : null;
-if (ptyBinaries === null) throw new Error(`node-pty has no prebuild or compiled binary for ${target}`);
-copy(ptyBinaries.from, ptyBinaries.to);
-const helper = path.join(ptyBinaries.to, 'spawn-helper');
-if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
+function stage(arch) {
+  const target = `${platform}-${arch}`;
+  const out = stagedDir(arch);
+  fs.mkdirSync(out, { recursive: true });
+  copy(path.join(bundle, 'index.mjs'), path.join(out, 'index.mjs'));
+  const modules = path.join(out, 'native');
+  fs.rmSync(modules, { recursive: true, force: true });
 
-const sqlite = packageDir('better-sqlite3');
-const sqliteOut = path.join(modules, 'better-sqlite3');
-copy(path.join(sqlite, 'package.json'), path.join(sqliteOut, 'package.json'));
-copy(path.join(sqlite, 'lib'), path.join(sqliteOut, 'lib'));
-const sqlitePrebuild = path.join(sqlite, 'prebuilds', `${target}.node`);
-if (!fs.existsSync(sqlitePrebuild)) throw new Error(`better-sqlite3 has no prebuild for ${target}`);
-copy(sqlitePrebuild, path.join(sqliteOut, 'prebuilds', `${target}.node`));
+  const pty = packageDir('node-pty');
+  const ptyOut = path.join(modules, 'node-pty');
+  copy(path.join(pty, 'package.json'), path.join(ptyOut, 'package.json'));
+  copy(path.join(pty, 'lib'), path.join(ptyOut, 'lib'));
+  // node-pty ships prebuilds for macOS and Windows; Linux installs compile into build/Release.
+  const ptyPrebuild = path.join(pty, 'prebuilds', target);
+  const ptyCompiled = path.join(pty, 'build', 'Release');
+  const ptyBinaries = fs.existsSync(ptyPrebuild)
+    ? { from: ptyPrebuild, to: path.join(ptyOut, 'prebuilds', target) }
+    : fs.existsSync(path.join(ptyCompiled, 'pty.node'))
+      ? { from: ptyCompiled, to: path.join(ptyOut, 'build', 'Release') }
+      : null;
+  if (ptyBinaries === null) throw new Error(`node-pty has no prebuild or compiled binary for ${target}`);
+  copy(ptyBinaries.from, ptyBinaries.to);
+  const helper = path.join(ptyBinaries.to, 'spawn-helper');
+  if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
 
-console.log(`staged daemon for ${target} in ${path.relative(process.cwd(), out)}`);
-
+  const sqlite = packageDir('better-sqlite3');
+  const sqliteOut = path.join(modules, 'better-sqlite3');
+  copy(path.join(sqlite, 'package.json'), path.join(sqliteOut, 'package.json'));
+  copy(path.join(sqlite, 'lib'), path.join(sqliteOut, 'lib'));
+  const sqlitePrebuild = path.join(sqlite, 'prebuilds', `${target}.node`);
+  if (!fs.existsSync(sqlitePrebuild)) throw new Error(`better-sqlite3 has no prebuild for ${target}`);
+  copy(sqlitePrebuild, path.join(sqliteOut, 'prebuilds', `${target}.node`));
+  console.log(`staged daemon for ${target} in ${path.relative(process.cwd(), out)}`);
+}
 if (process.argv.includes('--verify')) await verify();
 
 async function verify() {
@@ -79,7 +89,10 @@ async function verify() {
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'agenterm-stage-'));
   const port = String(38000 + Math.floor(Math.random() * 1000));
   const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1', AGENTERM_DATA_DIR: data, AGENTERM_PORT: port };
-  const daemon = spawn(electron, [path.join(out, 'index.mjs')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const daemon = spawn(electron, [path.join(stagedDir(process.arch), 'index.mjs')], {
+    env,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
   let stderr = '';
   daemon.stderr.on('data', (chunk) => (stderr += chunk));
   try {
@@ -93,27 +106,24 @@ async function verify() {
       return response.json();
     };
     const health = await waitFor(() => call('GET', '/health'));
-    const { session } = await call('POST', '/sessions', {
-      provider: 'generic',
-      command: '/bin/echo',
-      args: ['staged-pty-ok'],
-      cwd: os.tmpdir()
-    });
+    const { task } = await call('POST', '/tasks', { id: 'verify', command: 'echo staged-pty-ok', cwd: os.tmpdir() });
     const output = await waitFor(async () => {
-      const page = await call('GET', `/sessions/${session.id}/output`);
+      const page = await call('GET', `/tasks/${task.id}/output`);
       const text = page.chunks.map((chunk) => chunk.data).join('');
       if (!text.includes('staged-pty-ok')) throw new Error('no output yet');
       return text.trim();
     });
-    const events = await call('GET', '/events?limit=5');
+    const { tasks } = await call('GET', '/tasks');
     console.log(
-      `verify ok: daemon ${health.version} under Electron node, pty said "${output}", sqlite holds ${events.events.length} events`
+      `verify ok: daemon ${health.version} (api ${health.api}) under Electron node, pty said "${output}", sqlite holds ${tasks.length} task`
     );
   } catch (error) {
     console.error('verify failed:', error, stderr);
     process.exitCode = 1;
   } finally {
     daemon.kill('SIGTERM');
+    await new Promise((resolve) => daemon.once('exit', resolve));
+    fs.rmSync(data, { recursive: true, force: true });
   }
 }
 
