@@ -26,6 +26,7 @@
     },
     "dev:web": {
       "dependsOn": ["^build"],
+      "passThroughEnv": ["AGENTERM_*"],
       "cache": false,
       "persistent": true
     }
