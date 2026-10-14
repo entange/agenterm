@@ -11,7 +11,15 @@ import {
 } from '@agenterm/core';
 import { Command, Option } from 'commander';
 import type { Caller } from './caller.js';
-import { daemonEntry, daemonLogTail, dataDir, pidAlive, readLock, startDaemonProcess } from './local.js';
+import {
+  daemonEntry,
+  daemonLogTail,
+  dataDir,
+  pidAlive,
+  ptyAddonMissing,
+  readLock,
+  startDaemonProcess
+} from './local.js';
 import { runMcpStdio } from './mcp.js';
 import {
   cleanEnv,
@@ -205,6 +213,12 @@ the running task instead of starting a second one. Add --restart to replace it.`
       if (entry === null) {
         throw new CliError(
           'cannot find the daemon next to this CLI. Reinstall agenterm, or run `bun run build` in a checkout.'
+        );
+      }
+      if (ptyAddonMissing()) {
+        throw new CliError(
+          'node-pty, which agenterm runs terminals with, was installed without being built. npm 12 skips its build step unless you allow it.',
+          'reinstall with `npm install -g agenterm --allow-scripts=node-pty`, or use `npx --allow-scripts=node-pty agenterm`.'
         );
       }
       startDaemonProcess(entry);

@@ -68,10 +68,10 @@ export function ConnectAgent(): React.JSX.Element {
         skill in <code className="font-mono">skills/agenterm</code> teaches it that.
       </Note>
       <Note>
-        All of these need <code className="font-mono">agenterm</code> on your PATH. If{' '}
-        <code className="font-mono">which agenterm</code> prints nothing, run{' '}
-        <code className="font-mono">npm link</code> in agenterm's <code className="font-mono">apps/cli</code> folder.
+        All of these need the <code className="font-mono">agenterm</code> command. If{' '}
+        <code className="font-mono">which agenterm</code> prints nothing, install it with Node.js 22 or newer:
       </Note>
+      <CopyField text="npm install -g agenterm --allow-scripts=node-pty" label="install command" />
     </div>
   );
 }

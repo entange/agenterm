@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,6 +60,26 @@ export function daemonEntry(): string | null {
   if (typeof override === 'string' && override.length > 0) return override;
   const bundled = fileURLToPath(new URL('./daemon.js', import.meta.url));
   return fs.existsSync(bundled) ? bundled : null;
+}
+
+/**
+ * Whether node-pty, which runs every terminal, has its native addon. It ships
+ * prebuilt for macOS but compiles at install time on Linux, and npm 12 skips
+ * that step unless the install allows node-pty's scripts. Without it the
+ * daemon cannot start. A node-pty that cannot be found at all (a bundled or
+ * overridden daemon) counts as present: that daemon brings its own.
+ */
+export function ptyAddonMissing(): boolean {
+  let root: string;
+  try {
+    root = path.dirname(createRequire(import.meta.url).resolve('node-pty/package.json'));
+  } catch {
+    return false;
+  }
+  return ![
+    path.join(root, 'prebuilds', `${process.platform}-${process.arch}`, 'pty.node'),
+    path.join(root, 'build', 'Release', 'pty.node')
+  ].some((addon) => fs.existsSync(addon));
 }
 
 /**

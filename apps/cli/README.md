@@ -4,7 +4,7 @@ Run dev servers, watchers, builds, and tests in terminals that you and your codi
 and stop. Each command gets an id, so an agent never starts the same server twice.
 
 ```sh
-npm install -g agenterm
+npm install -g agenterm --allow-scripts=node-pty
 
 agenterm run --id web "npm run dev"    # start it (or get the one already running)
 agenterm ls                            # what is running, with ports
@@ -13,6 +13,9 @@ agenterm stop web                      # Ctrl+C, then end it
 ```
 
 Or without installing: `npx agenterm ls`.
+
+`--allow-scripts=node-pty` lets npm 12 and newer build node-pty, the native module that runs the terminals; older npm
+versions ignore the flag. macOS works without it (node-pty ships prebuilt there), but npm prints a warning.
 
 Tasks keep running in a small background daemon after the terminal or agent that started them exits. The
 [agenterm desktop app](https://github.com/entange/agenterm/releases/latest) shows every task as a live terminal.
@@ -30,7 +33,8 @@ Other agents (Cursor, Claude Desktop, …) take this in their MCP config:
 { "mcpServers": { "agenterm": { "command": "agenterm", "args": ["mcp"] } } }
 ```
 
-Without a global install, use `"command": "npx", "args": ["-y", "agenterm", "mcp"]`.
+Without a global install, use `"command": "npx", "args": ["-y", "agenterm", "mcp"]` (on Linux add
+`"--allow-scripts=node-pty"` before `"agenterm"`).
 
 The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, and `remove`.
 
@@ -54,7 +58,10 @@ The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, and `remove`.
 
 - macOS or Linux, Node.js 22 or newer.
 - On Linux, installing builds one native module (node-pty), which needs `python3`, `make`, and a C++ compiler
-  (`sudo apt install build-essential python3` on Debian and Ubuntu).
+  (`sudo apt install build-essential python3` on Debian and Ubuntu), and npm 12 needs `--allow-scripts=node-pty` to
+  run that build. If it was skipped, agenterm says so and prints the command to fix it.
+- Installed with a different version than the daemon already running? `agenterm daemon restart` swaps it (the CLI
+  does this by itself when nothing is running).
 
 Data lives in `~/.agenterm/`. The daemon listens on `127.0.0.1` only and every request needs a token stored there.
 
