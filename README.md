@@ -74,6 +74,12 @@ Any other agent: add `agenterm mcp` as a stdio MCP server. The tools match the C
 Agents can also just call the CLI. Either way, giving each command an id (`--id web`) is what keeps an agent from
 starting the same server twice.
 
+### Agent skill
+
+[`skills/agenterm/SKILL.md`](skills/agenterm/SKILL.md) is an [Agent Skill](https://agentskills.io) that teaches an
+agent when to use agenterm, to always pass an id, and how to check on, stop, and clean up tasks. To use it, copy
+the `skills/agenterm` folder into your agent's skills folder, e.g. `.claude/skills/` in a project for Claude Code.
+
 ## The app
 
 A list of tasks on the left, grouped by project or by who started them, and the selected task's terminal on the
