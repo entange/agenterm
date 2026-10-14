@@ -26,13 +26,12 @@ function connect(): void {
     if (kind === 'connection') connection = payload as ConnectionInfo;
     if (kind === 'event') {
       const event = payload as AgentermEvent;
-      if ((event.kind === 'terminal.output' || event.kind === 'terminal.input') && !subscribed.has(event.sessionId))
-        return;
+      if (event.kind === 'terminal.output' && !subscribed.has(event.taskId)) return;
     }
     for (const handler of handlers[kind]) (handler as Handler<unknown>)(payload);
   };
   ws.onopen = () => {
-    for (const sessionId of subscribed) ws.send(JSON.stringify({ kind: 'subscribe', sessionId }));
+    for (const taskId of subscribed) ws.send(JSON.stringify({ kind: 'subscribe', taskId }));
   };
   ws.onclose = () => setTimeout(connect, 1000);
 }
@@ -50,14 +49,14 @@ const bridge: AgentermBridge = {
     const response = await fetch('/__agenterm/call', { method: 'POST', body: JSON.stringify({ method, args }) });
     return (await response.json()) as never;
   },
-  sendInput: (sessionId, data) => socket?.send(JSON.stringify({ kind: 'input', sessionId, data })),
-  subscribeOutput: (sessionId) => {
-    subscribed.add(sessionId);
-    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'subscribe', sessionId }));
+  sendInput: (taskId, data) => socket?.send(JSON.stringify({ kind: 'input', taskId, data })),
+  subscribeOutput: (taskId) => {
+    subscribed.add(taskId);
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'subscribe', taskId }));
   },
-  unsubscribeOutput: (sessionId) => {
-    subscribed.delete(sessionId);
-    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'unsubscribe', sessionId }));
+  unsubscribeOutput: (taskId) => {
+    subscribed.delete(taskId);
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ kind: 'unsubscribe', taskId }));
   },
   onEvent: (handler) => on('event', handler as Handler<never>),
   onActivity: (handler) => on('activity', handler as Handler<never>),
@@ -69,7 +68,6 @@ const bridge: AgentermBridge = {
     return connection;
   },
   stopDaemon: async () => false,
-  pickDirectory: async () => window.prompt('Folder (absolute path)'),
   openExternal: async (url) => {
     window.open(url, '_blank', 'noopener');
   },
@@ -89,35 +87,31 @@ window.addEventListener('keydown', (event) => {
   const command: AppCommand | null =
     key === 'k'
       ? { kind: 'palette' }
-      : key === 'j'
-        ? { kind: 'toggle-activity' }
-        : event.shiftKey && key === 'h'
-          ? { kind: 'home' }
-          : null;
+      : key === ','
+        ? { kind: 'settings' }
+        : key === ']'
+          ? { kind: 'cycle-task', delta: 1 }
+          : key === '['
+            ? { kind: 'cycle-task', delta: -1 }
+            : null;
   if (command === null) return;
   event.preventDefault();
   for (const handler of handlers.command) handler(command);
 });
 
-// Screenshot helpers: ?theme=dark|light, ?select=<id prefix>&tab=<tab>, ?dialog=new|palette.
+// Screenshot helpers: ?theme=dark|light, ?group=project|agent|none, ?select=<id>, ?dialog=palette|settings.
 const params = new URLSearchParams(location.search);
 const theme = params.get('theme');
 const group = params.get('group');
-const density = params.get('density');
-if (theme === 'dark' || theme === 'light') {
-  const key = 'agenterm.ui.v1';
-  const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
-  localStorage.setItem(key, JSON.stringify({ ...stored, theme }));
-}
-if (group === 'status' || group === 'project' || density === 'compact' || density === 'comfortable') {
-  const key = 'agenterm.ui.v1';
-  const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+const storageKey = 'agenterm.ui.v2';
+if (theme !== null || group !== null) {
+  const stored = JSON.parse(localStorage.getItem(storageKey) ?? '{}') as Record<string, unknown>;
   localStorage.setItem(
-    key,
+    storageKey,
     JSON.stringify({
       ...stored,
-      ...(group === null ? {} : { groupBy: group }),
-      ...(density === null ? {} : { density })
+      ...(theme === 'dark' || theme === 'light' || theme === 'system' ? { theme } : {}),
+      ...(group === 'project' || group === 'agent' || group === 'none' ? { groupBy: group } : {})
     })
   );
 }
@@ -126,18 +120,16 @@ await import('../main.js');
 
 const { useUi } = await import('../lib/ui.js');
 const select = params.get('select');
-const tab = params.get('tab');
 const dialog = params.get('dialog');
 if (select !== null || dialog !== null) {
   const started = Date.now();
   const timer = setInterval(() => {
-    void bridge.call('listSessions').then((result) => {
+    void bridge.call('listTasks').then((result) => {
       if (!result.ok) return;
-      const match =
-        select === null ? undefined : result.value.sessions.find((session) => session.id.startsWith(select));
-      if (match !== undefined) useUi.getState().select(match.id, (tab ?? 'terminal') as never);
-      if (dialog === 'new') useUi.getState().setNewSessionOpen(true);
+      const match = select === null ? undefined : result.value.tasks.find((task) => task.id.startsWith(select));
+      if (match !== undefined) useUi.getState().select(match.id);
       if (dialog === 'palette') useUi.getState().setPaletteOpen(true);
+      if (dialog === 'settings') useUi.getState().setSettingsOpen(true);
       if (match !== undefined || select === null || Date.now() - started > 5000) clearInterval(timer);
     });
   }, 300);

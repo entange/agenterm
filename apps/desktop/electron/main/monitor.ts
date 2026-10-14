@@ -1,40 +1,25 @@
-import type { AgentermEvent, SessionRecord } from '@agenterm/core';
-import { app, Notification } from 'electron';
-import { callsign } from '../../shared/callsign.js';
+import { statusText, type AgentermEvent, type TaskRecord } from '@agenterm/core';
+import { Notification } from 'electron';
+import { taskLabel } from '../../shared/label.js';
 import type { DaemonLink } from './daemonLink.js';
 
-const MONITORED = new Set<AgentermEvent['kind']>([
-  'session.created',
-  'session.attached',
-  'session.updated',
-  'session.exited',
-  'session.detached',
-  'agent.status'
-]);
-
 /**
- * Watches daemon events for moments that need the user.
- *
- * Raises a native notification when an agent waits for approval or a
- * reply, reports failure or completion, or exits badly, but only while
- * no agenterm window has focus. Keeps the dock badge equal to the number
- * of live agents waiting on the user, and hands the latest session list
- * to the tray.
+ * Keeps main's copy of the task list for the tray, and
+ * raises a native notification when a running task fails, but only while
+ * no agenterm window has focus. Tasks someone stopped never notify.
  */
-export class AttentionMonitor {
-  private sessions: SessionRecord[] = [];
+export class TaskMonitor {
+  private tasks: TaskRecord[] = [];
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly poll: ReturnType<typeof setInterval>;
-  /** Avoid repeating the same notification while a status flaps. */
-  private readonly lastNotified = new Map<string, string>();
 
   constructor(
     private readonly options: {
       link: DaemonLink;
       enabled: () => boolean;
       hasFocus: () => boolean;
-      onOpenSession: (sessionId: string) => void;
-      onSessions: (sessions: SessionRecord[]) => void;
+      onOpenTask: (taskId: string) => void;
+      onTasks: (tasks: TaskRecord[]) => void;
     }
   ) {
     options.link.onEvent((event) => this.handle(event));
@@ -44,52 +29,25 @@ export class AttentionMonitor {
     this.poll = setInterval(() => this.scheduleRefresh(0), 10_000);
   }
 
-  list(): SessionRecord[] {
-    return this.sessions;
-  }
-
-  private find(sessionId: string): SessionRecord | undefined {
-    return this.sessions.find((session) => session.id === sessionId);
+  list(): TaskRecord[] {
+    return this.tasks;
   }
 
   private handle(event: AgentermEvent): void {
-    // The tray and badge only track lifecycle and status; spend, ports, and file edits are noise here.
-    if (!MONITORED.has(event.kind)) return;
-    this.scheduleRefresh(1500);
-    const session = this.find(event.sessionId);
-    const name = session === undefined ? 'An agent' : `${callsign(session)} · ${session.title}`;
-    if (event.kind === 'agent.status' && event.overlay === 'working') {
-      // Back at work: the next wait is a new moment worth announcing.
-      this.lastNotified.delete(event.sessionId);
-      return;
+    if (event.kind === 'terminal.output') return;
+    this.scheduleRefresh(1000);
+    if (event.kind !== 'task.updated') return;
+    const before = this.tasks.find((task) => task.id === event.taskId);
+    if (before?.status === 'running' && event.task.status === 'failed') {
+      this.notify(event.task);
     }
-    if (event.kind === 'agent.status') {
-      const messages: Partial<Record<typeof event.overlay, string>> = {
-        waiting_permission: 'Waiting for your approval',
-        waiting_input: 'Waiting for your reply',
-        failed: 'Reported a failure',
-        completed: 'Finished its task'
-      };
-      const body = messages[event.overlay];
-      if (body !== undefined) this.notify(event.sessionId, `status:${event.overlay}`, name, event.summary ?? body);
-      return;
-    }
-    if (event.kind === 'session.exited' && session?.lifecycle !== 'killed') {
-      const bad = event.exitSignal !== null || (event.exitCode !== null && event.exitCode !== 0);
-      if (bad) {
-        const detail =
-          event.exitSignal !== null ? `Ended by ${event.exitSignal}` : `Exited with code ${event.exitCode}`;
-        this.notify(event.sessionId, `exit:${event.createdAtMs}`, name, detail);
-      }
-    }
+    if (before !== undefined) this.tasks = this.tasks.map((task) => (task.id === event.taskId ? event.task : task));
   }
 
-  private notify(sessionId: string, key: string, title: string, body: string): void {
+  private notify(task: TaskRecord): void {
     if (!this.options.enabled() || this.options.hasFocus() || !Notification.isSupported()) return;
-    if (this.lastNotified.get(sessionId) === key) return;
-    this.lastNotified.set(sessionId, key);
-    const notification = new Notification({ title, body, silent: false });
-    notification.on('click', () => this.options.onOpenSession(sessionId));
+    const notification = new Notification({ title: `${taskLabel(task)} ${statusText(task)}`, body: task.command });
+    notification.on('click', () => this.options.onOpenTask(task.id));
     notification.show();
   }
 
@@ -104,19 +62,11 @@ export class AttentionMonitor {
   private async refresh(): Promise<void> {
     if (this.options.link.connection().state !== 'online') return;
     try {
-      this.sessions = (await this.options.link.client().listSessions()).sessions;
+      this.tasks = (await this.options.link.client().listTasks()).tasks;
     } catch {
       return;
     }
-    const waiting = this.sessions.filter(
-      (session) =>
-        session.lifecycle === 'running' &&
-        (session.overlay === 'waiting_permission' ||
-          session.overlay === 'waiting_input' ||
-          session.overlay === 'failed')
-    ).length;
-    if (process.platform === 'darwin' || process.platform === 'linux') app.setBadgeCount(waiting);
-    this.options.onSessions(this.sessions);
+    this.options.onTasks(this.tasks);
   }
 
   dispose(): void {

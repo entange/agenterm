@@ -9,9 +9,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Instrument-panel palette. Signal colors carry meaning everywhere:
- * attn = needs you, work = producing output, fail = failed, ok = finished,
- * idle = alive and quiet. Accent marks selection and focus only.
+ * Neutral palette. Signal colors carry meaning everywhere: ok = running,
+ * fail = failed, attn = lost, idle = finished or stopped. Accent marks
+ * selection and focus only.
  */
 :root {
   --canvas: #f4f4f5;
@@ -24,9 +24,9 @@
   --ink-muted: #52525b;
   --ink-faint: #8a8a93;
   --accent: #18181b;
-  --accent-soft: #18181b12;
+  --accent-soft: #18181b1c;
   --sig-attn: #b7791f;
-  --sig-work: #1f7fd1;
+  --sig-work: #52525b;
   --sig-fail: #c9423f;
   --sig-ok: #2f8f5b;
   --sig-idle: #8a8a93;
@@ -48,7 +48,7 @@
   --accent: #ededee;
   --accent-soft: #ffffff14;
   --sig-attn: #f2b84b;
-  --sig-work: #5fb3f9;
+  --sig-work: #a0a0a7;
   --sig-fail: #ef6f6c;
   --sig-ok: #6ccb9a;
   --sig-idle: #74747c;
@@ -120,8 +120,8 @@ code {
   -webkit-app-region: no-drag;
 }
 
-/* Callsigns: Martian Mono, compressed and tracked like a printed strip. */
-.callsign {
+/* The wordmark: Martian Mono, compressed and tracked. */
+.wordmark {
   font-family: var(--font-call);
   font-stretch: 75%;
   font-weight: 560;
@@ -138,7 +138,7 @@ code {
   text-transform: uppercase;
 }
 
-/* The only ambient motion: a strip that needs the user breathes. */
+/* The only ambient motion: the connecting indicator breathes. */
 @keyframes attn-breathe {
   0%,
   100% {

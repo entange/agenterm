@@ -92,26 +92,22 @@ function devBridge(): Plugin {
             link.onConnection((info: ConnectionInfo) => send('connection', info))
           ];
           ws.on('message', (raw) => {
-            const message = JSON.parse(String(raw)) as { kind: string; sessionId?: string; data?: string };
-            if (message.kind === 'input' && typeof message.sessionId === 'string' && typeof message.data === 'string') {
-              link.sendInput(message.sessionId, message.data);
+            const message = JSON.parse(String(raw)) as { kind: string; taskId?: string; data?: string };
+            if (message.kind === 'input' && typeof message.taskId === 'string' && typeof message.data === 'string') {
+              link.sendInput(message.taskId, message.data);
             }
             if (message.kind === 'start') void link.ensure();
-            if (message.kind === 'subscribe' && typeof message.sessionId === 'string' && !mine.has(message.sessionId)) {
-              mine.add(message.sessionId);
-              link.subscribe(message.sessionId);
+            if (message.kind === 'subscribe' && typeof message.taskId === 'string' && !mine.has(message.taskId)) {
+              mine.add(message.taskId);
+              link.subscribe(message.taskId);
             }
-            if (
-              message.kind === 'unsubscribe' &&
-              typeof message.sessionId === 'string' &&
-              mine.delete(message.sessionId)
-            ) {
-              link.unsubscribe(message.sessionId);
+            if (message.kind === 'unsubscribe' && typeof message.taskId === 'string' && mine.delete(message.taskId)) {
+              link.unsubscribe(message.taskId);
             }
           });
           ws.on('close', () => {
             offs.forEach((off) => off());
-            for (const sessionId of mine) link.unsubscribe(sessionId);
+            for (const taskId of mine) link.unsubscribe(taskId);
           });
         });
       });

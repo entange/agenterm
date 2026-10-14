@@ -1,8 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { SessionRecord } from '@agenterm/core';
-import { AgentermApiError } from '@agenterm/core';
+import { AgentermApiError, isRunning, type TaskRecord } from '@agenterm/core';
 import {
   app,
   BrowserWindow,
@@ -19,10 +18,10 @@ import {
   type MenuItemConstructorOptions
 } from 'electron';
 import { API_METHODS, IPC, type ApiFailure, type AppCommand, type Preferences } from '../../shared/bridge.js';
-import { callsign } from '../../shared/callsign.js';
+import { taskLabel } from '../../shared/label.js';
 import { DaemonLink, dataDir } from './daemonLink.js';
 import { loadLoginEnv } from './loginEnv.js';
-import { AttentionMonitor } from './monitor.js';
+import { TaskMonitor } from './monitor.js';
 import { startUpdater } from './updater.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -130,7 +129,7 @@ function createWindow(): BrowserWindow {
     }
   });
   win.once('ready-to-show', () => win.show());
-  // Links printed by agents never navigate the privileged window.
+  // Links printed by tasks never navigate the privileged window.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
@@ -143,7 +142,7 @@ function createWindow(): BrowserWindow {
   });
   const contentsId = win.webContents.id;
   win.on('closed', () => {
-    for (const sessionId of outputSubscriptions.get(contentsId) ?? []) link.unsubscribe(sessionId);
+    for (const taskId of outputSubscriptions.get(contentsId) ?? []) link.unsubscribe(taskId);
     outputSubscriptions.delete(contentsId);
     if (mainWindow === win) mainWindow = null;
   });
@@ -223,36 +222,25 @@ function registerIpc(): void {
       return { ok: false, error: failure(error) };
     }
   });
-  ipcMain.on(IPC.input, (event, sessionId: unknown, data: unknown) => {
-    if (!trusted(event) || typeof sessionId !== 'string' || typeof data !== 'string' || data.length === 0) return;
-    link.sendInput(sessionId, data);
+  ipcMain.on(IPC.input, (event, taskId: unknown, data: unknown) => {
+    if (!trusted(event) || typeof taskId !== 'string' || typeof data !== 'string' || data.length === 0) return;
+    link.sendInput(taskId, data);
   });
-  ipcMain.on(IPC.subscribe, (event, sessionId: unknown) => {
-    if (!trusted(event) || typeof sessionId !== 'string') return;
+  ipcMain.on(IPC.subscribe, (event, taskId: unknown) => {
+    if (!trusted(event) || typeof taskId !== 'string') return;
     const set = outputSubscriptions.get(event.sender.id) ?? new Set<string>();
-    if (!set.has(sessionId)) link.subscribe(sessionId);
-    set.add(sessionId);
+    if (!set.has(taskId)) link.subscribe(taskId);
+    set.add(taskId);
     outputSubscriptions.set(event.sender.id, set);
   });
-  ipcMain.on(IPC.unsubscribe, (event, sessionId: unknown) => {
-    if (typeof sessionId === 'string' && outputSubscriptions.get(event.sender.id)?.delete(sessionId) === true) {
-      link.unsubscribe(sessionId);
+  ipcMain.on(IPC.unsubscribe, (event, taskId: unknown) => {
+    if (typeof taskId === 'string' && outputSubscriptions.get(event.sender.id)?.delete(taskId) === true) {
+      link.unsubscribe(taskId);
     }
   });
   ipcMain.handle(IPC.getConnection, () => link.connection());
   ipcMain.handle(IPC.startDaemon, (event) => (trusted(event) ? link.ensure() : link.connection()));
   ipcMain.handle(IPC.stopDaemon, async (event) => (trusted(event) ? confirmAndStopDaemon() : false));
-  ipcMain.handle(IPC.pickDirectory, async (event, defaultPath: unknown) => {
-    if (!trusted(event)) return null;
-    const win = BrowserWindow.fromWebContents(event.sender);
-    const options: Electron.OpenDialogOptions = {
-      title: 'Choose a working folder',
-      properties: ['openDirectory', 'createDirectory'],
-      ...(typeof defaultPath === 'string' && path.isAbsolute(defaultPath) ? { defaultPath } : {})
-    };
-    const result = win === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(win, options);
-    return result.canceled ? null : (result.filePaths[0] ?? null);
-  });
   ipcMain.handle(IPC.openExternal, async (event, url: unknown) => {
     if (trusted(event) && typeof url === 'string' && /^https?:\/\//.test(url)) await shell.openExternal(url);
   });
@@ -275,9 +263,7 @@ function registerIpc(): void {
 }
 
 async function confirmAndStopDaemon(): Promise<boolean> {
-  const running = monitor
-    .list()
-    .filter((session) => session.lifecycle === 'running' && session.origin === 'spawned').length;
+  const running = monitor.list().filter(isRunning).length;
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     buttons: ['Stop daemon', 'Cancel'],
@@ -286,8 +272,8 @@ async function confirmAndStopDaemon(): Promise<boolean> {
     message: 'Stop the agenterm daemon?',
     detail:
       running > 0
-        ? `${running} running ${running === 1 ? 'agent' : 'agents'} started by agenterm will end. Attached processes keep running.`
-        : 'Nothing started by agenterm is running. You can start the daemon again from the app.'
+        ? `${running} running ${running === 1 ? 'task' : 'tasks'} will end.`
+        : 'No tasks are running. The CLI and the app start it again when needed.'
   };
   const win = BrowserWindow.getFocusedWindow();
   const { response } = win === null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(win, options);
@@ -299,17 +285,38 @@ async function confirmAndStopDaemon(): Promise<boolean> {
 
 function buildAppMenu(): void {
   const jump: MenuItemConstructorOptions[] = Array.from({ length: 9 }, (_, i) => ({
-    label: `Session ${i + 1}`,
+    label: `Task ${i + 1}`,
     accelerator: isMac ? `Cmd+${i + 1}` : `Alt+${i + 1}`,
-    click: () => sendCommand({ kind: 'jump-session', index: i })
+    click: () => sendCommand({ kind: 'jump-task', index: i })
   }));
   const template: MenuItemConstructorOptions[] = [
-    ...(isMac ? [{ role: 'appMenu' as const }] : []),
+    ...(isMac
+      ? [
+          {
+            role: 'appMenu' as const,
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              { label: 'Settings…', accelerator: 'Cmd+,', click: () => sendCommand({ kind: 'settings' }) },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const }
+            ]
+          }
+        ]
+      : []),
     {
       label: 'File',
       submenu: [
-        { label: 'New Session…', accelerator: accel('N'), click: () => sendCommand({ kind: 'new-session' }) },
-        { type: 'separator' },
+        ...(isMac
+          ? []
+          : [
+              { label: 'Settings…', accelerator: 'Ctrl+,', click: () => sendCommand({ kind: 'settings' }) },
+              { type: 'separator' as const }
+            ]),
         { label: 'Open Data Folder', click: () => void shell.openPath(dataDir()) },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' }
@@ -319,25 +326,15 @@ function buildAppMenu(): void {
     {
       label: 'View',
       submenu: [
-        { label: 'Command Palette', accelerator: accel('K'), click: () => sendCommand({ kind: 'palette' }) },
-        {
-          label: 'Control Room',
-          accelerator: isMac ? 'Cmd+Shift+H' : 'Ctrl+Shift+H',
-          click: () => sendCommand({ kind: 'home' })
-        },
-        { label: 'Activity', accelerator: accel('J'), click: () => sendCommand({ kind: 'toggle-activity' }) },
+        { label: 'Find Task…', accelerator: accel('K'), click: () => sendCommand({ kind: 'palette' }) },
         { type: 'separator' },
         {
-          label: 'Previous Session',
+          label: 'Previous Task',
           accelerator: accel('['),
-          click: () => sendCommand({ kind: 'cycle-session', delta: -1 })
+          click: () => sendCommand({ kind: 'cycle-task', delta: -1 })
         },
-        {
-          label: 'Next Session',
-          accelerator: accel(']'),
-          click: () => sendCommand({ kind: 'cycle-session', delta: 1 })
-        },
-        { label: 'Go to Session', submenu: jump },
+        { label: 'Next Task', accelerator: accel(']'), click: () => sendCommand({ kind: 'cycle-task', delta: 1 }) },
+        { label: 'Go to Task', submenu: jump },
         { type: 'separator' },
         ...(app.isPackaged
           ? []
@@ -361,37 +358,27 @@ function buildAppMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function buildTrayMenu(sessions: SessionRecord[]): void {
+function buildTrayMenu(tasks: TaskRecord[]): void {
   if (tray === null) return;
-  const live = sessions.filter((session) => session.lifecycle === 'running');
-  const waiting = live.filter(
-    (session) => session.overlay === 'waiting_permission' || session.overlay === 'waiting_input'
-  );
-  const summary =
-    live.length === 0
-      ? 'No agents running'
-      : `${live.length} running${waiting.length > 0 ? ` · ${waiting.length} waiting on you` : ''}`;
-  const rows: MenuItemConstructorOptions[] = [...waiting, ...live.filter((session) => !waiting.includes(session))]
-    .slice(0, 8)
-    .map((session) => ({
-      label: `${waiting.includes(session) ? '● ' : ''}${callsign(session)}  ${session.title}`,
-      click: () => sendCommand({ kind: 'focus-session', sessionId: session.id })
-    }));
+  const running = tasks.filter(isRunning);
+  const summary = running.length === 0 ? 'Nothing running' : `${running.length} running`;
+  const rows: MenuItemConstructorOptions[] = running.slice(0, 10).map((task) => ({
+    label: `${taskLabel(task)}${task.ports.length > 0 ? `  :${task.ports.join(' :')}` : ''}`,
+    click: () => sendCommand({ kind: 'focus-task', taskId: task.id })
+  }));
   const connected = link.connection().state === 'online';
   tray.setToolTip(`agenterm — ${summary}`);
-  if (isMac) tray.setTitle(waiting.length > 0 ? String(waiting.length) : '');
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: connected ? summary : 'Daemon offline', enabled: false },
       ...(rows.length > 0 ? [{ type: 'separator' as const }, ...rows] : []),
       { type: 'separator' },
       { label: 'Open agenterm', click: () => showWindow() },
-      { label: 'New Session…', click: () => sendCommand({ kind: 'new-session' }) },
       { type: 'separator' },
       connected
         ? { label: 'Stop Daemon…', click: () => void confirmAndStopDaemon() }
         : { label: 'Start Daemon', click: () => void link.ensure() },
-      { label: 'Quit agenterm (agents keep running)', role: 'quit' }
+      { label: 'Quit agenterm (tasks keep running)', role: 'quit' }
     ])
   );
 }
@@ -408,19 +395,19 @@ function createTray(): void {
 
 // --- boot ------------------------------------------------------------------
 
-const monitor = new AttentionMonitor({
+const monitor = new TaskMonitor({
   link,
   enabled: () => preferences.notifications,
   hasFocus: () => BrowserWindow.getFocusedWindow() !== null,
-  onOpenSession: (sessionId) => sendCommand({ kind: 'focus-session', sessionId }),
-  onSessions: (sessions) => buildTrayMenu(sessions)
+  onOpenTask: (taskId) => sendCommand({ kind: 'focus-task', taskId }),
+  onTasks: (tasks) => buildTrayMenu(tasks)
 });
 
 link.onEvent((event) => {
-  const terminal = event.kind === 'terminal.output' || event.kind === 'terminal.input';
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue;
-    if (terminal && outputSubscriptions.get(win.webContents.id)?.has(event.sessionId) !== true) continue;
+    if (event.kind === 'terminal.output' && outputSubscriptions.get(win.webContents.id)?.has(event.taskId) !== true)
+      continue;
     win.webContents.send(IPC.event, event);
   }
 });
@@ -433,7 +420,7 @@ link.onConnection((info) => {
 app.on('second-instance', () => showWindow());
 app.on('activate', () => showWindow());
 app.on('window-all-closed', () => {
-  // The daemon and the tray stay; closing the window never stops agents.
+  // The daemon and the tray stay; closing the window never stops tasks.
 });
 app.on('before-quit', () => {
   monitor.dispose();

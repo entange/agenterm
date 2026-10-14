@@ -64,7 +64,7 @@ function findOnPath(binary: string, envPath: string | undefined): string | null 
  *
  * Starts the daemon when it is not running (with the login-shell env so
  * agents resolve), tracks connection state, holds one event socket that
- * receives every session's output, and folds that output into per-second
+ * receives every task's output, and folds that output into per-second
  * activity ticks (bytes plus last visible line) for the heartbeat traces.
  * Terminal bytes themselves are forwarded only to windows that asked.
  */
@@ -220,7 +220,7 @@ export class DaemonLink {
     return this.info;
   }
 
-  /** Stop the daemon on explicit user request. Ends every spawned session. */
+  /** Stop the daemon on explicit user request. Ends every running task. */
   async stop(): Promise<boolean> {
     const lock = readLock();
     // Only signal a pid the daemon itself confirms; a stale lock's pid may be reused.
@@ -242,14 +242,18 @@ export class DaemonLink {
     for (let i = 0; i < 50 && pidAlive(lock.pid); i++) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    this.setInfo({ state: 'stopped', version: null, detail: 'The daemon is stopped. Agents it started have ended.' });
+    this.setInfo({
+      state: 'stopped',
+      version: null,
+      detail: 'The daemon is stopped. Tasks it was running have ended.'
+    });
     return true;
   }
 
-  sendInput(sessionId: string, data: string): void {
+  sendInput(taskId: string, data: string): void {
     // Once a keystroke goes over HTTP, later ones queue behind it so they cannot overtake it on the socket.
     if (this.pendingInputs === 0 && this.socket !== null && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({ kind: 'terminal.input', sessionId, data }));
+      this.socket.send(JSON.stringify({ kind: 'terminal.input', taskId, data }));
       return;
     }
     this.pendingInputs += 1;
@@ -257,10 +261,10 @@ export class DaemonLink {
       .then(async () => {
         const socket = this.socket;
         if (socket !== null && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ kind: 'terminal.input', sessionId, data }));
+          socket.send(JSON.stringify({ kind: 'terminal.input', taskId, data }));
           return;
         }
-        await this.client().sendInput(sessionId, { data });
+        await this.client().sendInput(taskId, { data });
       })
       .catch(() => undefined)
       .finally(() => {
@@ -282,7 +286,7 @@ export class DaemonLink {
     socket.on('open', () => {
       this.retryDelayMs = 500;
       // Only terminals someone is looking at stream bytes; activity arrives as one frame per second.
-      for (const sessionId of this.outputs.keys()) socket.send(JSON.stringify({ kind: 'subscribe', sessionId }));
+      for (const taskId of this.outputs.keys()) socket.send(JSON.stringify({ kind: 'subscribe', taskId }));
       this.setInfo({ state: 'online', version, detail: null });
     });
     socket.on('message', (raw) => {
@@ -325,21 +329,21 @@ export class DaemonLink {
     this.retryDelayMs = Math.min(this.retryDelayMs * 2, 5000);
   }
 
-  /** Start streaming one session's terminal bytes (reference counted). */
-  subscribe(sessionId: string): void {
-    const count = this.outputs.get(sessionId) ?? 0;
-    this.outputs.set(sessionId, count + 1);
-    if (count === 0) this.sendFrame({ kind: 'subscribe', sessionId });
+  /** Start streaming one task's terminal bytes (reference counted). */
+  subscribe(taskId: string): void {
+    const count = this.outputs.get(taskId) ?? 0;
+    this.outputs.set(taskId, count + 1);
+    if (count === 0) this.sendFrame({ kind: 'subscribe', taskId });
   }
 
-  unsubscribe(sessionId: string): void {
-    const count = this.outputs.get(sessionId) ?? 0;
+  unsubscribe(taskId: string): void {
+    const count = this.outputs.get(taskId) ?? 0;
     if (count <= 1) {
-      this.outputs.delete(sessionId);
-      if (count === 1) this.sendFrame({ kind: 'unsubscribe', sessionId });
+      this.outputs.delete(taskId);
+      if (count === 1) this.sendFrame({ kind: 'unsubscribe', taskId });
       return;
     }
-    this.outputs.set(sessionId, count - 1);
+    this.outputs.set(taskId, count - 1);
   }
 
   private sendFrame(frame: unknown): void {

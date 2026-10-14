@@ -10,28 +10,17 @@ import type { AgentermClient, AgentermEvent } from '@agenterm/core';
  */
 export const API_METHODS = [
   'health',
-  'discover',
-  'listSessions',
-  'attach',
-  'sessionDetail',
-  'spawn',
-  'deleteSession',
-  'updateSession',
-  'restart',
+  'listTasks',
+  'getTask',
+  'stop',
+  'remove',
+  'clearEnded',
   'sendInput',
   'resize',
-  'signal',
   'output',
-  'processes',
-  'ports',
-  'commands',
-  'git',
-  'gitDiff',
-  'files',
-  'events',
   'activity',
-  'usage',
-  'search'
+  'settings',
+  'updateSettings'
 ] as const;
 
 export type ApiMethod = (typeof API_METHODS)[number];
@@ -57,21 +46,19 @@ export interface ConnectionInfo {
   detail: string | null;
 }
 
-/** Output volume and last visible line per session over the last tick. */
+/** Output volume and last visible line per task over the last tick. */
 export interface ActivityTick {
   atMs: number;
-  sessions: Record<string, { bytes: number; lastLine: string | null }>;
+  tasks: Record<string, { bytes: number; lastLine: string | null }>;
 }
 
 /** App-level commands sent from menus, tray, and notifications. */
 export type AppCommand =
-  | { kind: 'new-session' }
   | { kind: 'palette' }
-  | { kind: 'toggle-activity' }
-  | { kind: 'home' }
-  | { kind: 'focus-session'; sessionId: string }
-  | { kind: 'cycle-session'; delta: 1 | -1 }
-  | { kind: 'jump-session'; index: number };
+  | { kind: 'settings' }
+  | { kind: 'focus-task'; taskId: string }
+  | { kind: 'cycle-task'; delta: 1 | -1 }
+  | { kind: 'jump-task'; index: number };
 
 export interface Preferences {
   notifications: boolean;
@@ -81,9 +68,9 @@ export interface AgentermBridge {
   platform: string;
   call<M extends ApiMethod>(method: M, ...args: ApiArgs<M>): Promise<ApiEnvelope<ApiResult<M>>>;
   /** Fast keystroke path over the daemon socket. */
-  sendInput(sessionId: string, data: string): void;
-  subscribeOutput(sessionId: string): void;
-  unsubscribeOutput(sessionId: string): void;
+  sendInput(taskId: string, data: string): void;
+  subscribeOutput(taskId: string): void;
+  unsubscribeOutput(taskId: string): void;
   onEvent(handler: (event: AgentermEvent) => void): () => void;
   onActivity(handler: (tick: ActivityTick) => void): () => void;
   onConnection(handler: (info: ConnectionInfo) => void): () => void;
@@ -91,7 +78,6 @@ export interface AgentermBridge {
   connection(): Promise<ConnectionInfo>;
   startDaemon(): Promise<ConnectionInfo>;
   stopDaemon(): Promise<boolean>;
-  pickDirectory(defaultPath?: string): Promise<string | null>;
   openExternal(url: string): Promise<void>;
   revealPath(path: string): Promise<void>;
   preferences(): Promise<Preferences>;
@@ -110,7 +96,6 @@ export const IPC = {
   command: 'agenterm:command',
   startDaemon: 'agenterm:start-daemon',
   stopDaemon: 'agenterm:stop-daemon',
-  pickDirectory: 'agenterm:pick-directory',
   openExternal: 'agenterm:open-external',
   revealPath: 'agenterm:reveal-path',
   preferences: 'agenterm:preferences',

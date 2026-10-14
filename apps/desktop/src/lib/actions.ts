@@ -1,113 +1,79 @@
-import type { SessionRecord, SpawnSessionRequest } from '@agenterm/core';
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
-import { callsign } from '../../shared/callsign.js';
+import type { QueryClient } from '@tanstack/react-query';
+import { isRunning, type TaskRecord } from '@agenterm/core';
 import { api } from './bridge.js';
-import { keys, seedSession } from './queries.js';
+import { useLive } from './live.js';
+import { keys } from './queries.js';
+import { upsertTask } from './tasks.js';
 import { toast, toastError } from './toast.js';
 import { useUi } from './ui.js';
 
 /**
- * User actions. Each one names its result the way its button names the
- * action ("Kill" → "Killed"), refreshes what it changed, and reports
- * daemon errors with their hint.
+ * What the app can do to a task: stop it, kill it, remove it, clear the
+ * ended ones. Results go straight into the cached list so the screen
+ * updates before the next event arrives.
  */
-export function actions(client: QueryClient) {
-  const refresh = (id?: string): void => {
-    void client.invalidateQueries({ queryKey: keys.sessions });
-    if (id !== undefined) void client.invalidateQueries({ queryKey: keys.detail(id) });
-  };
 
-  return {
-    async spawn(request: SpawnSessionRequest): Promise<SessionRecord | null> {
-      try {
-        const { session } = await api('spawn', request);
-        seedSession(client, session);
-        refresh();
-        useUi.getState().rememberCwd(request.cwd);
-        useUi.getState().select(session.id, 'terminal');
-        toast('success', `Started ${callsign(session)}`, session.title);
-        return session;
-      } catch (error) {
-        toastError('Could not start the session', error);
-        return null;
-      }
-    },
-
-    async attach(pid: number, title?: string): Promise<void> {
-      try {
-        const { session } = await api('attach', { pid, cwd: null, ...(title === undefined ? {} : { title }) });
-        refresh();
-        useUi.getState().select(session.id, 'processes');
-        toast('success', `Attached to pid ${pid}`, 'Watching read-only. agenterm will not type into or stop it.');
-      } catch (error) {
-        toastError(`Could not attach to pid ${pid}`, error);
-      }
-    },
-
-    async interrupt(session: SessionRecord): Promise<void> {
-      try {
-        await api('signal', session.id, { signal: 'interrupt' });
-      } catch (error) {
-        toastError('Could not send Ctrl+C', error);
-      }
-    },
-
-    async kill(session: SessionRecord, confirmPid?: number): Promise<boolean> {
-      try {
-        const result = await api('deleteSession', session.id, {
-          killTree: true,
-          ...(confirmPid === undefined ? {} : { confirmPid })
-        });
-        refresh(session.id);
-        toast('success', result.killed ? `Killed ${callsign(session)}` : `${callsign(session)} had already ended`);
-        return true;
-      } catch (error) {
-        toastError(`Could not kill ${callsign(session)}`, error);
-        return false;
-      }
-    },
-
-    async close(session: SessionRecord): Promise<void> {
-      try {
-        await api('deleteSession', session.id, { killTree: false });
-        if (useUi.getState().selectedId === session.id) useUi.getState().select(null);
-        refresh();
-        toast(
-          'info',
-          session.origin === 'attached' ? `Detached from pid ${session.pid}` : `Closed ${callsign(session)}`
-        );
-      } catch (error) {
-        toastError(`Could not close ${callsign(session)}`, error);
-      }
-    },
-
-    async restart(session: SessionRecord): Promise<void> {
-      try {
-        const { session: fresh } = await api('restart', session.id);
-        seedSession(client, fresh);
-        refresh();
-        useUi.getState().select(fresh.id, 'terminal');
-        toast('success', `Restarted as ${callsign(fresh)}`);
-      } catch (error) {
-        toastError(`Could not restart ${callsign(session)}`, error);
-      }
-    },
-
-    async rename(session: SessionRecord, title: string): Promise<void> {
-      try {
-        await api('updateSession', session.id, { title });
-        refresh(session.id);
-      } catch (error) {
-        toastError('Could not rename the session', error);
-      }
-    }
-  };
+function patch(client: QueryClient, task: TaskRecord): void {
+  client.setQueryData<TaskRecord[]>(keys.tasks, (current) => upsertTask(current ?? [], task));
 }
 
-export type Actions = ReturnType<typeof actions>;
+function drop(client: QueryClient, ids: string[]): void {
+  const gone = new Set(ids);
+  client.setQueryData<TaskRecord[]>(keys.tasks, (current) => (current ?? []).filter((task) => !gone.has(task.id)));
+  for (const id of ids) useLive.getState().forget(id);
+}
 
-export function useActions(): Actions {
-  const client = useQueryClient();
-  return useMemo(() => actions(client), [client]);
+/** Ctrl+C, then end the process tree if it does not exit. `force` kills it right away. */
+export async function stopTask(client: QueryClient, task: TaskRecord, force: boolean): Promise<void> {
+  try {
+    patch(client, (await api('stop', task.id, { force })).task);
+  } catch (error) {
+    toastError(force ? `Could not kill ${task.id}` : `Could not stop ${task.id}`, error);
+  }
+}
+
+async function removeNow(client: QueryClient, task: TaskRecord): Promise<void> {
+  try {
+    await api('remove', task.id);
+    drop(client, [task.id]);
+  } catch (error) {
+    toastError(`Could not remove ${task.id}`, error);
+  }
+}
+
+/** Remove a task and its output. A running one is stopped first, after asking. */
+export function removeTask(client: QueryClient, task: TaskRecord): void {
+  if (!isRunning(task)) {
+    void removeNow(client, task);
+    return;
+  }
+  useUi.getState().confirm({
+    title: `Stop and remove ${task.id}?`,
+    detail: `${task.command} is still running. It will be stopped and its output deleted.`,
+    action: 'Stop and remove',
+    run: () => removeNow(client, task)
+  });
+}
+
+/** Remove every task that has ended. */
+export async function clearEnded(client: QueryClient): Promise<void> {
+  try {
+    const { removed } = await api('clearEnded');
+    drop(client, removed);
+    toast(
+      'success',
+      removed.length === 0
+        ? 'Nothing to clear'
+        : `Cleared ${removed.length} ended ${removed.length === 1 ? 'task' : 'tasks'}`
+    );
+  } catch (error) {
+    toastError('Could not clear ended tasks', error);
+  }
+}
+
+export function copyText(text: string, label: string): void {
+  void navigator.clipboard.writeText(text).then(
+    () => toast('success', `Copied ${label}`),
+    (error: unknown) => toastError(`Could not copy ${label}`, error)
+  );
 }

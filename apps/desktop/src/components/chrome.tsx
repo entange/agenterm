@@ -1,18 +1,16 @@
 import { Button, cn, IconButton, Kbd } from '@agenterm/ui';
-import { CheckCircle2, CircleAlert, Info, PanelRight, Search, X } from 'lucide-react';
+import { CheckCircle2, CircleAlert, Info, Search, Settings, X } from 'lucide-react';
 import * as React from 'react';
 import { getBridge } from '../lib/bridge.js';
 import { useLive } from '../lib/live.js';
 import { useToasts } from '../lib/toast.js';
-import { useUi, useWideLayout } from '../lib/ui.js';
+import { useUi } from '../lib/ui.js';
 import { shortcut } from '../lib/shortcuts.js';
 
-/** Inset title bar: drag region, palette trigger, activity toggle. */
+/** Inset title bar: drag region, task finder, settings. */
 export function TitleBar(): React.JSX.Element {
   const setPaletteOpen = useUi((state) => state.setPaletteOpen);
-  const wide = useWideLayout();
-  const railOpen = useUi((state) => (wide ? state.railOpen : state.railPeek));
-  const toggleRail = useUi((state) => state.toggleRail);
+  const setSettingsOpen = useUi((state) => state.setSettingsOpen);
   const mac = getBridge()?.platform === 'darwin';
   return (
     <div
@@ -21,37 +19,32 @@ export function TitleBar(): React.JSX.Element {
         mac ? 'pl-[88px]' : 'pl-3'
       )}
     >
-      <span className="callsign text-[12px] text-ink-muted">agenterm</span>
+      <span className="wordmark text-[12px] text-ink-muted">agenterm</span>
       <button
         type="button"
         onClick={() => setPaletteOpen(true)}
-        className="no-drag mx-auto flex h-7 w-[420px] items-center gap-2 rounded-md border border-line bg-raised px-2.5 text-[12.5px] text-ink-faint hover:border-line-strong hover:text-ink-muted"
+        className="no-drag mx-auto flex h-7 w-[380px] items-center gap-2 rounded-md border border-line bg-raised px-2.5 text-[12.5px] text-ink-faint hover:border-line-strong hover:text-ink-muted"
       >
         <Search className="size-3.5" />
-        Jump to a session or run an action
+        Find a task
         <Kbd className="ml-auto">{shortcut('K')}</Kbd>
       </button>
       <div className="no-drag">
-        <IconButton
-          label={railOpen ? 'Hide activity' : 'Show activity'}
-          shortcut={shortcut('J')}
-          onClick={toggleRail}
-          className={railOpen ? 'text-ink' : undefined}
-        >
-          <PanelRight className="size-4" />
+        <IconButton label="Settings" onClick={() => setSettingsOpen(true)}>
+          <Settings className="size-4" />
         </IconButton>
       </div>
     </div>
   );
 }
 
-/** The daemon is up but the session list keeps failing to load. */
-export function SessionsErrorBanner({ error, retry }: { error: unknown; retry: () => void }): React.JSX.Element {
+/** The daemon is up but the task list keeps failing to load. */
+export function TasksErrorBanner({ error, retry }: { error: unknown; retry: () => void }): React.JSX.Element {
   return (
     <div role="alert" className="flex items-center gap-3 border-b border-fail/30 bg-fail/10 px-4 py-2 text-[12.5px]">
       <span className="size-1.5 rounded-full bg-fail" />
       <span className="flex-1 text-ink">
-        Could not load sessions: {error instanceof Error ? error.message : String(error)}
+        Could not load tasks: {error instanceof Error ? error.message : String(error)}
       </span>
       <Button size="sm" tone="secondary" onClick={retry}>
         Retry
@@ -115,7 +108,7 @@ export function Toaster(): React.JSX.Element {
             <Icon
               className={cn(
                 'mt-0.5 size-4 shrink-0',
-                entry.tone === 'error' ? 'text-fail' : entry.tone === 'success' ? 'text-ok' : 'text-accent'
+                entry.tone === 'error' ? 'text-fail' : entry.tone === 'success' ? 'text-ok' : 'text-ink-muted'
               )}
             />
             <div className="min-w-0 flex-1">

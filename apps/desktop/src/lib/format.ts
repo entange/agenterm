@@ -1,12 +1,5 @@
-import type { AgentermEvent, AgentProvider, SessionRecord } from '@agenterm/core';
-
-export const PROVIDER_NAMES: Record<AgentProvider, string> = {
-  claude: 'Claude Code',
-  codex: 'Codex',
-  gemini: 'Gemini CLI',
-  opencode: 'opencode',
-  generic: 'Command'
-};
+import type { TaskRecord } from '@agenterm/core';
+import type { Signal } from '@agenterm/ui';
 
 /** Compact age: now, 45s, 12m, 3h, 2d. */
 export function formatAge(fromMs: number, nowMs = Date.now()): string {
@@ -27,32 +20,6 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
-export function formatClock(ms: number): string {
-  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-}
-
-export function formatBytes(bytes: number | null): string {
-  if (bytes === null) return '—';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 / 1024).toFixed(0)} MB`;
-  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-}
-
-/** Dollars for spend: $0.42, $12.30, <$0.01. */
-export function formatCost(usd: number): string {
-  if (usd <= 0) return '$0';
-  if (usd < 0.01) return '<$0.01';
-  return `$${usd < 100 ? usd.toFixed(2) : Math.round(usd).toLocaleString()}`;
-}
-
-/** Token counts: 950, 12.3k, 1.2M. */
-export function formatTokens(count: number): string {
-  if (count < 1000) return String(Math.round(count));
-  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}k`;
-  return `${(count / 1_000_000).toFixed(1)}M`;
-}
-
 /** Home-relative path for display: /Users/me/code/app → ~/code/app. */
 export function shortPath(cwd: string): string {
   const match = /^(\/Users\/[^/]+|\/home\/[^/]+|[A-Za-z]:\\Users\\[^\\]+)(.*)$/.exec(cwd);
@@ -61,98 +28,28 @@ export function shortPath(cwd: string): string {
 }
 
 /** Last path segment, for compact labels. */
-/** A process command line with its executable's directory dropped, so arguments stay visible. */
-export function compactCommand(command: string): string {
-  const match = /^(\/\S*\/)(\S+)/.exec(command);
-  return match === null ? command : command.slice(match[1]?.length ?? 0);
-}
-
 export function folderName(cwd: string): string {
   const parts = cwd.split(/[\\/]/).filter((part) => part.length > 0);
   return parts[parts.length - 1] ?? cwd;
 }
 
-export function isLive(session: SessionRecord): boolean {
-  return session.lifecycle === 'running' || session.lifecycle === 'starting' || session.lifecycle === 'created';
-}
-
-/** One plain sentence per event, written from the user's side. */
-export function describeEvent(event: AgentermEvent): string {
-  switch (event.kind) {
-    case 'session.created':
-      return `Started ${event.commandLine.join(' ')}`;
-    case 'session.exited':
-      if (event.exitSignal !== null) return `Ended by ${event.exitSignal}`;
-      return event.exitCode === null
-        ? 'Ended'
-        : event.exitCode === 0
-          ? 'Finished cleanly'
-          : `Exited with code ${event.exitCode}`;
-    case 'session.attached':
-      return `Attached to pid ${event.pid}`;
-    case 'session.detached':
-      return 'Closed';
-    case 'session.updated':
-      return `Renamed to “${event.title}”`;
-    case 'agent.status': {
-      const label: Record<typeof event.overlay, string> = {
-        unknown: 'Status unknown',
-        working: 'Working',
-        waiting_input: 'Waiting for your reply',
-        waiting_permission: 'Waiting for your approval',
-        completed: 'Finished its task',
-        failed: 'Reported a failure'
-      };
-      return event.summary === null ? label[event.overlay] : `${label[event.overlay]} — ${event.summary}`;
-    }
-    case 'port.opened':
-      return `Listening on port ${event.port}`;
-    case 'port.closed':
-      return `Stopped listening on port ${event.port}`;
-    case 'workspace.conflict':
-      return `Shares ${shortPath(event.cwd)} with ${event.involvedSessionIds.length - 1} other running ${event.involvedSessionIds.length === 2 ? 'session' : 'sessions'}`;
-    case 'file.changed':
-      return `${event.change === 'added' ? 'Created' : event.change === 'deleted' ? 'Deleted' : 'Edited'} ${event.path}`;
-    case 'process.started':
-      return `Started ${event.command}`;
-    case 'process.exited':
-      return `${event.command} exited`;
-    case 'session.usage':
-      return `Spend now ${formatCost(event.costUsd)}`;
+/** Dot color: green running, red failed, amber lost, gray finished or stopped. */
+export function signalOf(task: Pick<TaskRecord, 'status'>): Signal {
+  switch (task.status) {
+    case 'running':
+      return 'ok';
+    case 'failed':
+      return 'fail';
+    case 'lost':
+      return 'attn';
     default:
-      return event.kind;
+      return 'idle';
   }
 }
 
-/** Split a typed argument string like a shell would, honoring quotes. */
-export function splitArgs(input: string): string[] {
-  const out: string[] = [];
-  let current = '';
-  let quote: '"' | "'" | null = null;
-  let started = false;
-  for (let i = 0; i < input.length; i++) {
-    const char = input[i] ?? '';
-    if (quote !== null) {
-      if (char === quote) quote = null;
-      else if (char === '\\' && quote === '"' && i + 1 < input.length) current += input[++i] ?? '';
-      else current += char;
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      started = true;
-    } else if (/\s/.test(char)) {
-      if (started) out.push(current);
-      current = '';
-      started = false;
-    } else if (char === '\\' && i + 1 < input.length) {
-      current += input[++i] ?? '';
-      started = true;
-    } else {
-      current += char;
-      started = true;
-    }
-  }
-  if (started) out.push(current);
-  return out;
+/** "up 5m" while running, "ran 3m 05s" once ended. */
+export function runtimeText(task: Pick<TaskRecord, 'startedAtMs' | 'endedAtMs'>, nowMs = Date.now()): string {
+  return task.endedAtMs === null
+    ? `up ${formatDuration(nowMs - task.startedAtMs)}`
+    : `ran ${formatDuration(task.endedAtMs - task.startedAtMs)}`;
 }

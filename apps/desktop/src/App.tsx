@@ -1,20 +1,18 @@
-import type { AgentProvider } from '@agenterm/core';
+import { isRunning } from '@agenterm/core';
 import { EmptyState, TooltipProvider } from '@agenterm/ui';
 import * as React from 'react';
 import type { AppCommand } from '../shared/bridge.js';
-import { ActivityRail } from './components/ActivityRail.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
-import { ConnectionBanner, SessionsErrorBanner, TitleBar, Toaster } from './components/chrome.js';
+import { ConnectionBanner, TasksErrorBanner, TitleBar, Toaster } from './components/chrome.js';
 import { CommandPalette } from './components/CommandPalette.js';
-import { NewSessionDialog, PendingDialogs } from './components/dialogs.js';
-import { Home } from './components/Home.js';
+import { ConfirmDialog, SettingsDialog } from './components/dialogs.js';
 import { Sidebar } from './components/Sidebar.js';
-import { buildRows } from './lib/board.js';
-import { SessionView } from './components/SessionView.js';
+import { TaskView, Welcome } from './components/TaskView.js';
 import { getBridge } from './lib/bridge.js';
 import { useLive } from './lib/live.js';
-import { useAttention, useSessions } from './lib/queries.js';
-import { useUi, useWideLayout } from './lib/ui.js';
+import { useTasks } from './lib/queries.js';
+import { buildRows, taskOrder } from './lib/tasks.js';
+import { useUi } from './lib/ui.js';
 import { useDaemonWiring } from './lib/wiring.js';
 
 /** Apply the theme preference to <html>, following the OS when set to system. */
@@ -34,91 +32,76 @@ function useThemeClass(): void {
 
 export function App(): React.JSX.Element {
   useThemeClass();
-  const sessionsQuery = useSessions();
-  const sessions = React.useMemo(() => sessionsQuery.data ?? [], [sessionsQuery.data]);
+  const tasksQuery = useTasks();
+  const tasks = React.useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const online = useLive((state) => state.connection.state === 'online');
-  const loading = sessionsQuery.data === undefined && online && !sessionsQuery.isError;
-  const attention = useAttention(sessions);
   const selectedId = useUi((state) => state.selectedId);
-  const railOpen = useUi((state) => state.railOpen);
-  const railPeek = useUi((state) => state.railPeek);
-  const wide = useWideLayout();
-  const newSessionOpen = useUi((state) => state.newSessionOpen);
-  const setNewSessionOpen = useUi((state) => state.setNewSessionOpen);
-  const [initialProvider, setInitialProvider] = React.useState<AgentProvider | undefined>(undefined);
-  const selected = sessions.find((session) => session.id === selectedId) ?? null;
-
-  const openNewSession = React.useCallback(
-    (provider?: AgentProvider) => {
-      setInitialProvider(provider);
-      setNewSessionOpen(true);
-    },
-    [setNewSessionOpen]
-  );
-
-  // Sidebar order drives the palette; ⌘1-9 and cycling follow only the rows the sidebar shows.
   const groupBy = useUi((state) => state.groupBy);
   const filter = useUi((state) => state.filter);
   const collapsed = useUi((state) => state.collapsed);
-  const ordered = React.useMemo(
-    () =>
-      buildRows(sessions, attention, { groupBy, collapsed: new Set(), filter: '', showAllEnded: true }).flatMap(
-        (row) => (row.kind === 'session' ? [row.session] : [])
-      ),
-    [sessions, attention, groupBy]
+  const selected = tasks.find((task) => task.id === selectedId) ?? null;
+
+  const rows = React.useMemo(
+    () => buildRows(tasks, { groupBy, filter, collapsed: new Set(collapsed) }),
+    [tasks, groupBy, filter, collapsed]
   );
-  const visible = React.useMemo(
-    () =>
-      buildRows(sessions, attention, { groupBy, collapsed: new Set(collapsed), filter, showAllEnded: true }).flatMap(
-        (row) => (row.kind === 'session' ? [row.session] : [])
-      ),
-    [sessions, attention, groupBy, collapsed, filter]
+  // ⌘1-9 and next/previous follow the rows the sidebar shows.
+  const visible = React.useMemo(() => taskOrder(rows), [rows]);
+  // The palette lists every task, in sidebar order where possible.
+  const ordered = React.useMemo(
+    () => taskOrder(buildRows(tasks, { groupBy, filter: '', collapsed: new Set() })),
+    [tasks, groupBy]
   );
 
   const onCommand = (command: AppCommand): void => {
     const ui = useUi.getState();
     switch (command.kind) {
-      case 'new-session':
-        openNewSession();
-        break;
       case 'palette':
         ui.setPaletteOpen(!ui.paletteOpen);
         break;
-      case 'toggle-activity':
-        ui.toggleRail();
+      case 'settings':
+        ui.setSettingsOpen(true);
         break;
-      case 'home':
-        ui.select(null);
+      case 'focus-task':
+        ui.select(command.taskId, { focus: true });
         break;
-      case 'focus-session':
-        ui.select(command.sessionId);
-        break;
-      case 'jump-session': {
+      case 'jump-task': {
         const target = visible[command.index];
-        if (target !== undefined) ui.select(target.id);
+        if (target !== undefined) ui.select(target.id, { focus: true });
         break;
       }
-      case 'cycle-session': {
+      case 'cycle-task': {
         if (visible.length === 0) break;
-        const index = visible.findIndex((session) => session.id === ui.selectedId);
+        const index = visible.findIndex((task) => task.id === ui.selectedId);
         const next = index === -1 ? 0 : (index + command.delta + visible.length) % visible.length;
         const target = visible[next];
-        if (target !== undefined) ui.select(target.id);
+        if (target !== undefined) ui.select(target.id, { focus: true });
         break;
       }
     }
   };
   useDaemonWiring(onCommand);
 
-  // A selected session that was closed elsewhere falls back to the control
-  // room, but only once the list has shown it and then lost it.
+  // Always show a terminal when there is one: with nothing selected, open the
+  // newest running task. When the selected task is removed, move to the task
+  // that took its place in the list.
+  const previousOrder = React.useRef<string[]>([]);
   const seenIds = React.useRef(new Set<string>());
   React.useEffect(() => {
-    for (const session of sessions) seenIds.current.add(session.id);
-    if (selectedId !== null && selected === null && seenIds.current.has(selectedId) && !sessionsQuery.isFetching) {
-      useUi.getState().select(null);
+    for (const task of tasks) seenIds.current.add(task.id);
+    const ids = visible.map((task) => task.id);
+    const lost = selectedId !== null && selected === null && seenIds.current.has(selectedId);
+    if (selectedId === null || lost) {
+      let next = visible.find(isRunning) ?? visible[0];
+      if (lost) {
+        const at = previousOrder.current.indexOf(selectedId);
+        const neighbor = previousOrder.current.slice(at + 1).find((id) => ids.includes(id));
+        next = visible.find((task) => task.id === neighbor) ?? visible[visible.length - 1];
+      }
+      if (next !== undefined || lost) useUi.getState().select(next?.id ?? null);
     }
-  }, [sessions, selected, selectedId, sessionsQuery.isFetching]);
+    previousOrder.current = ids;
+  }, [tasks, visible, selected, selectedId]);
 
   if (getBridge() === null) {
     return (
@@ -135,41 +118,25 @@ export function App(): React.JSX.Element {
       <div className="flex h-full flex-col">
         <TitleBar />
         <ConnectionBanner />
-        {online && sessionsQuery.isError ? (
-          <SessionsErrorBanner error={sessionsQuery.error} retry={() => void sessionsQuery.refetch()} />
+        {online && tasksQuery.isError ? (
+          <TasksErrorBanner error={tasksQuery.error} retry={() => void tasksQuery.refetch()} />
         ) : null}
         <div className="relative flex min-h-0 flex-1">
-          <Sidebar sessions={sessions} attention={attention} loading={loading} onNewSession={() => openNewSession()} />
-          <main className="flex min-w-0 flex-1 flex-col">
+          <Sidebar rows={rows} tasks={tasks} />
+          <main className="flex min-w-0 flex-1 flex-col bg-term">
             {selected === null ? (
-              <ErrorBoundary title="The control room hit an error">
-                <Home sessions={sessions} attention={attention} loading={loading} onNewSession={openNewSession} />
-              </ErrorBoundary>
+              <Welcome hasTasks={tasks.length > 0} />
             ) : (
-              <ErrorBoundary key={selected.id} title="This session's view hit an error">
-                <SessionView session={selected} attention={attention.get(selected.id)} />
+              <ErrorBoundary key={selected.id} title="This task's view hit an error">
+                <TaskView task={selected} />
               </ErrorBoundary>
             )}
           </main>
-          {wide ? (
-            railOpen ? (
-              <ActivityRail sessions={sessions} />
-            ) : null
-          ) : railPeek ? (
-            <div className="absolute inset-y-0 right-0 z-20 flex shadow-2xl shadow-black/40">
-              <ActivityRail sessions={sessions} />
-            </div>
-          ) : null}
         </div>
       </div>
-      <NewSessionDialog
-        open={newSessionOpen}
-        onOpenChange={setNewSessionOpen}
-        sessions={sessions}
-        initialProvider={initialProvider}
-      />
-      <PendingDialogs />
-      <CommandPalette sessions={ordered} attention={attention} onNewSession={() => openNewSession()} />
+      <CommandPalette tasks={ordered} />
+      <SettingsDialog />
+      <ConfirmDialog />
       <Toaster />
     </TooltipProvider>
   );

@@ -3,7 +3,7 @@ import * as React from 'react';
 
 /**
  * Keeps one broken view from blanking the whole window. The app-level
- * boundary offers a reload; inner boundaries (one per session) let the
+ * boundary offers a reload; inner boundaries (one per task) let the
  * rest of the control room keep working.
  */
 export class ErrorBoundary extends React.Component<

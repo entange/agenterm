@@ -1,4 +1,4 @@
-import type { AgentermEvent, SessionOutputChunk, SessionRecord } from '@agenterm/core';
+import type { AgentermEvent, TaskOutputChunk, TaskRecord } from '@agenterm/core';
 import { IconButton } from '@agenterm/ui';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
@@ -71,9 +71,10 @@ const MAC = navigator.platform.startsWith('Mac');
  */
 function isAppShortcut(event: KeyboardEvent): boolean {
   const key = event.key.toLowerCase();
-  if (MAC) return event.metaKey && !event.ctrlKey && (/^[knjf[\]1-9]$/.test(key) || (event.shiftKey && key === 'h'));
+  if (MAC) return event.metaKey && !event.ctrlKey && /^[kf[\],1-9]$/.test(key);
   if (event.altKey && !event.ctrlKey && /^[1-9]$/.test(key)) return true;
-  return event.ctrlKey && event.shiftKey && !event.altKey && /^[knjfh[\]{}]$/.test(key);
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && key === ',') return true;
+  return event.ctrlKey && event.shiftKey && !event.altKey && /^[kf[\]{}]$/.test(key);
 }
 
 function isFindShortcut(event: KeyboardEvent): boolean {
@@ -86,7 +87,8 @@ const TAIL_BYTES = 512 * 1024;
 const REPLAY_AGE_MS = 2000;
 
 /**
- * Live terminal for one session.
+ * Live terminal for one task. Typing goes straight to the program while
+ * it runs; an ended task shows its output read-only.
  *
  * Ordering is the hard part: subscribe first and buffer live chunks,
  * page in the full retained scrollback, then flush only buffered chunks
@@ -97,27 +99,18 @@ const REPLAY_AGE_MS = 2000;
  * attributes). xterm answers them through onData, so answers to old
  * output are dropped instead of being typed into the program.
  */
-export function TerminalPane({
-  session,
-  interactive
-}: {
-  session: SessionRecord;
-  interactive: boolean;
-}): React.JSX.Element {
+export function TerminalPane({ task }: { task: TaskRecord }): React.JSX.Element {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const searchRef = React.useRef<SearchAddon | null>(null);
   const termRef = React.useRef<Terminal | null>(null);
   const [searchOpen, setSearchOpen] = React.useState(false);
-  const [findSeed, setFindSeed] = React.useState('');
-  const [findNonce, setFindNonce] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
-  const sessionId = session.id;
-  // Read through a ref so a session ending does not tear down and reload the terminal.
+  const taskId = task.id;
+  const interactive = task.status === 'running';
+  // Read through a ref so a task ending does not tear down and reload the terminal.
   const interactiveRef = React.useRef(interactive);
   interactiveRef.current = interactive;
-  const pendingFind = useUi((state) =>
-    state.pendingFind !== null && state.pendingFind.sessionId === sessionId ? state.pendingFind.text : null
-  );
+  const wantsFocus = useUi((state) => state.wantsFocus);
 
   React.useEffect(() => {
     const host = hostRef.current;
@@ -181,35 +174,35 @@ export function TerminalPane({
       for (;;) {
         const page = await api(
           'output',
-          sessionId,
+          taskId,
           next === null ? { tailBytes: TAIL_BYTES, limit: 1000 } : { sinceSeq: next, limit: 1000 }
         );
         if (disposed) return;
         if (next !== null && page.firstSeq !== null && page.firstSeq > next + 1 && lastSeq > 0) {
           term.write('\r\n\x1b[2m— output dropped while disconnected —\x1b[0m\r\n');
         }
-        page.chunks.forEach((chunk: SessionOutputChunk) => write(chunk));
+        page.chunks.forEach((chunk: TaskOutputChunk) => write(chunk));
         if (!page.hasMore || page.resumeAfterSeq === null) return;
         next = page.resumeAfterSeq;
       }
     };
 
     const offEvent = bridge.onEvent((event: AgentermEvent) => {
-      if (event.kind !== 'terminal.output' || event.sessionId !== sessionId) return;
+      if (event.kind !== 'terminal.output' || event.taskId !== taskId) return;
       if (!ready) {
-        buffered.push({ seq: event.seq, data: event.data, createdAtMs: event.createdAtMs });
+        buffered.push({ seq: event.seq, data: event.data, createdAtMs: Date.now() });
         return;
       }
       if (event.seq > lastSeq + 1) {
         // A gap means events were missed; fetch it in order.
         ready = false;
-        buffered.push({ seq: event.seq, data: event.data, createdAtMs: event.createdAtMs });
+        buffered.push({ seq: event.seq, data: event.data, createdAtMs: Date.now() });
         void catchUp();
         return;
       }
       write(event);
     });
-    bridge.subscribeOutput(sessionId);
+    bridge.subscribeOutput(taskId);
 
     let retry: ReturnType<typeof setTimeout> | null = null;
     const catchUp = async (): Promise<void> => {
@@ -230,17 +223,18 @@ export function TerminalPane({
       try {
         await pageFrom(null);
       } catch {
-        if (!disposed) term.write('\x1b[2mScrollback is not available for this session.\x1b[0m\r\n');
+        if (!disposed) term.write('\x1b[2mThe output of this task is not available.\x1b[0m\r\n');
       }
       if (disposed) return;
       buffered.sort((a, b) => a.seq - b.seq).forEach(write);
       buffered = [];
       ready = true;
       setLoading(false);
-      // Take focus only when nothing else has it, so typing elsewhere during the load is not stolen.
+      // Take focus when a click asked for it or nothing else has it, so typing elsewhere is not stolen.
       const active = document.activeElement;
       const idle = active === null || active === document.body || host.contains(active);
-      if (interactiveRef.current && idle && useUi.getState().pendingFind === null) term.focus();
+      if (interactiveRef.current && (idle || useUi.getState().wantsFocus)) term.focus();
+      useUi.getState().clearFocusRequest();
     })();
 
     const offConnection = useLive.subscribe((state, previous) => {
@@ -251,14 +245,14 @@ export function TerminalPane({
     });
 
     const inputDisposable = term.onData((data) => {
-      if (muted === 0 && interactiveRef.current) bridge.sendInput(sessionId, data);
+      if (muted === 0 && interactiveRef.current) bridge.sendInput(taskId, data);
     });
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const resizeDisposable = term.onResize(({ cols, rows }) => {
       if (!interactiveRef.current) return;
       if (resizeTimer !== null) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        void api('resize', sessionId, { cols, rows }).catch(() => undefined);
+        void api('resize', taskId, { cols, rows }).catch(() => undefined);
       }, 120);
     });
     let frame = 0;
@@ -279,7 +273,7 @@ export function TerminalPane({
       if (retry !== null) clearTimeout(retry);
       offEvent();
       offConnection();
-      bridge.unsubscribeOutput(sessionId);
+      bridge.unsubscribeOutput(taskId);
       inputDisposable.dispose();
       resizeDisposable.dispose();
       if (resizeTimer !== null) clearTimeout(resizeTimer);
@@ -290,7 +284,7 @@ export function TerminalPane({
       termRef.current = null;
       term.dispose();
     };
-  }, [sessionId]);
+  }, [taskId]);
 
   React.useEffect(() => {
     const term = termRef.current;
@@ -300,27 +294,22 @@ export function TerminalPane({
     term.options.cursorStyle = interactive ? 'block' : 'underline';
   }, [interactive]);
 
-  // Arriving from output search: open Find on the searched text once the scrollback is in.
+  // Clicking the task again (or its row) after load puts the cursor back in the terminal.
   React.useEffect(() => {
-    if (loading || pendingFind === null) return;
-    useUi.getState().setPendingFind(null);
-    setFindSeed(pendingFind);
-    setFindNonce((nonce) => nonce + 1);
-    setSearchOpen(true);
-  }, [loading, pendingFind]);
+    if (!wantsFocus || loading) return;
+    if (interactive) termRef.current?.focus();
+    useUi.getState().clearFocusRequest();
+  }, [wantsFocus, loading, interactive]);
 
   return (
     <div className="relative h-full min-h-0 bg-term">
       <div ref={hostRef} className="selectable absolute inset-0" />
-      {loading ? <div className="absolute top-3 right-4 text-[11px] text-ink-faint">Loading scrollback…</div> : null}
+      {loading ? <div className="absolute top-3 right-4 text-[11px] text-ink-faint">Loading output…</div> : null}
       {searchOpen ? (
         <TerminalSearch
-          key={findNonce}
-          initial={findSeed}
           search={searchRef.current}
           onClose={() => {
             setSearchOpen(false);
-            setFindSeed('');
             searchRef.current?.clearDecorations();
             termRef.current?.focus();
           }}
@@ -339,29 +328,14 @@ const FIND_OPTIONS = {
   }
 };
 
-function TerminalSearch({
-  search,
-  initial,
-  onClose
-}: {
-  search: SearchAddon | null;
-  initial: string;
-  onClose: () => void;
-}): React.JSX.Element {
-  const [query, setQuery] = React.useState(initial);
+function TerminalSearch({ search, onClose }: { search: SearchAddon | null; onClose: () => void }): React.JSX.Element {
+  const [query, setQuery] = React.useState('');
   const [found, setFound] = React.useState<boolean | null>(null);
   const options = FIND_OPTIONS;
   const run = (direction: 'next' | 'previous'): void => {
     if (search === null || query.length === 0) return;
     setFound(direction === 'next' ? search.findNext(query, options) : search.findPrevious(query, options));
   };
-  // A seeded query jumps to its newest occurrence once.
-  const seeded = React.useRef(false);
-  React.useEffect(() => {
-    if (seeded.current || initial.length === 0 || search === null) return;
-    seeded.current = true;
-    setFound(search.findPrevious(initial, FIND_OPTIONS));
-  }, [initial, search]);
   return (
     <div className="absolute top-2 right-4 z-10 flex items-center gap-1 rounded-md border border-line-strong bg-raised p-1 shadow-lg">
       <input

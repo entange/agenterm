@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactCommand, formatAge, formatCost, formatDuration, formatTokens, shortPath, splitArgs } from './format.js';
+import { folderName, formatAge, formatDuration, runtimeText, shortPath, signalOf } from './format.js';
 
 describe('format', () => {
   it('formats ages and durations', () => {
@@ -9,36 +9,21 @@ describe('format', () => {
     expect(formatDuration(65_000)).toBe('1m 05s');
   });
 
-  it('formats spend and token counts', () => {
-    expect(formatCost(0)).toBe('$0');
-    expect(formatCost(0.004)).toBe('<$0.01');
-    expect(formatCost(1.234)).toBe('$1.23');
-    expect(formatTokens(950)).toBe('950');
-    expect(formatTokens(12_345)).toBe('12k');
-    expect(formatTokens(1_250_000)).toBe('1.3M');
-  });
-
   it('shortens home paths', () => {
     expect(shortPath('/Users/me/code/app')).toBe('~/code/app');
     expect(shortPath('/srv/app')).toBe('/srv/app');
+    expect(folderName('/srv/app/')).toBe('app');
   });
 
-  it('splits arguments with quotes and escapes', () => {
-    expect(splitArgs('--model opus -p "fix the tests" \'a b\' c\\ d')).toEqual([
-      '--model',
-      'opus',
-      '-p',
-      'fix the tests',
-      'a b',
-      'c d'
-    ]);
-    expect(splitArgs('  ')).toEqual([]);
-    expect(splitArgs('""')).toEqual(['']);
+  it('colors tasks by status', () => {
+    expect(signalOf({ status: 'running' })).toBe('ok');
+    expect(signalOf({ status: 'failed' })).toBe('fail');
+    expect(signalOf({ status: 'stopped' })).toBe('idle');
+    expect(signalOf({ status: 'lost' })).toBe('attn');
   });
 
-  it('drops the executable directory from process commands', () => {
-    expect(compactCommand('/opt/homebrew/bin/python3 -m http.server 8765')).toBe('python3 -m http.server 8765');
-    expect(compactCommand('node server.js')).toBe('node server.js');
-    expect(compactCommand('')).toBe('');
+  it('says how long a task has been up or ran', () => {
+    expect(runtimeText({ startedAtMs: 0, endedAtMs: null }, 65_000)).toBe('up 1m 05s');
+    expect(runtimeText({ startedAtMs: 0, endedAtMs: 1500 }, 99_000)).toBe('ran 1.5s');
   });
 });
