@@ -26,6 +26,11 @@ daemon `agentermd`, CLI `agenterm`, data dir `~/.agenterm/`.
 
 ## Files
 
+> The files below describe the original agent-session design (status hooks, attach, git and file
+> watching, the strip board). agenterm has since become a simpler task runner: `agenterm run`,
+> MCP with the same tools, and an app that views tasks. The root `README.md` describes the
+> current product. The constraints above still apply.
+
 - `00-overview.md` — what we build, non-goals, thesis
 - `01-stack-decision.md` — final TS stack + why Electron over Electrobun + version policy
 - `02-architecture.md` — daemon-first architecture, processes
