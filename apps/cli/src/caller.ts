@@ -93,7 +93,9 @@ export function scriptName(file: string): string | null {
 export function processName(info: ProcInfo): string {
   // A macOS app: the outermost bundle names it ("Visual Studio Code", not "Code Helper (Plugin)").
   const app = /\/([^/]+)\.app\//.exec(info.comm);
-  let name = app?.[1] ?? path.basename(info.comm);
+  // Programs that retitle themselves (npm shows "npm exec agenterm …") are named by the first word.
+  const retitled = app === null && !info.comm.startsWith('/') && /\s/.test(info.comm);
+  let name = app?.[1] ?? (retitled ? (info.comm.split(/\s+/)[0] ?? info.comm) : path.basename(info.comm));
   name = name.replace(/^-/, '').replace(/ Helper( \(.*\))?$/, '');
   if (INTERPRETERS.has(name)) {
     // args: "node /path/to/claude --flag". Skip runtime flags to find the script.

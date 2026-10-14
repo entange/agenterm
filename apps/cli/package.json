@@ -1,27 +1,67 @@
 {
   "name": "agenterm",
   "version": "0.1.0",
-  "private": true,
+  "description": "Run dev servers, watchers, and builds in terminals that you and your coding agents can watch, type into, and stop. CLI and MCP server.",
+  "keywords": [
+    "terminal",
+    "dev-server",
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "codex",
+    "agents",
+    "process-manager",
+    "cli"
+  ],
+  "homepage": "https://github.com/entange/agenterm#readme",
+  "bugs": {
+    "url": "https://github.com/entange/agenterm/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/entange/agenterm.git",
+    "directory": "apps/cli"
+  },
+  "license": "MIT",
+  "author": "Entange",
   "type": "module",
   "bin": {
     "agenterm": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "build": "vite build --config vite.bundle.config.ts",
+    "dev": "vite build --config vite.bundle.config.ts --watch",
     "lint": "eslint src test --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepack": "cp ../../LICENSE LICENSE"
   },
   "dependencies": {
-    "@agenterm/core": "workspace:*",
-    "commander": "15.0.0",
-    "@agenterm/runtime": "workspace:*"
+    "better-sqlite3": "13.0.3",
+    "node-pty": "1.1.0"
   },
   "devDependencies": {
+    "@agenterm/core": "workspace:*",
+    "@agenterm/runtime": "workspace:*",
+    "commander": "15.0.0",
     "@types/node": "26.6.3",
     "typescript": "6.0.3",
-    "vitest": "5.0.2"
+    "vitest": "5.0.2",
+    "vite": "8.3.1"
   },
-  "description": "agenterm command line: drive the local daemon from any terminal"
+  "publishConfig": {
+    "access": "public"
+  }
 }

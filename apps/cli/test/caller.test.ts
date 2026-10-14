@@ -15,6 +15,15 @@ describe('detectCaller', () => {
     expect(detectCaller(100, read)).toEqual({ name: 'claude', pid: 80 });
   });
 
+  it('sees through npx, which retitles itself "npm exec …"', () => {
+    const read = tree({
+      100: { ppid: 90, comm: 'npm exec agenterm run --id t echo hi', args: 'npm exec agenterm run --id t echo hi' },
+      90: { ppid: 80, comm: '-zsh', args: '-zsh' },
+      80: { ppid: 1, comm: '/Applications/Ghostty.app/Contents/MacOS/ghostty', args: 'ghostty' }
+    });
+    expect(detectCaller(100, read)).toEqual({ name: 'Ghostty', pid: 80 });
+  });
+
   it('names node programs by their script or package', () => {
     const read = tree({
       10: { ppid: 9, comm: '-zsh', args: '-zsh' },

@@ -203,7 +203,9 @@ the running task instead of starting a second one. Add --restart to replace it.`
     } else {
       const entry = daemonEntry();
       if (entry === null) {
-        throw new CliError('cannot find the daemon build. Run `bun run build` or set AGENTERM_DAEMON_ENTRY.');
+        throw new CliError(
+          'cannot find the daemon next to this CLI. Reinstall agenterm, or run `bun run build` in a checkout.'
+        );
       }
       startDaemonProcess(entry);
     }

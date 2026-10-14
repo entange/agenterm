@@ -6,6 +6,7 @@ import { acquireLock, releaseLock } from './lock.js';
 import { dataDir } from './paths.js';
 import { loadOrCreateToken } from './token.js';
 import { createApp } from './server.js';
+import { ensureSpawnHelper } from './ptyHelper.js';
 import { PtyManager } from './ptyManager.js';
 import { Supervisor } from './supervisor.js';
 import { EventBus } from './events.js';
@@ -57,6 +58,8 @@ async function main(): Promise<void> {
   process.on('uncaughtException', (error) => {
     log.error({ err: error }, 'uncaught exception');
   });
+  const stuckHelper = ensureSpawnHelper();
+  if (stuckHelper !== null) log.warn({ helper: stuckHelper }, 'node-pty spawn helper is not executable');
   process.on('unhandledRejection', (reason) => {
     log.error({ err: reason }, 'unhandled rejection');
   });

@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** Data dir shared with the daemon. Overridable for tests and side-by-side installs. */
 export function dataDir(): string {
@@ -53,18 +53,12 @@ export function pidAlive(pid: number): boolean {
   }
 }
 
-/** Daemon entry script: explicit env override, else the workspace runtime build. */
+/** Daemon entry script: an explicit override, else the daemon bundled next to this CLI. */
 export function daemonEntry(): string | null {
   const override = process.env['AGENTERM_DAEMON_ENTRY'];
   if (typeof override === 'string' && override.length > 0) return override;
-  try {
-    const require = createRequire(import.meta.url);
-    const pkg = require.resolve('@agenterm/runtime/package.json');
-    const entry = path.join(path.dirname(pkg), 'dist', 'index.js');
-    return fs.existsSync(entry) ? entry : null;
-  } catch {
-    return null;
-  }
+  const bundled = fileURLToPath(new URL('./daemon.js', import.meta.url));
+  return fs.existsSync(bundled) ? bundled : null;
 }
 
 /**

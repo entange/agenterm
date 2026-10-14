@@ -2,12 +2,7 @@
   "extends": "../../packages/config/tsconfig.base.json",
   "compilerOptions": {
     "composite": false,
-    "types": [
-      "node"
-    ]
+    "types": ["node"]
   },
-  "include": [
-    "src",
-    "test"
-  ]
+  "include": ["src", "test"]
 }
