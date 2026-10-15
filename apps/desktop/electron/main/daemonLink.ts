@@ -45,7 +45,7 @@ function pidAlive(pid: number): boolean {
   }
 }
 
-function findOnPath(binary: string, envPath: string | undefined): string | null {
+export function findOnPath(binary: string, envPath: string | undefined): string | null {
   for (const dir of (envPath ?? '').split(path.delimiter)) {
     if (dir.length === 0) continue;
     const candidate = path.join(dir, binary);

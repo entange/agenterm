@@ -4,6 +4,10 @@ import { detectCaller, type Caller } from './caller.js';
 import { readPort, readToken } from './local.js';
 import { buildProgram } from './program.js';
 
+// The desktop app's copy runs on Electron as Node. That switch is for this
+// process only: tasks would inherit it and break any Electron app they run.
+if (process.versions.electron !== undefined) delete process.env['ELECTRON_RUN_AS_NODE'];
+
 function makeClient(): AgentermClient {
   // An empty token still reaches the daemon and earns a clear 401 or a connection error.
   return new AgentermClient({ baseUrl: daemonBaseUrl(readPort()), token: readToken() });

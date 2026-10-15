@@ -3,10 +3,13 @@
 // under Electron's Node without a rebuild). One folder per target, so a
 // single machine can package every architecture.
 //
+// The CLI rides along in cli/, with bin/agenterm to run it on the app's
+// Electron; the app links /usr/local/bin/agenterm to that script.
+//
 //   node scripts/stage-daemon.mjs                  this machine, into build/daemon/<platform>-<arch>
 //   node scripts/stage-daemon.mjs --arch arm64,x64 several architectures
 //   node scripts/stage-daemon.mjs --verify         then boot this machine's build with ELECTRON_RUN_AS_NODE,
-//                                                  run a task in a PTY, and read it back
+//                                                  run a task in a PTY, and read it back through the staged CLI
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -27,6 +30,17 @@ execFileSync(
   [path.join(app, 'node_modules', 'vite', 'bin', 'vite.js'), 'build', '--config', 'vite.daemon.config.ts'],
   {
     cwd: app,
+    stdio: 'inherit'
+  }
+);
+
+// The CLI's own build: dist/index.js and its chunks (its dist/daemon.js is the npm package's daemon).
+const cli = path.join(app, '..', 'cli');
+execFileSync(
+  process.execPath,
+  [path.join(cli, 'node_modules', 'vite', 'bin', 'vite.js'), 'build', '--config', 'vite.bundle.config.ts'],
+  {
+    cwd: cli,
     stdio: 'inherit'
   }
 );
@@ -53,6 +67,11 @@ function stage(arch) {
   const out = stagedDir(arch);
   fs.mkdirSync(out, { recursive: true });
   copy(path.join(bundle, 'index.mjs'), path.join(out, 'index.mjs'));
+  copy(path.join(cli, 'dist', 'index.js'), path.join(out, 'cli', 'index.js'));
+  copy(path.join(cli, 'dist', 'chunks'), path.join(out, 'cli', 'chunks'));
+  fs.writeFileSync(path.join(out, 'cli', 'package.json'), '{ "type": "module" }\n');
+  copy(path.join(app, 'resources', 'agenterm'), path.join(out, 'bin', 'agenterm'));
+  fs.chmodSync(path.join(out, 'bin', 'agenterm'), 0o755);
   const modules = path.join(out, 'native');
   fs.rmSync(modules, { recursive: true, force: true });
 
@@ -114,8 +133,13 @@ async function verify() {
       return text.trim();
     });
     const { tasks } = await call('GET', '/tasks');
+    const cliSaid = execFileSync(electron, [path.join(stagedDir(process.arch), 'cli', 'index.js'), 'logs', 'verify'], {
+      env,
+      encoding: 'utf8'
+    });
+    if (!cliSaid.includes('staged-pty-ok')) throw new Error(`the staged CLI printed ${JSON.stringify(cliSaid)}`);
     console.log(
-      `verify ok: daemon ${health.version} (api ${health.api}) under Electron node, pty said "${output}", sqlite holds ${tasks.length} task`
+      `verify ok: daemon ${health.version} (api ${health.api}) under Electron node, pty said "${output}", sqlite holds ${tasks.length} task, the CLI reads it back`
     );
   } catch (error) {
     console.error('verify failed:', error, stderr);

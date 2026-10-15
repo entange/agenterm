@@ -1,5 +1,12 @@
 import type { AgentermEvent } from '@agenterm/core';
-import type { ActivityTick, AgentermBridge, AppCommand, ConnectionInfo, Preferences } from '../../shared/bridge.js';
+import type {
+  ActivityTick,
+  AgentermBridge,
+  AppCommand,
+  CliStatus,
+  ConnectionInfo,
+  Preferences
+} from '../../shared/bridge.js';
 
 /**
  * Browser stand-in for the Electron preload, used only by the Vite web
@@ -17,6 +24,14 @@ let connection: ConnectionInfo = { state: 'starting', version: null, detail: nul
 let socket: WebSocket | null = null;
 const subscribed = new Set<string>();
 let preferences: Preferences = { notifications: true };
+// The browser has no app copy of the command; ?cli=missing (or installed, other) previews the others.
+const cliState = (new URLSearchParams(location.search).get('cli') ?? 'unavailable') as CliStatus['state'];
+let cli: CliStatus = {
+  state: cliState,
+  path: { installed: '/usr/local/bin/agenterm', other: '/opt/homebrew/bin/agenterm', missing: null, unavailable: null }[
+    cliState
+  ]
+};
 
 function connect(): void {
   const ws = new WebSocket(`ws://${location.host}/__agenterm/stream`);
@@ -76,6 +91,11 @@ const bridge: AgentermBridge = {
   setPreferences: async (patch) => {
     preferences = { ...preferences, ...patch };
     return preferences;
+  },
+  cliStatus: async () => cli,
+  installCli: async () => {
+    cli = { state: 'installed', path: '/usr/local/bin/agenterm' };
+    return cli;
   }
 };
 

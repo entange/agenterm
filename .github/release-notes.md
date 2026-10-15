@@ -8,7 +8,11 @@
 If macOS says it could not verify agenterm, open **System Settings → Privacy & Security** and click **Open
 Anyway**, or run `xattr -dr com.apple.quarantine /Applications/agenterm.app`.
 
-**CLI and MCP server** (macOS and Linux, Node.js 22+):
+The app includes the `agenterm` command and its MCP server. On first launch it offers to add the command to
+`/usr/local/bin` (macOS asks for your password once), or later from **Settings → Connect an agent**. No Node.js
+needed.
+
+**CLI only** (Linux, or a Mac without the app; Node.js 22+):
 
 ```sh
 npm install -g agenterm@{{version}} --allow-scripts=node-pty

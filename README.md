@@ -27,7 +27,30 @@ Agents start dev servers and then lose track of them: they start a second copy, 
 
 ## Install
 
-### The CLI (macOS and Linux)
+### macOS: the app (includes the CLI)
+
+Download the DMG for your Mac from the [latest release](https://github.com/entange/agenterm/releases/latest):
+
+- **Apple Silicon** (M1 and later): `agenterm-<version>-arm64-mac.dmg`
+- **Intel**: `agenterm-<version>-x64-mac.dmg`
+
+Open it and drag agenterm into Applications. It runs on macOS 12 or later and needs nothing else: the daemon, the
+`agenterm` command, and its MCP server all ship inside the app and run on the app's own runtime, so there is no
+Node.js or npm to install.
+
+On first launch the app offers to add the `agenterm` command to `/usr/local/bin`, the way VS Code adds `code`. macOS
+asks for your password once. Skipped it? **Settings → Connect an agent → Add command**. The command points into the
+app, so it updates whenever the app does.
+
+**First launch.** Until the app is signed with an Apple Developer ID, macOS blocks the first open with "Apple could
+not verify agenterm". Either:
+
+- open it once, then go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**; or
+- run `xattr -dr com.apple.quarantine /Applications/agenterm.app` in a terminal, then open it normally.
+
+The app tells you when a new version is out.
+
+### Linux, or the CLI without the app: npm
 
 Needs [Node.js](https://nodejs.org) 22 or newer.
 
@@ -42,24 +65,9 @@ Or run it without installing: `npx agenterm ls`.
 ignores the flag. On Linux, that build needs `python3`, `make`, and a C++ compiler (`sudo apt install
 build-essential python3`). If the build was skipped, agenterm says so and prints the command that fixes it.
 
-### The desktop app (macOS)
-
-Download the DMG for your Mac from the [latest release](https://github.com/entange/agenterm/releases/latest):
-
-- **Apple Silicon** (M1 and later): `agenterm-<version>-arm64-mac.dmg`
-- **Intel**: `agenterm-<version>-x64-mac.dmg`
-
-Open it and drag agenterm into Applications. It runs on macOS 12 or later and brings its own copy of the daemon, so
-it works without the CLI. You need the CLI (or MCP) to start tasks.
-
-**First launch.** Until the app is signed with an Apple Developer ID, macOS blocks the first open with "Apple could
-not verify agenterm". Either:
-
-- open it once, then go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**; or
-- run `xattr -dr com.apple.quarantine /Applications/agenterm.app` in a terminal, then open it normally.
-
-The app tells you when a new version is out. The CLI and app check each other's version, and `agenterm daemon
-restart` swaps in the daemon from the copy you just installed.
+On a Mac with the app, skip this: two installs can drift apart in version. If you have both, the one first on your
+PATH wins, and the app's Settings tell you which that is. The CLI and app check each other's version, and `agenterm
+daemon restart` swaps in the daemon from the copy you just updated.
 
 ### Connect your agent
 
@@ -97,11 +105,10 @@ Cursor, Claude Desktop, and most other agents take the same server in their MCP 
 { "mcpServers": { "agenterm": { "command": "agenterm", "args": ["mcp"] } } }
 ```
 
-Without a global install, use `"command": "npx", "args": ["-y", "agenterm", "mcp"]` (on Linux, add
-`"--allow-scripts=node-pty"` before `"agenterm"`).
-
-Apps opened from the Dock may not see your shell's PATH; use the full path from `which agenterm` as the command if
-they cannot find it. The app shows all of this under Settings → Connect an agent.
+Apps opened from the Dock may not see your shell's PATH; use the full path (`/usr/local/bin/agenterm` for the app's
+command, otherwise whatever `which agenterm` prints) if they cannot find it. Without any install, use `"command":
+"npx", "args": ["-y", "agenterm", "mcp"]` (on Linux, add `"--allow-scripts=node-pty"` before `"agenterm"`). The app
+shows all of this, with your own path filled in, under Settings → Connect an agent.
 
 The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, and `remove`. Output comes back as plain text with
 secrets redacted.
@@ -154,10 +161,11 @@ sudo sysctl -w kern.tty.ptmx_max=999
 | Tasks, output, settings, daemon log | `~/.agenterm/` (`AGENTERM_DATA_DIR` moves it)             |
 | App window and theme preferences    | `~/Library/Application Support/agenterm/preferences.json` |
 | The app                             | `/Applications/agenterm.app`                              |
-| The CLI                             | wherever `npm root -g` points                             |
+| The `agenterm` command (app)        | `/usr/local/bin/agenterm`, a link into the app            |
+| The CLI (npm)                       | wherever `npm root -g` points                             |
 
-To remove agenterm completely: `agenterm daemon stop`, `npm uninstall -g agenterm`, delete the app, then
-`rm -rf ~/.agenterm ~/Library/Application\ Support/agenterm`.
+To remove agenterm completely: `agenterm daemon stop`, delete the app and `sudo rm /usr/local/bin/agenterm` (or
+`npm uninstall -g agenterm`), then `rm -rf ~/.agenterm ~/Library/Application\ Support/agenterm`.
 
 ## Security and privacy
 

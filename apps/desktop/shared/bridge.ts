@@ -63,6 +63,19 @@ export type AppCommand =
 
 export interface Preferences {
   notifications: boolean;
+  /** Main has offered once to add the agenterm command. */
+  commandOffered?: boolean;
+}
+
+/**
+ * The agenterm command in terminals. installed: /usr/local/bin/agenterm runs
+ * this app's copy. other: `agenterm` runs another install (npm) at `path`.
+ * missing: no `agenterm` on the PATH. unavailable: this build has no copy to
+ * offer (development, or not macOS).
+ */
+export interface CliStatus {
+  state: 'installed' | 'other' | 'missing' | 'unavailable';
+  path: string | null;
 }
 
 export interface AgentermBridge {
@@ -84,6 +97,9 @@ export interface AgentermBridge {
   revealPath(path: string): Promise<void>;
   preferences(): Promise<Preferences>;
   setPreferences(patch: Partial<Preferences>): Promise<Preferences>;
+  cliStatus(): Promise<CliStatus>;
+  /** Link /usr/local/bin/agenterm to the app's copy; macOS may ask for a password. */
+  installCli(): Promise<CliStatus>;
 }
 
 export const IPC = {
@@ -101,5 +117,7 @@ export const IPC = {
   openExternal: 'agenterm:open-external',
   revealPath: 'agenterm:reveal-path',
   preferences: 'agenterm:preferences',
-  setPreferences: 'agenterm:set-preferences'
+  setPreferences: 'agenterm:set-preferences',
+  cliStatus: 'agenterm:cli-status',
+  installCli: 'agenterm:install-cli'
 } as const;

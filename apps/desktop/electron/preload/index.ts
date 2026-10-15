@@ -9,6 +9,7 @@ import {
   type ApiMethod,
   type ApiResult,
   type AppCommand,
+  type CliStatus,
   type ConnectionInfo,
   type Preferences
 } from '../../shared/bridge.js';
@@ -60,7 +61,9 @@ const bridge: AgentermBridge = {
   openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url) as Promise<void>,
   revealPath: (target) => ipcRenderer.invoke(IPC.revealPath, target) as Promise<void>,
   preferences: () => ipcRenderer.invoke(IPC.preferences) as Promise<Preferences>,
-  setPreferences: (patch) => ipcRenderer.invoke(IPC.setPreferences, patch) as Promise<Preferences>
+  setPreferences: (patch) => ipcRenderer.invoke(IPC.setPreferences, patch) as Promise<Preferences>,
+  cliStatus: () => ipcRenderer.invoke(IPC.cliStatus) as Promise<CliStatus>,
+  installCli: () => ipcRenderer.invoke(IPC.installCli) as Promise<CliStatus>
 };
 
 contextBridge.exposeInMainWorld('agenterm', bridge);

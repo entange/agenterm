@@ -17,8 +17,16 @@ import {
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions
 } from 'electron';
-import { API_METHODS, IPC, type ApiFailure, type AppCommand, type Preferences } from '../../shared/bridge.js';
+import {
+  API_METHODS,
+  IPC,
+  type ApiFailure,
+  type AppCommand,
+  type CliStatus,
+  type Preferences
+} from '../../shared/bridge.js';
 import { taskLabel } from '../../shared/label.js';
+import { bundledCommand, COMMAND_LINK, commandStatus, linkCommand } from './cliCommand.js';
 import { DaemonLink, dataDir } from './daemonLink.js';
 import { loadLoginEnv } from './loginEnv.js';
 import { TaskMonitor } from './monitor.js';
@@ -33,11 +41,14 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
+const loginEnv = loadLoginEnv();
 const link = new DaemonLink({
-  loginEnv: loadLoginEnv(),
+  loginEnv,
   isPackaged: app.isPackaged,
   resourcesPath: process.resourcesPath
 });
+/** The agenterm command inside this app, which /usr/local/bin/agenterm links to. */
+const bundledCli = bundledCommand({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath });
 /** Terminal output subscriptions per renderer, keyed by webContents id. */
 const outputSubscriptions = new Map<number, Set<string>>();
 let tray: Tray | null = null;
@@ -63,6 +74,46 @@ function readPreferences(): Preferences {
 }
 
 let preferences = DEFAULT_PREFERENCES;
+
+function savePreferences(next: Preferences): void {
+  preferences = next;
+  fs.mkdirSync(path.dirname(preferencesFile()), { recursive: true });
+  fs.writeFileSync(preferencesFile(), JSON.stringify(next, null, 2));
+}
+
+// --- the agenterm command --------------------------------------------------
+
+async function cliStatus(): Promise<CliStatus> {
+  return commandStatus(bundledCli, (await loginEnv)['PATH']);
+}
+
+/**
+ * Put the agenterm command on the PATH so agents can start tasks without a
+ * separate install. Quietly when no password is needed (first install on a
+ * writable /usr/local/bin, or relinking after the app moved); otherwise ask
+ * once, since macOS then wants an administrator password. Settings can add
+ * it any time after.
+ */
+async function offerCommand(): Promise<void> {
+  if (bundledCli === null || (await cliStatus()).state !== 'missing') return;
+  if (await linkCommand(bundledCli, { askForPassword: false, replace: false })) return;
+  if (preferences.commandOffered === true) return;
+  savePreferences({ ...preferences, commandOffered: true });
+  const options: Electron.MessageBoxOptions = {
+    type: 'question',
+    buttons: ['Add Command', 'Not Now'],
+    defaultId: 0,
+    cancelId: 1,
+    message: 'Add the agenterm command?',
+    detail: `Agents start tasks with the agenterm command, and connect over MCP with agenterm mcp. agenterm can put it at ${COMMAND_LINK} so every terminal and agent finds it; macOS asks for your password once.\n\nYou can also do this later in Settings.`
+  };
+  const win = mainWindow;
+  const { response } =
+    win === null || win.isDestroyed()
+      ? await dialog.showMessageBox(options)
+      : await dialog.showMessageBox(win, options);
+  if (response === 0) await linkCommand(bundledCli, { askForPassword: true, replace: false });
+}
 
 // --- windows ---------------------------------------------------------------
 
@@ -255,10 +306,13 @@ function registerIpc(): void {
     const next = { ...preferences };
     const record = patch as Record<string, unknown>;
     if (typeof record['notifications'] === 'boolean') next.notifications = record['notifications'];
-    preferences = next;
-    fs.mkdirSync(path.dirname(preferencesFile()), { recursive: true });
-    fs.writeFileSync(preferencesFile(), JSON.stringify(next, null, 2));
+    savePreferences(next);
     return next;
+  });
+  ipcMain.handle(IPC.cliStatus, () => cliStatus());
+  ipcMain.handle(IPC.installCli, async (event) => {
+    if (trusted(event) && bundledCli !== null) await linkCommand(bundledCli, { askForPassword: true, replace: true });
+    return cliStatus();
   });
 }
 
@@ -351,7 +405,7 @@ function buildAppMenu(): void {
       role: 'help',
       submenu: [
         { label: 'Show Daemon Log', click: () => shell.showItemInFolder(path.join(dataDir(), 'daemon.log')) },
-        { label: 'agenterm on GitHub', click: () => void shell.openExternal('https://github.com/') }
+        { label: 'agenterm on GitHub', click: () => void shell.openExternal('https://github.com/entange/agenterm') }
       ]
     }
   ];
@@ -438,6 +492,7 @@ void app.whenReady().then(() => {
   buildAppMenu();
   createTray();
   mainWindow = createWindow();
+  mainWindow.once('ready-to-show', () => void offerCommand());
   void link.ensure();
   startUpdater();
 });

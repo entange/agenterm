@@ -18,7 +18,8 @@ Or without installing: `npx agenterm ls`.
 versions ignore the flag. macOS works without it (node-pty ships prebuilt there), but npm prints a warning.
 
 Tasks keep running in a small background daemon after the terminal or agent that started them exits. The
-[agenterm desktop app](https://github.com/entange/agenterm/releases/latest) shows every task as a live terminal.
+[agenterm desktop app](https://github.com/entange/agenterm/releases/latest) shows every task as a live terminal. On a
+Mac it also includes this CLI and adds the `agenterm` command for you, so you do not need this package as well.
 
 ## For agents (MCP)
 

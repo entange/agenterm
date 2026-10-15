@@ -52,6 +52,17 @@ jobs:
         working-directory: apps/desktop
       - run: npx electron-builder --dir --publish never
         working-directory: apps/desktop
+      # The agenterm command inside the app, through a link like the one the app adds to /usr/local/bin,
+      # with no Node.js on the PATH: it starts the app's daemon and runs a task.
+      - run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          ln -s "$PWD/release/mac-arm64/agenterm.app/Contents/Resources/agentermd/bin/agenterm" "$RUNNER_TEMP/bin/agenterm"
+          export PATH="$RUNNER_TEMP/bin:/usr/bin:/bin" AGENTERM_DATA_DIR="$RUNNER_TEMP/agenterm-app" AGENTERM_PORT=37401
+          agenterm run --id smoke "echo app-command-ok"
+          sleep 1
+          agenterm logs smoke | grep app-command-ok
+          agenterm daemon stop
+        working-directory: apps/desktop
       # The npm package: pack it, install it globally, and run a task through it.
       - run: |
           npm pack

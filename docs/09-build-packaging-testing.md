@@ -28,7 +28,10 @@ interval at 1s and scope queries to session subtrees).
 ## Packaging (electron-builder, latest stable)
 
 As built: the macOS app (`dmg` plus `zip`, arm64 plus x64) and the CLI on npm. Windows is not
-shipped. See `RELEASING.md` for the release flow.
+shipped. See `RELEASING.md` for the release flow. The app's `Resources/agentermd/` holds the daemon,
+the CLI (`cli/`), and `bin/agenterm`, a script that runs that CLI on the app's Electron as Node. The
+app links `/usr/local/bin/agenterm` to it (asking for an administrator password when needed), so a
+Mac needs no Node.js or npm.
 
 - macOS: `dmg` plus `zip` (arm64 plus x64), hardened runtime, notarize.
 - Windows: `nsis` (x64), signed.

@@ -1,0 +1,14 @@
+#!/bin/sh
+# The agenterm command inside agenterm.app. It runs the bundled CLI on the
+# app's own Electron as Node, so it needs no separate Node.js or npm install.
+# The app links /usr/local/bin/agenterm here; follow links back to the app.
+self=$0
+while [ -L "$self" ]; do
+  target=$(readlink "$self")
+  case $target in
+    /*) self=$target ;;
+    *) self=$(dirname "$self")/$target ;;
+  esac
+done
+here=$(cd "$(dirname "$self")" && pwd -P)
+ELECTRON_RUN_AS_NODE=1 exec "$here/../../../MacOS/agenterm" "$here/../cli/index.js" "$@"

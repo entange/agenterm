@@ -54,12 +54,19 @@ export function pidAlive(pid: number): boolean {
   }
 }
 
-/** Daemon entry script: an explicit override, else the daemon bundled next to this CLI. */
+/**
+ * Daemon entry script: an explicit override, else the daemon bundled next to
+ * this CLI (the npm package), else the one this CLI sits beside inside the
+ * desktop app (agentermd/cli/index.js next to agentermd/index.mjs).
+ */
 export function daemonEntry(): string | null {
   const override = process.env['AGENTERM_DAEMON_ENTRY'];
   if (typeof override === 'string' && override.length > 0) return override;
-  const bundled = fileURLToPath(new URL('./daemon.js', import.meta.url));
-  return fs.existsSync(bundled) ? bundled : null;
+  for (const relative of ['./daemon.js', '../index.mjs']) {
+    const bundled = fileURLToPath(new URL(relative, import.meta.url));
+    if (fs.existsSync(bundled)) return bundled;
+  }
+  return null;
 }
 
 /**
@@ -95,10 +102,15 @@ export function withFileLimit(command: string, args: string[]): { command: strin
   };
 }
 
-/** Start the daemon detached so it outlives this CLI invocation. */
+/**
+ * Start the daemon detached so it outlives this CLI invocation. Inside the
+ * desktop app this CLI runs on the app's Electron as Node, and so does the
+ * daemon it starts.
+ */
 export function startDaemonProcess(entry: string): void {
   const launch = withFileLimit(process.execPath, [entry]);
-  const child = spawn(launch.command, launch.args, { detached: true, stdio: 'ignore', env: process.env });
+  const env = process.versions.electron === undefined ? process.env : { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+  const child = spawn(launch.command, launch.args, { detached: true, stdio: 'ignore', env });
   child.unref();
 }
 
