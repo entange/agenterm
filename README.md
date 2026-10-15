@@ -127,7 +127,7 @@ starting the same server twice.
 
 [`skills/agenterm/SKILL.md`](skills/agenterm/SKILL.md) is an [Agent Skill](https://agentskills.io) that teaches an
 agent when to use agenterm (dev servers and watchers, not quick commands like `ls`), to always pass an id, and how to
-check on, stop, and clean up tasks. Install it with [skills](https://skills.sh/entange/agenterm):
+check on, stop, and clean up tasks. Install it with [skills](https://skills.sh):
 
 ```sh
 npx skills add entange/agenterm
