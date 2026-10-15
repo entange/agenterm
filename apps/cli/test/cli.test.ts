@@ -132,7 +132,7 @@ describe('managing tasks', () => {
     await c.run('run', '--id', 'web-1', '--wait', '0', 'a');
     await c.run('run', '--id', 'web-2', '--wait', '0', 'b');
     await c.run('stop', 'web');
-    expect(c.err).toEqual(['error: "web" matches 2 tasks: web-2, web-1']);
+    expect(c.err).toEqual(['error: "web" matches 2 tasks: web-1, web-2']);
     await c.run('logs', 'nope');
     expect(c.err).toEqual(['error: no task matches "nope"']);
     expect(process.exitCode).toBe(1);

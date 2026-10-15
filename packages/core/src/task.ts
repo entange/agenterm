@@ -94,7 +94,9 @@ export function findTask<T extends Pick<TaskRecord, 'id' | 'title' | 'status'>>(
   if (byPrefix.length === 1 && byPrefix[0] !== undefined) return byPrefix[0];
   const candidates = byTitle.length > 1 ? byTitle : byPrefix;
   if (candidates.length > 1) {
-    throw new Error(`"${wanted}" matches ${candidates.length} tasks: ${candidates.map((task) => task.id).join(', ')}`);
+    // Sorted, so the message does not depend on list order (tasks started in the same millisecond).
+    const ids = candidates.map((task) => task.id).sort();
+    throw new Error(`"${wanted}" matches ${candidates.length} tasks: ${ids.join(', ')}`);
   }
   throw new Error(`no task matches "${wanted}"`);
 }
