@@ -126,8 +126,16 @@ starting the same server twice.
 ### Agent skill
 
 [`skills/agenterm/SKILL.md`](skills/agenterm/SKILL.md) is an [Agent Skill](https://agentskills.io) that teaches an
-agent when to use agenterm, to always pass an id, and how to check on, stop, and clean up tasks. To use it, copy
-the `skills/agenterm` folder into your agent's skills folder, e.g. `.claude/skills/` in a project for Claude Code.
+agent when to use agenterm (dev servers and watchers, not quick commands like `ls`), to always pass an id, and how to
+check on, stop, and clean up tasks. Install it with [skills](https://skills.sh/entange/agenterm):
+
+```sh
+npx skills add entange/agenterm
+```
+
+It asks which agents to add it to. For every project at once, add `-g`; to skip the prompts for Claude Code, use
+`npx skills add entange/agenterm -g -a claude-code -y`. Or copy the `skills/agenterm` folder into your agent's skills
+folder yourself.
 
 ## The app
 
