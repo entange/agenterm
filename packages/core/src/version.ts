@@ -1,5 +1,5 @@
 /** agenterm release version. `scripts/set-version.mjs` keeps it in step with every package.json. */
-export const VERSION = '0.3.0';
+export const VERSION = '0.3.1';
 
 /**
  * Revision of the daemon's HTTP API. Bump it when a client of the previous

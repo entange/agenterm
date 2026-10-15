@@ -1,6 +1,6 @@
 {
   "name": "agenterm",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Run dev servers, watchers, and builds in terminals that you and your coding agents can watch, type into, and stop. CLI and MCP server.",
   "keywords": [
     "terminal",
