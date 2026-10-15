@@ -7,9 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src --max-warnings=0",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "deploy": "vite build && wrangler deploy"
+    "lint": "eslint src worker --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p worker/tsconfig.json --noEmit",
+    "deploy": "vite build && wrangler d1 migrations apply agenterm-site --remote && wrangler deploy",
+    "downloads": "wrangler d1 execute agenterm-site --remote --command \"SELECT version, arch, COUNT(*) AS downloads FROM downloads GROUP BY version, arch UNION ALL SELECT 'total', '', COUNT(*) FROM downloads\""
   },
   "dependencies": {
     "@fontsource-variable/archivo": "5.3.0",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@agenterm/config": "workspace:*",
+    "@cloudflare/workers-types": "5.20261015.1",
     "typescript": "6.0.3",
     "vite": "8.3.1",
     "wrangler": "4.151.0"

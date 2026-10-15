@@ -1,12 +1,23 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  // A static site: no Worker code, just the Vite build.
+  // The Vite build served as static assets. Only /download/* runs the Worker,
+  // which counts downloads in D1 (see worker/index.ts).
   "name": "agenterm-site",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-10-13",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "404-page"
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/download/*"]
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "agenterm-site",
+      "database_id": "3a5f2726-ba9b-425c-8f1f-64af18c9320c"
+    }
+  ],
   "routes": [{ "pattern": "agenterm.entange.com", "custom_domain": true }],
   "workers_dev": false,
   "preview_urls": false

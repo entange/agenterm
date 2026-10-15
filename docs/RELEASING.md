@@ -49,6 +49,11 @@ Deploy it by hand with `bun run deploy` in `apps/site` (after `bunx wrangler log
 change to `apps/site` on main once the repository has two more secrets: `CLOUDFLARE_API_TOKEN`, a token from the
 "Edit Cloudflare Workers" template, and `CLOUDFLARE_ACCOUNT_ID`. Without them it only builds.
 
+The download buttons go through `/download/<arch>/<version>`, the one path the Worker (`worker/index.ts`) handles. It
+adds a row to the `agenterm-site` D1 database (version, architecture, country, time) and redirects to the DMG on
+GitHub. `bun run downloads` in `apps/site` prints the counts. A new table or column goes in `migrations/`;
+`bun run deploy` applies migrations before deploying, and CI only deploys the code.
+
 The page has no version to bump: its download links follow the latest GitHub release.
 
 ## Building locally

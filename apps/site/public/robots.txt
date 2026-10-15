@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /download/
 
 Sitemap: https://agenterm.entange.com/sitemap.xml

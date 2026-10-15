@@ -11,11 +11,13 @@ const REPO = 'entange/agenterm';
 
 // --- downloads ----------------------------------------------------------------
 
-/** Point every download link at the DMG for its architecture in a given release. */
+/**
+ * Point every download link at the DMG for its architecture in a given release.
+ * /download/* counts the download, then redirects to the file on GitHub.
+ */
 function linkDownloads(version: string): void {
   for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-download]')) {
-    const arch = link.dataset['download'];
-    link.href = `https://github.com/${REPO}/releases/download/v${version}/agenterm-${version}-${arch}-mac.dmg`;
+    link.href = `/download/${link.dataset['download']}/${version}`;
   }
   for (const label of document.querySelectorAll<HTMLElement>('[data-version]')) label.textContent = `v${version}`;
 }
