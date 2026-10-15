@@ -165,8 +165,7 @@ sudo sysctl -w kern.tty.ptmx_max=999
 | The CLI (npm)                       | wherever `npm root -g` points                             |
 
 To remove agenterm completely: `agenterm daemon stop`, delete the app and `sudo rm /usr/local/bin/agenterm` (or
-`npm uninstall -g agenterm`), then `rm -rf ~/.agenterm ~/Library/Application\ Support/agenterm`. Versions up to
-0.3.1 kept the app's preferences in `~/Library/Application Support/agenterm-desktop` instead.
+`npm uninstall -g agenterm`), then `rm -rf ~/.agenterm ~/Library/Application\ Support/agenterm`.
 
 ## Security and privacy
 

@@ -62,20 +62,15 @@ function preferencesFile(): string {
   return path.join(app.getPath('userData'), 'preferences.json');
 }
 
-/** Up to 0.3.1 the app kept its data under the package name; read preferences from there until the next save. */
-function legacyPreferencesFile(): string {
-  return path.join(app.getPath('appData'), 'agenterm-desktop', 'preferences.json');
-}
-
 function readPreferences(): Preferences {
-  for (const file of [preferencesFile(), legacyPreferencesFile()]) {
-    try {
-      return { ...DEFAULT_PREFERENCES, ...(JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<Preferences>) };
-    } catch {
-      // Missing or unreadable: try the next one, then the defaults.
-    }
+  try {
+    return {
+      ...DEFAULT_PREFERENCES,
+      ...(JSON.parse(fs.readFileSync(preferencesFile(), 'utf8')) as Partial<Preferences>)
+    };
+  } catch {
+    return { ...DEFAULT_PREFERENCES };
   }
-  return { ...DEFAULT_PREFERENCES };
 }
 
 let preferences = DEFAULT_PREFERENCES;
