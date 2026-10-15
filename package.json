@@ -1,6 +1,6 @@
 {
   "name": "agenterm-monorepo",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "agenterm: run long-running commands in terminals you and your agents can watch, type into, and stop",
   "packageManager": "bun@1.3.14",
