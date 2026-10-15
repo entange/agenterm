@@ -192,7 +192,9 @@ h3 {
 .display .line {
   display: block;
   overflow: hidden;
-  padding-bottom: 0.06em;
+  /* Room for descenders (the g) inside the clip, without widening the leading. */
+  padding-bottom: 0.2em;
+  margin-bottom: -0.2em;
 }
 .display .line > span {
   display: inline-block;
@@ -217,7 +219,7 @@ h3 {
 
 @keyframes rise {
   from {
-    transform: translateY(105%);
+    transform: translateY(130%);
   }
 }
 
@@ -974,6 +976,9 @@ h3 {
   }
   .hero {
     padding-top: 12px;
+  }
+  .display {
+    line-height: 0.98;
   }
   .nav nav {
     gap: 18px;

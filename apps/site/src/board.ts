@@ -371,9 +371,9 @@ export function startBoard(options: BoardOptions): void {
   function opening(): (Task | null)[] {
     return [
       { id: 'web', status: 'running', by: 'claude code', ports: ':5173', startedAt: now - 40 * 60 },
-      { id: 'api', status: 'running', by: 'claude code', ports: ':3000', startedAt: now - 40 * 60 },
+      { id: 'api', status: 'running', by: 'opencode', ports: ':3000', startedAt: now - 52 * 60 },
       { id: 'tests', status: 'running', by: 'codex', ports: '', startedAt: now - 38 * 60 },
-      { id: 'worker', status: 'running', by: 'you', ports: '', startedAt: now - 2 * 3600 - 9 * 60 },
+      { id: 'worker', status: 'running', by: 'cursor', ports: '', startedAt: now - 2 * 3600 - 9 * 60 },
       { id: 'db', status: 'running', by: 'you', ports: ':5432', startedAt: now - 26 * 3600 },
       null
     ];
@@ -397,12 +397,12 @@ export function startBoard(options: BoardOptions): void {
     output('started tests: npx vitest', 'ok');
     await wait(2600);
 
-    await command('Codex', 'agenterm run --id docs "npm run docs"');
-    await set(5, { id: 'docs', status: 'running', by: 'codex', ports: ':4000', startedAt: now });
+    await command('Gemini CLI', 'agenterm run --id docs "npm run docs"');
+    await set(5, { id: 'docs', status: 'running', by: 'gemini cli', ports: ':4000', startedAt: now });
     output('started docs: npm run docs', 'ok');
     await wait(2600);
 
-    await command('Claude Code', 'agenterm stop worker');
+    await command('OpenCode', 'agenterm stop worker');
     const worker = find('worker');
     await set(worker, { ...tasks[worker]!, status: 'stopped' });
     output('worker: stopped');
