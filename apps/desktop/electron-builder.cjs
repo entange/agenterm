@@ -43,12 +43,5 @@ module.exports = {
     entitlementsInherit: 'resources/entitlements.mac.plist',
     ...(signed ? {} : { identity: '-' })
   },
-  linux: {
-    icon: 'resources/icon.png',
-    category: 'Development',
-    target: ['AppImage', 'deb'],
-    maintainer: 'Entange',
-    artifactName: 'agenterm-${version}-${arch}.${ext}'
-  },
   publish: { provider: 'github', owner: 'entange', repo: 'agenterm' }
 };
