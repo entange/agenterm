@@ -8,7 +8,7 @@
       name="description"
       content="Run dev servers, watchers, and test loops in terminals that you and your coding agents can watch, type into, and stop. Each gets an id, so nothing starts twice. Free and open source, for macOS and Linux."
     />
-    <meta name="theme-color" content="#0b0b0c" />
+    <meta name="theme-color" content="#dcddda" />
     <link rel="canonical" href="https://agenterm.entange.com/" />
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -23,7 +23,10 @@
     <meta property="og:image" content="https://agenterm.entange.com/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="The agenterm app showing running dev servers and their live terminals" />
+    <meta
+      property="og:image:alt"
+      content="A split-flap board listing the dev servers and test watchers agents left running"
+    />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="agenterm: know what your agents left running" />
     <meta
@@ -36,112 +39,112 @@
     <a class="skip" href="#main">Skip to content</a>
 
     <header class="nav">
-      <a class="wordmark nav-mark" href="/" aria-label="agenterm home">agenterm</a>
+      <a class="wordmark" href="/" aria-label="agenterm home">agenterm</a>
       <nav aria-label="Primary">
         <a href="#agents">Agents</a>
         <a href="#cli">CLI</a>
         <a href="#install">Install</a>
-        <a href="https://github.com/entange/agenterm" class="nav-gh">GitHub</a>
+        <a href="https://github.com/entange/agenterm">GitHub</a>
       </nav>
     </header>
 
     <main id="main">
       <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <p class="eyebrow reveal" style="--i: 0">For Claude Code, Codex, and any agent with a shell</p>
-          <h1 id="hero-title" class="display reveal" style="--i: 1">
-            Know what your agents left <span class="nowrap">running<span class="pulse" aria-hidden="true"></span></span>
-          </h1>
-          <p class="lede reveal" style="--i: 2">
-            agenterm runs dev servers, watchers, and test loops in real terminals that keep going after the agent moves
-            on. Each one gets an id, so it never starts twice, and you can watch, type into, or stop any of them.
+        <h1 id="hero-title" class="display" data-headline>
+          <span class="line"><span>Know what your agents</span></span>
+          <span class="line"><span>left running.</span></span>
+        </h1>
+        <div class="hero-side" data-hero-side>
+          <p class="lede">
+            agenterm runs your dev servers, watchers, and test loops in terminals that outlive the agent that started
+            them. Every task has an id, so it never starts twice, and you can watch it, type into it, or stop it.
           </p>
-          <div class="cta reveal" style="--i: 3">
-            <a class="button primary" data-download="arm64" href="https://github.com/entange/agenterm/releases/latest">
+          <div class="cta">
+            <a class="button" data-download="arm64" href="https://github.com/entange/agenterm/releases/latest">
               Download for Mac
             </a>
             <button
-              class="copy-chip"
+              class="chip"
               type="button"
               data-copy="npm install -g agenterm"
               aria-label="Copy npm install -g agenterm"
             >
-              <span class="prompt">$</span> npm install -g agenterm
-              <span class="copy-state" aria-hidden="true">copy</span>
+              <code>npm install -g agenterm</code>
+              <span class="chip-state" aria-hidden="true">Copy</span>
             </button>
           </div>
-          <p class="fineprint reveal" style="--i: 4">
-            Free and open source. That's the Apple Silicon build; there is one for
-            <a data-download="x64" href="https://github.com/entange/agenterm/releases/latest">Intel Macs</a> too, and
-            npm covers Linux. <span class="version" data-version></span>
+          <p class="fineprint">
+            Free and open source. Also for
+            <a data-download="x64" href="https://github.com/entange/agenterm/releases/latest">Intel Macs</a>, and Linux
+            through npm. <span class="version" data-version></span>
           </p>
         </div>
 
-        <figure class="demo reveal" style="--i: 2" aria-label="An agent starting tasks with agenterm">
-          <div class="pane pane-agent">
-            <div class="pane-head">
-              <span class="pane-dot"></span>Claude Code <span class="pane-sub">~/code/shop</span>
-            </div>
-            <ol class="transcript" data-transcript aria-live="off"></ol>
+        <figure class="board" data-board aria-label="Tasks agents started, shown as a split-flap board">
+          <div class="board-top">
+            <span class="wordmark">agenterm</span>
+            <span class="clock" data-clock aria-hidden="true"></span>
           </div>
-          <div class="pane pane-tasks">
-            <div class="pane-head">
-              <span class="wordmark">agenterm</span><span class="pane-sub" data-running>0 running</span>
-            </div>
-            <ul class="tasks" data-tasks></ul>
+          <div class="board-head" data-board-head aria-hidden="true"></div>
+          <ol class="board-rows" data-board-rows aria-hidden="true"></ol>
+          <div class="ticker" aria-hidden="true">
+            <p class="ticker-line">
+              <span class="ticker-agent" data-ticker-agent></span><span class="ticker-prompt">$</span
+              ><span class="ticker-command" data-ticker-command></span>
+            </p>
+            <p class="ticker-output" data-ticker-output></p>
           </div>
           <figcaption class="sr-only">
-            The agent starts a web server, an API, and a test watcher. Forty minutes later it runs the web server again
-            and agenterm returns the one already running instead of starting a second copy. When the tests fail, the
-            agent reads their output and restarts them.
+            Five tasks are running: web and api, started by Claude Code; tests, started by Codex; and a worker and a
+            database you started. Codex runs the web server again and agenterm returns the one already running instead
+            of starting a second copy. The tests fail, Claude Code reads their output and restarts them, Codex starts
+            the docs server, and Claude Code stops the worker.
           </figcaption>
         </figure>
       </section>
 
-      <section class="why" aria-labelledby="why-title">
-        <h2 id="why-title" class="sr-only">What agenterm fixes</h2>
-        <ul class="facts">
-          <li class="fact">
-            <code class="fact-cmd">run --id web</code>
+      <section class="facts" aria-labelledby="facts-title">
+        <h2 id="facts-title" class="title">Agents forget what they started. agenterm keeps the list.</h2>
+        <ul class="fact-list">
+          <li>
             <h3>Nothing starts twice</h3>
             <p>
               Run the same id, or the same command in the same folder, and you get the task that is already running.
             </p>
+            <code>agenterm run --id web</code>
           </li>
-          <li class="fact">
-            <code class="fact-cmd">ls</code>
-            <h3>One place to look</h3>
-            <p>Every task with its status, ports, folder, and the agent or terminal that started it.</p>
+          <li>
+            <h3>One list for every agent</h3>
+            <p>Claude Code, Codex, and your own terminal see the same tasks, with their status, ports, and folder.</p>
+            <code>agenterm ls</code>
           </li>
-          <li class="fact">
-            <code class="fact-cmd">logs web -f</code>
-            <h3>Outlives the agent</h3>
+          <li>
+            <h3>Outlives the session</h3>
             <p>Tasks keep running after the agent or terminal that started them exits. Their output stays readable.</p>
+            <code>agenterm logs web -f</code>
           </li>
-          <li class="fact">
-            <code class="fact-cmd">stop web</code>
-            <h3>Clean stops</h3>
-            <p>Ctrl+C first, then the whole process tree. No stray node processes holding your ports.</p>
+          <li>
+            <h3>Stops cleanly</h3>
+            <p>Ctrl+C first, then the whole process tree. No stray node process holding your port.</p>
+            <code>agenterm stop web</code>
           </li>
         </ul>
       </section>
 
-      <section class="app" aria-labelledby="app-title">
-        <div class="section-head">
-          <p class="eyebrow">The Mac app</p>
+      <section class="app" data-app aria-labelledby="app-title">
+        <div class="app-head">
           <h2 id="app-title" class="title">Every task, one click from its terminal.</h2>
-          <p class="body">
-            Group tasks by project or by who started them. Click one and type straight into it. Ports open in your
-            browser. A notification tells you when something fails in the background.
+          <p>
+            The Mac app groups tasks by project or by who started them. Click one and type straight into it. Ports open
+            in your browser, and a notification tells you when something fails in the background.
           </p>
-          <div class="theme-switch" role="group" aria-label="Screenshot theme">
+          <div class="switch" role="group" aria-label="Screenshot theme">
             <button type="button" data-shot="dark" aria-pressed="true">Dark</button>
             <button type="button" data-shot="light" aria-pressed="false">Light</button>
           </div>
         </div>
-        <div class="window-stage">
+        <div class="stage" data-stage>
           <div class="window" data-window>
-            <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
             <img
               data-shot-img
               src="/app-dark.jpg"
@@ -156,124 +159,139 @@
       </section>
 
       <section class="agents" id="agents" aria-labelledby="agents-title">
-        <div class="section-head">
-          <p class="eyebrow">Connect your agent</p>
-          <h2 id="agents-title" class="title">One line, then your agent knows.</h2>
-          <p class="body">
-            agenterm is an MCP server too. The tools match the CLI: <code>run</code>, <code>list</code>,
-            <code>logs</code>, <code>input</code>, <code>stop</code>, <code>remove</code>. Agents can also just call the
-            CLI, and the <a href="https://github.com/entange/agenterm/tree/main/skills/agenterm">agent skill</a>
-            teaches them when to.
-          </p>
+        <div class="split">
+          <div>
+            <h2 id="agents-title" class="title">Connect your agent.</h2>
+            <p>
+              agenterm is an MCP server. Its tools match the CLI: <code>run</code>, <code>list</code>,
+              <code>logs</code>, <code>input</code>, <code>stop</code>, and <code>remove</code>. Agents can also call
+              the CLI directly.
+            </p>
+          </div>
+          <div class="tabs">
+            <div class="tab-list" role="tablist" aria-label="Agent">
+              <button role="tab" id="tab-claude" aria-controls="panel-claude" aria-selected="true">Claude Code</button>
+              <button role="tab" id="tab-codex" aria-controls="panel-codex" aria-selected="false" tabindex="-1">
+                Codex
+              </button>
+              <button role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false" tabindex="-1">
+                Other MCP clients
+              </button>
+            </div>
+            <div class="tab-panel" role="tabpanel" id="panel-claude" aria-labelledby="tab-claude">
+              <pre><code>claude mcp add --scope user agenterm -- agenterm mcp</code></pre>
+              <button class="copy" type="button" data-copy="claude mcp add --scope user agenterm -- agenterm mcp">
+                Copy
+              </button>
+            </div>
+            <div class="tab-panel" role="tabpanel" id="panel-codex" aria-labelledby="tab-codex" hidden>
+              <pre><code>codex mcp add agenterm -- agenterm mcp</code></pre>
+              <button class="copy" type="button" data-copy="codex mcp add agenterm -- agenterm mcp">Copy</button>
+            </div>
+            <div class="tab-panel" role="tabpanel" id="panel-json" aria-labelledby="tab-json" hidden>
+              <pre><code>{ "mcpServers": { "agenterm": { "command": "agenterm", "args": ["mcp"] } } }</code></pre>
+              <button
+                class="copy"
+                type="button"
+                data-copy='{ "mcpServers": { "agenterm": { "command": "agenterm", "args": ["mcp"] } } }'
+              >
+                Copy
+              </button>
+            </div>
+            <p class="note">
+              Apps opened from the Dock may not see your shell's PATH. If yours cannot find the command, use the full
+              path that <code>which agenterm</code> prints.
+            </p>
+          </div>
         </div>
-        <div class="tabs" data-tabs>
-          <div class="tab-list" role="tablist" aria-label="Agent">
-            <button role="tab" id="tab-claude" aria-controls="panel-claude" aria-selected="true">Claude Code</button>
-            <button role="tab" id="tab-codex" aria-controls="panel-codex" aria-selected="false" tabindex="-1">
-              Codex
-            </button>
-            <button role="tab" id="tab-json" aria-controls="panel-json" aria-selected="false" tabindex="-1">
-              Cursor, Claude Desktop, others
-            </button>
+        <div class="split skill">
+          <div>
+            <h3>Add the skill</h3>
+            <p>
+              It tells agents when to reach for agenterm: dev servers and watchers, yes; <code>ls</code> and
+              <code>git status</code>, no. Works with Claude Code, Codex, Cursor, and other agents that read skills.
+            </p>
           </div>
-          <div class="tab-panel" role="tabpanel" id="panel-claude" aria-labelledby="tab-claude">
-            <pre><code>claude mcp add --scope user agenterm -- agenterm mcp</code></pre>
-            <button class="copy" type="button" data-copy="claude mcp add --scope user agenterm -- agenterm mcp">
-              Copy
-            </button>
+          <div class="code-line">
+            <pre><code>npx skills add entange/agenterm</code></pre>
+            <button class="copy" type="button" data-copy="npx skills add entange/agenterm">Copy</button>
           </div>
-          <div class="tab-panel" role="tabpanel" id="panel-codex" aria-labelledby="tab-codex" hidden>
-            <pre><code>codex mcp add agenterm -- agenterm mcp</code></pre>
-            <button class="copy" type="button" data-copy="codex mcp add agenterm -- agenterm mcp">Copy</button>
-          </div>
-          <div class="tab-panel" role="tabpanel" id="panel-json" aria-labelledby="tab-json" hidden>
-            <pre><code>{ "mcpServers": { "agenterm": { "command": "agenterm", "args": ["mcp"] } } }</code></pre>
-            <button
-              class="copy"
-              type="button"
-              data-copy='{ "mcpServers": { "agenterm": { "command": "agenterm", "args": ["mcp"] } } }'
-            >
-              Copy
-            </button>
-          </div>
-          <p class="tabs-note">
-            Apps opened from the Dock may not see your shell's PATH. If yours cannot find the command, use the full path
-            that <code>which agenterm</code> prints.
-          </p>
         </div>
       </section>
 
       <section class="cli" id="cli" aria-labelledby="cli-title">
-        <div class="section-head">
-          <p class="eyebrow">The CLI</p>
-          <h2 id="cli-title" class="title">Small on purpose.</h2>
-          <p class="body">
-            Name a task by its id, its title, or a unique id prefix. <code>run</code> and <code>ls</code> take
-            <code>--json</code> for scripts.
-          </p>
+        <div class="split">
+          <div>
+            <h2 id="cli-title" class="title">The whole CLI.</h2>
+            <p>
+              Refer to a task by its id, its title, or a unique prefix of its id. <code>run</code> and
+              <code>ls</code> take <code>--json</code> for scripts.
+            </p>
+          </div>
+          <dl class="commands">
+            <div>
+              <dt>agenterm run --id web "npm run dev"</dt>
+              <dd>Start it, or get the one already running</dd>
+            </div>
+            <div>
+              <dt>agenterm ls</dt>
+              <dd>Every task, with ports and who started it</dd>
+            </div>
+            <div>
+              <dt>agenterm logs web -f</dt>
+              <dd>Recent output, then follow it</dd>
+            </div>
+            <div>
+              <dt>agenterm input web "y"</dt>
+              <dd>Answer a prompt</dd>
+            </div>
+            <div>
+              <dt>agenterm run --id web --restart "npm run dev"</dt>
+              <dd>Replace a running task</dd>
+            </div>
+            <div>
+              <dt>agenterm stop web</dt>
+              <dd>Ctrl+C, then end the process tree</dd>
+            </div>
+            <div>
+              <dt>agenterm rm web</dt>
+              <dd>Remove a task and its output</dd>
+            </div>
+            <div>
+              <dt>agenterm mcp</dt>
+              <dd>The same tools over MCP</dd>
+            </div>
+          </dl>
         </div>
-        <dl class="commands">
-          <div>
-            <dt>agenterm run --id web "npm run dev"</dt>
-            <dd>Start it, or get the one already running</dd>
-          </div>
-          <div>
-            <dt>agenterm ls</dt>
-            <dd>What is running, with ports and who started it</dd>
-          </div>
-          <div>
-            <dt>agenterm logs web -f</dt>
-            <dd>Recent output, then follow it</dd>
-          </div>
-          <div>
-            <dt>agenterm stop web</dt>
-            <dd>Ctrl+C, then end the process tree</dd>
-          </div>
-          <div>
-            <dt>agenterm input web "y"</dt>
-            <dd>Answer a prompt</dd>
-          </div>
-          <div>
-            <dt>agenterm run --id web --restart …</dt>
-            <dd>Replace a running task</dd>
-          </div>
-          <div>
-            <dt>agenterm rm web</dt>
-            <dd>Remove a task and its output</dd>
-          </div>
-          <div>
-            <dt>agenterm mcp</dt>
-            <dd>The same tools over MCP</dd>
-          </div>
-        </dl>
       </section>
 
       <section class="install" id="install" aria-labelledby="install-title">
-        <div class="section-head">
-          <p class="eyebrow">Install</p>
-          <h2 id="install-title" class="title">Two ways in.</h2>
-        </div>
+        <h2 id="install-title" class="title">Install.</h2>
         <div class="install-grid">
-          <article class="card">
-            <h3>Mac app <span class="tag">includes the CLI</span></h3>
+          <article class="mac">
+            <h3>Mac app</h3>
             <p>
-              The app, the <code>agenterm</code> command, and the MCP server in one download. Nothing else to install.
-              On first launch it offers to add the command to your PATH.
+              The app, the <code>agenterm</code> command, and the MCP server in one download. On first launch it offers
+              to put <code>agenterm</code> on your PATH.
             </p>
-            <div class="card-actions">
-              <a class="button primary" data-download="arm64" href="https://github.com/entange/agenterm/releases/latest"
-                >Apple Silicon</a
+            <div class="actions">
+              <a class="button light" data-download="arm64" href="https://github.com/entange/agenterm/releases/latest"
+                >Download for Apple Silicon</a
               >
-              <a class="button" data-download="x64" href="https://github.com/entange/agenterm/releases/latest">Intel</a>
+              <a class="button ghost" data-download="x64" href="https://github.com/entange/agenterm/releases/latest"
+                >Download for Intel</a
+              >
             </div>
             <p class="note">
-              macOS 12 or later. The app is not signed with an Apple Developer ID yet, so macOS asks you to confirm the
-              first launch: open it once, then <strong>System Settings → Privacy &amp; Security → Open Anyway</strong>.
+              macOS 12 or later. The app is not signed with an Apple Developer ID, so macOS asks you to confirm the
+              first launch: open it once, then go to System Settings, Privacy &amp; Security, and click Open Anyway.
             </p>
           </article>
-          <article class="card">
-            <h3>npm <span class="tag">Linux, or the CLI alone</span></h3>
-            <p>Needs Node.js 22 or newer. The background daemon starts on first use.</p>
+          <article class="npm">
+            <h3>npm</h3>
+            <p>
+              For Linux, or the CLI on its own. Needs Node.js 22 or newer. The background daemon starts on first use.
+            </p>
             <div class="code-line">
               <pre><code>npm install -g agenterm --allow-scripts=node-pty</code></pre>
               <button class="copy" type="button" data-copy="npm install -g agenterm --allow-scripts=node-pty">
@@ -281,7 +299,8 @@
               </button>
             </div>
             <p class="note">
-              On Linux, node-pty builds from source: <code>sudo apt install build-essential python3</code> first.
+              On Linux, node-pty builds from source, so install <code>build-essential</code> and
+              <code>python3</code> first.
             </p>
           </article>
         </div>
@@ -294,9 +313,10 @@
         <a href="https://github.com/entange/agenterm">GitHub</a>
         <a href="https://github.com/entange/agenterm/releases">Releases</a>
         <a href="https://www.npmjs.com/package/agenterm">npm</a>
+        <a href="https://skills.sh/entange/agenterm">Skill</a>
         <a href="https://github.com/entange/agenterm/blob/main/LICENSE">MIT license</a>
       </nav>
-      <span class="footer-by">Made by <a href="https://entange.com">Entange</a></span>
+      <span>Made by <a href="https://entange.com">Entange</a></span>
     </footer>
 
     <script type="module" src="/src/main.ts"></script>

@@ -1,8 +1,9 @@
-import '@fontsource-variable/ibm-plex-sans';
+import '@fontsource-variable/archivo/wdth.css';
 import '@fontsource-variable/jetbrains-mono';
 import '@fontsource-variable/martian-mono/wdth.css';
 import './style.css';
-import { startDemo } from './demo.js';
+import { animate, scroll } from 'motion';
+import { startBoard } from './board.js';
 
 declare const __VERSION__: string;
 
@@ -78,28 +79,57 @@ for (const [index, tab] of tabs.entries()) {
   });
 }
 
-// --- screenshot theme ---------------------------------------------------------
+// --- the app screenshot --------------------------------------------------------
 
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const app = document.querySelector<HTMLElement>('[data-app]');
 const shot = document.querySelector<HTMLImageElement>('[data-shot-img]');
 const frame = document.querySelector<HTMLElement>('[data-window]');
+const stage = document.querySelector<HTMLElement>('[data-stage]');
+
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-shot]')) {
   button.addEventListener('click', () => {
     const theme = button.dataset['shot'] ?? 'dark';
-    if (shot !== null) shot.src = `/app-${theme}.jpg`;
-    frame?.classList.toggle('light', theme === 'light');
+    if (shot === null || shot.src.endsWith(`/app-${theme}.jpg`)) return;
     for (const other of document.querySelectorAll<HTMLButtonElement>('[data-shot]')) {
       other.setAttribute('aria-pressed', String(other === button));
     }
+    app?.classList.toggle('light', theme === 'light');
+    if (reducedMotion.matches) {
+      shot.src = `/app-${theme}.jpg`;
+      return;
+    }
+    // Dip the screenshot while the band changes color around it.
+    void animate(shot, { opacity: [1, 0.15] }, { duration: 0.18 }).then(() => {
+      shot.src = `/app-${theme}.jpg`;
+      void animate(shot, { opacity: [0.15, 1] }, { duration: 0.32 });
+    });
   });
 }
 // Fetch the other theme early so the switch is instant.
 new Image().src = '/app-light.jpg';
 
-// --- the demo -----------------------------------------------------------------
+// The window tips up into place as it scrolls in.
+if (frame !== null && stage !== null && !reducedMotion.matches) {
+  scroll(
+    animate(
+      frame,
+      { transform: ['rotateX(24deg) scale(0.88)', 'rotateX(0deg) scale(1)'], opacity: [0.4, 1] },
+      { ease: 'linear' }
+    ),
+    { target: stage, offset: ['start end', 'start 0.2'] }
+  );
+}
 
-const transcript = document.querySelector<HTMLOListElement>('[data-transcript]');
-const taskList = document.querySelector<HTMLUListElement>('[data-tasks]');
-const running = document.querySelector<HTMLElement>('[data-running]');
-if (transcript !== null && taskList !== null && running !== null) {
-  startDemo({ transcript, taskList, running, reducedMotion: matchMedia('(prefers-reduced-motion: reduce)') });
+// --- the board ----------------------------------------------------------------
+
+const board = document.querySelector<HTMLElement>('[data-board]');
+const rows = document.querySelector<HTMLElement>('[data-board-rows]');
+const head = document.querySelector<HTMLElement>('[data-board-head]');
+const clock = document.querySelector<HTMLElement>('[data-clock]');
+const agent = document.querySelector<HTMLElement>('[data-ticker-agent]');
+const command = document.querySelector<HTMLElement>('[data-ticker-command]');
+const output = document.querySelector<HTMLElement>('[data-ticker-output]');
+if (board && rows && head && clock && agent && command && output) {
+  startBoard({ board, rows, head, clock, ticker: { agent, command, output }, reducedMotion });
 }
