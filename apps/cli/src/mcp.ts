@@ -73,6 +73,7 @@ export const TOOLS: Tool[] = [
     description:
       'Start a long-running command (dev server, watcher, build, test loop) in a real terminal the user can watch and type into in the agenterm app. ' +
       'Returns the task id and its first output. Use it instead of running servers in your own shell. ' +
+      'Only for commands that keep running or take minutes: run quick ones (ls, pwd, git status, npm install, a single test run) in your own shell. ' +
       'Calling again with the same id, or the same command in the same folder, returns the running task instead of starting a duplicate; set restart to replace it.',
     inputSchema: {
       type: 'object',

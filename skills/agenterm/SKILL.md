@@ -14,8 +14,9 @@ running.
 - Dev servers, `--watch` builds, test watchers, `docker compose up`, tunnels: anything that does not exit.
 - A build or test run long enough that you want to check back on it instead of blocking.
 
-Commands that finish in seconds (`git status`, `npm install`, a single test run) do not need agenterm. Run them
-directly.
+Only those. Commands that finish on their own in seconds (`ls`, `pwd`, `cat`, `grep`, `git status`, `npm install`,
+a single test run, a quick build) do not belong in agenterm. Run them directly in your own shell, as usual: wrapping
+them adds a task the user has to clean up and hides nothing worth watching.
 
 ## Always give the task an id
 
