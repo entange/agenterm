@@ -36,3 +36,4 @@ Thumbs.db
 # copied in at pack time
 apps/cli/LICENSE
 *.tgz
+.wrangler/
