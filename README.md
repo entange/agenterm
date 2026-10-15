@@ -6,6 +6,8 @@ from anywhere.
 You or your coding agent start a command with `agenterm run`. It keeps running in the background, even after the
 terminal or agent that started it exits. The desktop app lists every task with its live terminal, one click away.
 
+**[agenterm.entange.com](https://agenterm.entange.com)** · [Download for Mac](https://github.com/entange/agenterm/releases/latest) · `npm install -g agenterm`
+
 <picture>
   <source media="(prefers-color-scheme: light)" srcset=".github/assets/screenshot-light.png">
   <img alt="The agenterm app: tasks grouped by project on the left, the selected dev server's live terminal on the right" src=".github/assets/screenshot-dark.png">
@@ -185,6 +187,7 @@ To remove agenterm completely: `agenterm daemon stop`, delete the app and `sudo 
 ```
 apps/cli           agenterm CLI and MCP stdio server
 apps/desktop       Electron: main (daemon link, tray, notifications, updater) + React renderer
+apps/site          agenterm.entange.com, a static Vite page on Cloudflare
 packages/runtime   agentermd: Fastify + ws daemon, node-pty, process and port tracking, SQLite
 packages/core      shared types, validation, redaction, typed HTTP client
 packages/ui        Radix-based primitives shared by the app

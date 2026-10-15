@@ -66,4 +66,5 @@ The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, and `remove`.
 
 Data lives in `~/.agenterm/`. The daemon listens on `127.0.0.1` only and every request needs a token stored there.
 
-MIT licensed. Source, issues, and the desktop app: <https://github.com/entange/agenterm>.
+MIT licensed. Website: <https://agenterm.entange.com>. Source, issues, and the desktop app:
+<https://github.com/entange/agenterm>.

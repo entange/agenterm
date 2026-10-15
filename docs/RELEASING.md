@@ -42,6 +42,15 @@ once on npmjs.com: package `agenterm` → Settings → Trusted publisher → Git
 repository `agenterm`, and workflow `release.yml`. npm only offers this for a package that exists, so the very first
 version is published by hand (below).
 
+## Website
+
+`apps/site` is agenterm.entange.com: a Vite page served as static assets by a Cloudflare Worker (`wrangler.jsonc`).
+Deploy it by hand with `bun run deploy` in `apps/site` (after `bunx wrangler login`). `site.yml` deploys it on every
+change to `apps/site` on main once the repository has two more secrets: `CLOUDFLARE_API_TOKEN`, a token from the
+"Edit Cloudflare Workers" template, and `CLOUDFLARE_ACCOUNT_ID`. Without them it only builds.
+
+The page has no version to bump: its download links follow the latest GitHub release.
+
 ## Building locally
 
 ```sh
