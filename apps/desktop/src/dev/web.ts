@@ -59,7 +59,8 @@ function on<K extends keyof typeof handlers>(kind: K, handler: Handler<never>): 
 }
 
 const bridge: AgentermBridge = {
-  platform: 'web',
+  // ?platform=darwin lays the title bar out as on a Mac, for screenshots.
+  platform: new URLSearchParams(location.search).get('platform') ?? 'web',
   call: async (method, ...args) => {
     const response = await fetch('/__agenterm/call', { method: 'POST', body: JSON.stringify({ method, args }) });
     return (await response.json()) as never;

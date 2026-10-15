@@ -6,6 +6,11 @@ from anywhere.
 You or your coding agent start a command with `agenterm run`. It keeps running in the background, even after the
 terminal or agent that started it exits. The desktop app lists every task with its live terminal, one click away.
 
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset=".github/assets/screenshot-light.png">
+  <img alt="The agenterm app: tasks grouped by project on the left, the selected dev server's live terminal on the right" src=".github/assets/screenshot-dark.png">
+</picture>
+
 ```sh
 agenterm run --id web "npm run dev"    # start it (or get the one already running)
 agenterm ls                            # what is running
