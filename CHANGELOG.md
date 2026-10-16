@@ -15,6 +15,8 @@ Every release, newest first. The app shows these when an update is available.
 - Agents get `processes` and `kill` MCP tools to find what holds a port or what was left behind.
 - `npm install -g agenterm` installs prebuilt on macOS and Linux, x64 and arm64, with nothing to compile.
 - Ports show on Linux without `lsof`.
+- The CLI says once a day, in a terminal, when npm has a newer version.
+- After updating, a daemon from 0.3 is replaced when idle; with tasks running, the app asks first.
 
 ## 0.3.2 · 2026-10-15
 
