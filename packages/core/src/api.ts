@@ -139,6 +139,64 @@ export interface TaskOutputResponse {
   live: boolean;
 }
 
+/**
+ * A command running outside agenterm: typed into a terminal, run by an
+ * agent in its own shell, or left behind when whatever started it exited.
+ * agenterm did not start it, so it has no terminal output to show.
+ */
+export interface OutsideProcess {
+  /** The command's top process. Stopping it ends every pid in `pids`. */
+  pid: number;
+  /** The top process and everything under it. */
+  pids: number[];
+  /** Short program name: vite, next, python, cloudflared. */
+  name: string;
+  /** Full command line of the top process. Secrets are masked. */
+  command: string;
+  /** Working directory of the top process, or null when it cannot be read. */
+  cwd: string | null;
+  /** Git repository or folder name of cwd. Null for home, root, or unknown. */
+  project: string | null;
+  /** The agent, terminal, or editor it runs under: claude, codex, iTerm2. Null once orphaned. */
+  startedBy: string | null;
+  startedByPid: number | null;
+  /** What started it has exited, so nothing will stop it but you. */
+  orphaned: boolean;
+  /** Terminal device, like ttys004, or null when it has none. */
+  tty: string | null;
+  /** TCP ports any of its processes are listening on. */
+  ports: number[];
+  /** CPU use of all its processes, in percent of one core. */
+  cpuPercent: number;
+  /** Resident memory of all its processes. */
+  memoryBytes: number;
+  startedAtMs: number;
+}
+
+/** GET /processes. Orphaned first, then newest first. */
+export interface ListProcessesResponse {
+  processes: OutsideProcess[];
+  scannedAtMs: number;
+}
+
+/** POST /processes/:pid/stop. */
+export interface StopProcessRequest {
+  /** False (default): SIGTERM, then SIGKILL whatever is left a few seconds later. True: SIGKILL right away. */
+  force?: boolean;
+  /**
+   * When the process was listed as starting. A pid reused by a newer
+   * process since then is refused rather than stopped.
+   */
+  startedAtMs?: number;
+}
+
+export interface StopProcessResponse {
+  /** The command as it was when it was stopped. */
+  process: OutsideProcess;
+  /** True when every one of its processes is gone. */
+  exited: boolean;
+}
+
 /** Output heartbeat for one task over the last two minutes. */
 export interface TaskActivity {
   /** Output bytes per second, oldest first. */

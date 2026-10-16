@@ -2,11 +2,14 @@ import type {
   ActivityResponse,
   ClearTasksResponse,
   HealthResponse,
+  ListProcessesResponse,
   ListTasksResponse,
   RemoveTaskResponse,
   RunTaskRequest,
   RunTaskResponse,
   Settings,
+  StopProcessRequest,
+  StopProcessResponse,
   StopTaskRequest,
   TaskInputRequest,
   TaskInputResponse,
@@ -176,6 +179,16 @@ export class AgentermClient {
         `/output${querySuffix({ tailBytes: query.tailBytes, sinceSeq: query.sinceSeq, limit: query.limit })}`
       )
     );
+  }
+
+  /** Commands running outside agenterm: in terminals, under agents, or orphaned. */
+  listProcesses(): Promise<ListProcessesResponse> {
+    return this.request('GET', '/processes');
+  }
+
+  /** End a command running outside agenterm and everything under it. */
+  stopProcess(pid: number, request: StopProcessRequest = {}): Promise<StopProcessResponse> {
+    return this.request('POST', `/processes/${pid}/stop`, request);
   }
 
   activity(): Promise<ActivityResponse> {

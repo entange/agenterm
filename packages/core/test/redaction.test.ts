@@ -48,6 +48,15 @@ describe('redactText', () => {
     expect(redactText('auth Bearer abcdefghijklmnopqrstu end')).not.toContain('abcdefghijklmnopqrstu');
   });
 
+  it('masks flags named like secrets whose value follows a space', () => {
+    expect(redactText('cloudflared tunnel run --token abcdef123456')).toBe('cloudflared tunnel run --token [REDACTED]');
+    expect(redactText('psql --password "hunter22" -h db')).toBe('psql --password "[REDACTED]" -h db');
+    expect(redactText('tool --api-key k1234567 --verbose')).toBe('tool --api-key [REDACTED] --verbose');
+    // The next flag is not a value.
+    expect(redactText('serve --token --port 3000')).toBe('serve --token --port 3000');
+    expect(redactText('biome --stop-on-disconnect --log-path /tmp')).toBe('biome --stop-on-disconnect --log-path /tmp');
+  });
+
   it('masks common credential formats', () => {
     const secrets = [
       'AKIAIOSFODNN7EXAMPLE',

@@ -76,6 +76,11 @@ const REDACT_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
   [
     /\b([A-Za-z0-9_]*(?:password|passwd|secret|token|api[_-]?key)[A-Za-z0-9_]*)(=|"\s*:\s*")(["']?)[^\s"'&]{4,}/gi,
     `$1$2$3${MASK}`
+  ],
+  // Command-line flags named like secrets, with the value after a space: --token abc, --api-key abc
+  [
+    /(\s--?[A-Za-z0-9_-]*(?:password|passwd|secret|token|api[_-]?key)[A-Za-z0-9_-]*\s+)(["']?)(?!-)[^\s"']{4,}/gi,
+    `$1$2${MASK}`
   ]
 ];
 

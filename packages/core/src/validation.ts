@@ -1,6 +1,7 @@
 import type {
   RunTaskRequest,
   Settings,
+  StopProcessRequest,
   StopTaskRequest,
   TaskInputRequest,
   TaskOutputQuery,
@@ -114,6 +115,32 @@ export function parseStopTaskRequest(body: unknown): ValidationResult<StopTaskRe
     return { ok: false, code: 'invalid_force', message: 'force must be a boolean' };
   }
   return { ok: true, value: force === undefined ? {} : { force } };
+}
+
+/** A pid from a URL segment or a body. */
+export function parsePid(value: unknown): ValidationResult<number> {
+  const pid = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
+  if (!isInt(pid, 2, 4_194_304)) return { ok: false, code: 'invalid_pid', message: 'pid must be a process id' };
+  return { ok: true, value: pid };
+}
+
+export function parseStopProcessRequest(body: unknown): ValidationResult<StopProcessRequest> {
+  if (body === undefined || body === null) return { ok: true, value: {} };
+  if (!isPlainRecord(body)) return { ok: false, code: 'invalid_body', message: 'body must be an object' };
+  const out: StopProcessRequest = {};
+  const force = body['force'];
+  if (force !== undefined) {
+    if (typeof force !== 'boolean') return { ok: false, code: 'invalid_force', message: 'force must be a boolean' };
+    out.force = force;
+  }
+  const startedAtMs = body['startedAtMs'];
+  if (startedAtMs !== undefined) {
+    if (!isInt(startedAtMs, 0, Number.MAX_SAFE_INTEGER)) {
+      return { ok: false, code: 'invalid_startedAtMs', message: 'startedAtMs must be a timestamp in ms' };
+    }
+    out.startedAtMs = startedAtMs;
+  }
+  return { ok: true, value: out };
 }
 
 export function parseTaskInputRequest(body: unknown): ValidationResult<TaskInputRequest> {

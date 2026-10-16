@@ -1,13 +1,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import {
   API_VERSION,
   isRunning,
+  parsePid,
   parseRunTaskRequest,
   parseSettingsPatch,
+  parseStopProcessRequest,
   parseStopTaskRequest,
   parseTaskId,
   parseTaskInputRequest,
@@ -25,7 +26,9 @@ import { buildSpawnEnv } from './env.js';
 import { EventBus } from './events.js';
 import { readGitInfo, type GitInfo } from './gitInfo.js';
 import { DAEMON_VERSION, settingsPath, taskDir, terminalLogPath } from './paths.js';
+import { OutsideScanner } from './outside.js';
 import { ensureSpawnHelper } from './ptyHelper.js';
+import { projectOf } from './project.js';
 import { PtyManager } from './ptyManager.js';
 import { loadSettings, saveSettings } from './settings.js';
 import { Supervisor } from './supervisor.js';
@@ -40,6 +43,8 @@ export interface CreateAppOptions {
   store?: TaskStore | undefined;
   pty?: PtyManager | undefined;
   supervisor?: Supervisor | undefined;
+  /** Finds commands running outside agenterm. */
+  outside?: Pick<OutsideScanner, 'list' | 'stop'> | undefined;
   bus?: EventBus | undefined;
   /** Where terminal logs and settings live. Absent keeps everything in memory. */
   dataDir?: string | undefined;
@@ -141,13 +146,6 @@ export function slugOf(text: string): string {
   return words.join('-').slice(0, 32).replace(/-+$/, '');
 }
 
-/** Project name: git repository name, else the folder name. Null for home and root. */
-export function projectOf(cwd: string, gitRoot: string | null): string | null {
-  const folder = gitRoot ?? cwd;
-  if (folder === path.parse(folder).root || path.resolve(folder) === path.resolve(os.homedir())) return null;
-  return path.basename(folder) || null;
-}
-
 type Result<T> = { ok: true; status: number; value: T } | ({ ok: false } & Failure);
 
 const UNKNOWN_HINT = 'Run `agenterm ls` to see task ids.';
@@ -182,6 +180,8 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
         if (task !== null && isRunning(task)) publish(task);
       }
     });
+
+  const outside = options.outside ?? new OutsideScanner({ gitReader });
 
   /** Command lines as given, for dedupe. Rows only keep the masked form. */
   const rawCommands = new Map<string, string>();
@@ -575,6 +575,38 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
       firstSeq: tail !== null && tail.length > 0 ? 1 : null,
       live: false
     };
+  });
+
+  app.get('/processes', async (_request, reply) => {
+    try {
+      return await outside.list();
+    } catch (error) {
+      await fail(reply, {
+        status: 500,
+        code: 'scan_failed',
+        message: `could not read the process table: ${error instanceof Error ? error.message : String(error)}`
+      });
+      return;
+    }
+  });
+
+  app.post('/processes/:pid/stop', async (request, reply) => {
+    const pid = parsePid((request.params as { pid?: unknown }).pid);
+    if (!pid.ok) {
+      await fail(reply, { status: 400, code: pid.code, message: pid.message });
+      return;
+    }
+    const parsed = parseStopProcessRequest(request.body);
+    if (!parsed.ok) {
+      await fail(reply, { status: 400, code: parsed.code, message: parsed.message });
+      return;
+    }
+    const result = await outside.stop(pid.value, parsed.value);
+    if (!result.ok) {
+      await fail(reply, result);
+      return;
+    }
+    return { process: result.process, exited: result.exited };
   });
 
   app.get('/activity', async () => activity.snapshot());

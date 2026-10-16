@@ -3,7 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { TaskRecord } from '@agenterm/core';
-import { createApp, projectOf, shellFor, slugOf } from '../src/server.js';
+import { OutsideScanner, type ProcRow } from '../src/outside.js';
+import { projectOf } from '../src/project.js';
+import { createApp, shellFor, slugOf } from '../src/server.js';
 import { TaskStore } from '../src/taskStore.js';
 import { headers, rig, TOKEN } from './helpers.js';
 
@@ -268,6 +270,48 @@ describe('terminal', () => {
     };
     expect(ended.live).toBe(false);
     expect(ended.chunks[0]?.data).toBe('one\r\ntwo\r\n');
+  });
+});
+
+describe('processes outside agenterm', () => {
+  const row = (pid: number, ppid: number, args: string, uid = process.getuid?.() ?? 501): ProcRow => ({
+    pid,
+    ppid,
+    uid,
+    elapsedSeconds: 60,
+    tty: null,
+    cpuPercent: 0,
+    rssBytes: 0,
+    comm: args.split(' ')[0] ?? '',
+    args
+  });
+  const outside = new OutsideScanner({
+    ownPids: [],
+    gitReader: async () => ({ branch: null, worktreeRoot: null }),
+    probes: {
+      processes: async () => [row(1, 0, '/sbin/launchd', 0), row(40, 1, 'node left-behind.js')],
+      sockets: async () => [{ port: 4000, pid: 40, address: '127.0.0.1' }],
+      launchdJobs: async () => null,
+      isService: () => false,
+      cwds: async () => new Map([[40, '/work/api']])
+    }
+  });
+
+  it('lists them and refuses to stop a pid that is not one of them', async () => {
+    const app = createApp({ token: TOKEN, port: 37241, store: new TaskStore(), outside });
+    const list = (await app.inject({ method: 'GET', url: '/processes', headers })).json() as {
+      processes: Array<Record<string, unknown>>;
+    };
+    expect(list.processes).toEqual([
+      expect.objectContaining({ pid: 40, orphaned: true, ports: [4000], cwd: '/work/api', project: 'api' })
+    ]);
+    const unknown = await app.inject({ method: 'POST', url: '/processes/41/stop', headers, payload: {} });
+    expect(unknown.statusCode).toBe(404);
+    expect((unknown.json() as { error: { code: string } }).error.code).toBe('unknown_process');
+    const bad = await app.inject({ method: 'POST', url: '/processes/abc/stop', headers, payload: {} });
+    expect(bad.statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: '/processes' })).statusCode).toBe(401);
+    await app.close();
   });
 });
 

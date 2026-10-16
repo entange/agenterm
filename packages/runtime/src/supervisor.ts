@@ -105,7 +105,7 @@ export function parseLsofListeners(stdout: string): SockEntry[] {
  * Listening TCP sockets. POSIX asks lsof for listeners only, which is a
  * fraction of the cost of a full connection scan.
  */
-async function defaultSockets(): Promise<SockEntry[]> {
+export async function listeningSockets(): Promise<SockEntry[]> {
   if (process.platform !== 'win32') {
     try {
       const { stdout } = await execFileAsync('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'], {
@@ -181,7 +181,7 @@ export class Supervisor {
       onPorts?: ((taskId: string, ports: number[]) => void) | undefined;
     } = {}
   ) {
-    this.probes = options.probes ?? { processes: defaultProcesses, sockets: defaultSockets };
+    this.probes = options.probes ?? { processes: defaultProcesses, sockets: listeningSockets };
     this.intervalMs = options.intervalMs ?? 1000;
     this.onPorts = options.onPorts;
   }

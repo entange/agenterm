@@ -85,6 +85,11 @@ export function rig(overrides: RigOptions = {}) {
     return [leader];
   };
   const { ignoreInterrupt: _ignore, ...appOverrides } = overrides;
+  // Never scan the real machine from tests.
+  const outside = {
+    list: async () => ({ processes: [], scannedAtMs: Date.now() }),
+    stop: async () => ({ ok: false as const, status: 404, code: 'unknown_process', message: 'not listed' })
+  };
   const app = createApp({
     token: TOKEN,
     port: 37241,
@@ -93,6 +98,7 @@ export function rig(overrides: RigOptions = {}) {
     supervisor,
     bus,
     dataDir,
+    outside,
     gitReader: async () => ({ branch: null, worktreeRoot: null }),
     baseEnv: {
       HOME: '/home/agent',
