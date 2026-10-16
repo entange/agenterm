@@ -62,10 +62,15 @@ export type AppCommand =
   | { kind: 'settings' }
   | { kind: 'focus-task'; taskId: string }
   | { kind: 'cycle-task'; delta: 1 | -1 }
-  | { kind: 'jump-task'; index: number };
+  | { kind: 'jump-task'; index: number }
+  /** Show the Outside view, with this command picked. */
+  | { kind: 'show-outside'; pid: number | null };
 
 export interface Preferences {
+  /** Notify when a task fails. */
   notifications: boolean;
+  /** Notify when a command is left running after its terminal or agent exits. */
+  orphanNotifications: boolean;
   /** Main has offered once to add the agenterm command. */
   commandOffered?: boolean;
 }

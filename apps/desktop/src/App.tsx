@@ -71,6 +71,10 @@ export function App(): React.JSX.Element {
       case 'focus-task':
         ui.select(command.taskId, { focus: true });
         break;
+      case 'show-outside':
+        ui.setView('outside');
+        if (command.pid !== null) ui.selectPid(command.pid);
+        break;
       case 'jump-task': {
         const target = visible[command.index];
         if (target !== undefined) ui.select(target.id, { focus: true });

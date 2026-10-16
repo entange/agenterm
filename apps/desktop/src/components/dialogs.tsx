@@ -40,7 +40,8 @@ export function SettingsDialog(): React.JSX.Element {
   const health = useHealth(open);
   const preferences = useQuery({
     queryKey: ['preferences'],
-    queryFn: async (): Promise<Preferences> => (await getBridge()?.preferences()) ?? { notifications: true },
+    queryFn: async (): Promise<Preferences> =>
+      (await getBridge()?.preferences()) ?? { notifications: true, orphanNotifications: true },
     enabled: open
   });
 
@@ -59,9 +60,9 @@ export function SettingsDialog(): React.JSX.Element {
 
   const hidden = settings.data?.hiddenCommands ?? [];
 
-  const setNotifications = (notifications: boolean): void => {
+  const setPreferences = (patch: Partial<Preferences>): void => {
     void getBridge()
-      ?.setPreferences({ notifications })
+      ?.setPreferences(patch)
       .then((next) => client.setQueryData(['preferences'], next));
   };
 
@@ -123,7 +124,14 @@ export function SettingsDialog(): React.JSX.Element {
             detail="Only while agenterm is in the background."
             checked={preferences.data?.notifications ?? true}
             disabled={preferences.data === undefined}
-            onChange={setNotifications}
+            onChange={(notifications) => setPreferences({ notifications })}
+          />
+          <Switch
+            label="Notify me when a command is left running"
+            detail="When a terminal or agent exits and something it started keeps running. Hidden commands never notify."
+            checked={preferences.data?.orphanNotifications ?? true}
+            disabled={preferences.data === undefined}
+            onChange={(orphanNotifications) => setPreferences({ orphanNotifications })}
           />
         </Section>
         <Section title="Appearance">

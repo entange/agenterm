@@ -30,6 +30,7 @@ import { bundledCommand, COMMAND_LINK, commandStatus, linkCommand } from './cliC
 import { DaemonLink, dataDir } from './daemonLink.js';
 import { loadLoginEnv } from './loginEnv.js';
 import { TaskMonitor } from './monitor.js';
+import { OrphanWatcher } from './orphans.js';
 import { startUpdater } from './updater.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -56,7 +57,7 @@ let mainWindow: BrowserWindow | null = null;
 
 // --- preferences -----------------------------------------------------------
 
-const DEFAULT_PREFERENCES: Preferences = { notifications: true };
+const DEFAULT_PREFERENCES: Preferences = { notifications: true, orphanNotifications: true };
 
 function preferencesFile(): string {
   return path.join(app.getPath('userData'), 'preferences.json');
@@ -306,6 +307,7 @@ function registerIpc(): void {
     const next = { ...preferences };
     const record = patch as Record<string, unknown>;
     if (typeof record['notifications'] === 'boolean') next.notifications = record['notifications'];
+    if (typeof record['orphanNotifications'] === 'boolean') next.orphanNotifications = record['orphanNotifications'];
     savePreferences(next);
     return next;
   });
@@ -412,8 +414,9 @@ function buildAppMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function buildTrayMenu(tasks: TaskRecord[]): void {
+function buildTrayMenu(tasks: TaskRecord[] = monitor.list()): void {
   if (tray === null) return;
+  const orphaned = orphans.list().length;
   const running = tasks.filter(isRunning);
   const summary = running.length === 0 ? 'Nothing running' : `${running.length} running`;
   const rows: MenuItemConstructorOptions[] = running.slice(0, 10).map((task) => ({
@@ -426,6 +429,15 @@ function buildTrayMenu(tasks: TaskRecord[]): void {
     Menu.buildFromTemplate([
       { label: connected ? summary : 'Daemon offline', enabled: false },
       ...(rows.length > 0 ? [{ type: 'separator' as const }, ...rows] : []),
+      ...(connected && orphaned > 0
+        ? [
+            { type: 'separator' as const },
+            {
+              label: `${orphaned} orphaned outside agenterm…`,
+              click: () => sendCommand({ kind: 'show-outside', pid: null })
+            }
+          ]
+        : []),
       { type: 'separator' },
       { label: 'Open agenterm', click: () => showWindow() },
       { type: 'separator' },
@@ -457,6 +469,14 @@ const monitor = new TaskMonitor({
   onTasks: (tasks) => buildTrayMenu(tasks)
 });
 
+const orphans = new OrphanWatcher({
+  link,
+  enabled: () => preferences.orphanNotifications,
+  hasFocus: () => BrowserWindow.getFocusedWindow() !== null,
+  onOpen: (pid) => sendCommand({ kind: 'show-outside', pid }),
+  onOrphans: () => buildTrayMenu()
+});
+
 link.onEvent((event) => {
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue;
@@ -478,6 +498,7 @@ app.on('window-all-closed', () => {
 });
 app.on('before-quit', () => {
   monitor.dispose();
+  orphans.dispose();
   link.dispose();
 });
 
