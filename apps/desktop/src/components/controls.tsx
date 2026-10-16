@@ -95,10 +95,24 @@ export function CopyField({ text, label }: { text: string; label: string }): Rea
 }
 
 /** A multi-line snippet the user is meant to copy, such as a config file entry. */
-export function CopyBlock({ text, label }: { text: string; label: string }): React.JSX.Element {
+export function CopyBlock({
+  text,
+  label,
+  wrap = false
+}: {
+  text: string;
+  label: string;
+  /** Wrap long lines, such as a command line, instead of scrolling them. */
+  wrap?: boolean;
+}): React.JSX.Element {
   return (
     <div className="relative rounded-md border border-line bg-sunken">
-      <pre className="selectable scroll-thin overflow-x-auto py-2 pr-10 pl-3 font-mono text-[12px] leading-[1.6] text-ink">
+      <pre
+        className={cn(
+          'selectable scroll-thin py-2 pr-10 pl-3 font-mono text-[12px] leading-[1.6] text-ink',
+          wrap ? 'break-all whitespace-pre-wrap' : 'overflow-x-auto'
+        )}
+      >
         {text}
       </pre>
       <IconButton label={`Copy ${label}`} onClick={() => copyText(text, label)} className="absolute top-1 right-1">

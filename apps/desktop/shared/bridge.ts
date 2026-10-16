@@ -20,7 +20,9 @@ export const API_METHODS = [
   'output',
   'activity',
   'settings',
-  'updateSettings'
+  'updateSettings',
+  'listProcesses',
+  'stopProcess'
 ] as const;
 
 export type ApiMethod = (typeof API_METHODS)[number];

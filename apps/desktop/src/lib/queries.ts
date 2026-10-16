@@ -1,4 +1,4 @@
-import type { TaskRecord } from '@agenterm/core';
+import type { OutsideProcess, TaskRecord } from '@agenterm/core';
 import { useQuery } from '@tanstack/react-query';
 import { api } from './bridge.js';
 import { useLive } from './live.js';
@@ -7,7 +7,8 @@ import { sortTasks } from './tasks.js';
 export const keys = {
   tasks: ['tasks'] as const,
   settings: ['settings'] as const,
-  health: ['health'] as const
+  health: ['health'] as const,
+  processes: ['processes'] as const
 };
 
 function useOnline(): boolean {
@@ -38,5 +39,20 @@ export function useHealth(enabled = true) {
     queryFn: () => api('health'),
     enabled: online && enabled,
     refetchInterval: 5000
+  });
+}
+
+/**
+ * Commands running outside agenterm. Each scan reads the whole process
+ * table, so it polls often only while the list is on screen.
+ */
+export function useOutside(visible: boolean) {
+  const online = useOnline();
+  return useQuery({
+    queryKey: keys.processes,
+    queryFn: async (): Promise<OutsideProcess[]> => (await api('listProcesses')).processes,
+    enabled: online,
+    refetchInterval: visible ? 4000 : 60_000,
+    placeholderData: (previous) => previous
   });
 }

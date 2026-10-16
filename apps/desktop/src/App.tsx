@@ -6,11 +6,12 @@ import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { ConnectionBanner, TasksErrorBanner, TitleBar, Toaster } from './components/chrome.js';
 import { CommandPalette } from './components/CommandPalette.js';
 import { ConfirmDialog, SettingsDialog } from './components/dialogs.js';
+import { OutsideEmpty, OutsideView } from './components/Outside.js';
 import { Sidebar } from './components/Sidebar.js';
 import { TaskView, Welcome } from './components/TaskView.js';
 import { getBridge } from './lib/bridge.js';
 import { useLive } from './lib/live.js';
-import { useTasks } from './lib/queries.js';
+import { useOutside, useTasks } from './lib/queries.js';
 import { buildRows, taskOrder } from './lib/tasks.js';
 import { useUi } from './lib/ui.js';
 import { useDaemonWiring } from './lib/wiring.js';
@@ -40,6 +41,11 @@ export function App(): React.JSX.Element {
   const filter = useUi((state) => state.filter);
   const collapsed = useUi((state) => state.collapsed);
   const selected = tasks.find((task) => task.id === selectedId) ?? null;
+  const view = useUi((state) => state.view);
+  const outsideQuery = useOutside(view === 'outside');
+  const outside = React.useMemo(() => outsideQuery.data ?? [], [outsideQuery.data]);
+  const selectedPid = useUi((state) => state.selectedPid);
+  const picked = outside.find((entry) => entry.pid === selectedPid) ?? null;
 
   const rows = React.useMemo(
     () => buildRows(tasks, { groupBy, filter, collapsed: new Set(collapsed) }),
@@ -103,6 +109,13 @@ export function App(): React.JSX.Element {
     previousOrder.current = ids;
   }, [tasks, visible, selected, selectedId]);
 
+  // Outside agenterm: keep something picked, the first orphan when there is one.
+  React.useEffect(() => {
+    if (view !== 'outside' || picked !== null) return;
+    const first = outside.find((entry) => entry.orphaned) ?? outside[0];
+    if (first !== undefined) useUi.getState().selectPid(first.pid);
+  }, [view, picked, outside]);
+
   if (getBridge() === null) {
     return (
       <EmptyState
@@ -122,9 +135,17 @@ export function App(): React.JSX.Element {
           <TasksErrorBanner error={tasksQuery.error} retry={() => void tasksQuery.refetch()} />
         ) : null}
         <div className="relative flex min-h-0 flex-1">
-          <Sidebar rows={rows} tasks={tasks} />
+          <Sidebar rows={rows} tasks={tasks} outside={outside} outsideLoading={outsideQuery.isPending} />
           <main className="flex min-w-0 flex-1 flex-col bg-term">
-            {selected === null ? (
+            {view === 'outside' ? (
+              picked === null ? (
+                <OutsideEmpty count={outside.length} />
+              ) : (
+                <ErrorBoundary key={picked.pid} title="This command's view hit an error">
+                  <OutsideView entry={picked} />
+                </ErrorBoundary>
+              )
+            ) : selected === null ? (
               <Welcome hasTasks={tasks.length > 0} />
             ) : (
               <ErrorBoundary key={selected.id} title="This task's view hit an error">

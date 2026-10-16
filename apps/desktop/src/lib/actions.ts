@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { isRunning, type TaskRecord } from '@agenterm/core';
+import { isRunning, type OutsideProcess, type TaskRecord } from '@agenterm/core';
 import { api } from './bridge.js';
 import { useLive } from './live.js';
 import { keys } from './queries.js';
@@ -69,6 +69,35 @@ export async function clearEnded(client: QueryClient): Promise<void> {
   } catch (error) {
     toastError('Could not clear ended tasks', error);
   }
+}
+
+/**
+ * End a command running outside agenterm and everything under it, after
+ * asking: agenterm did not start it, so it may be someone's work.
+ */
+export function stopOutside(client: QueryClient, entry: OutsideProcess, force: boolean): void {
+  const others = entry.pids.length - 1;
+  const starter = entry.orphaned
+    ? 'What started it has exited.'
+    : `${entry.startedBy ?? 'Something'} started it and is still running.`;
+  const how = force ? 'It is killed right away' : 'It gets SIGTERM, then SIGKILL after 3 seconds';
+  const under = others > 0 ? `, with the ${others} ${others === 1 ? 'process' : 'processes'} under it` : '';
+  useUi.getState().confirm({
+    title: `${force ? 'Kill' : 'Stop'} ${entry.name} (pid ${entry.pid})?`,
+    detail: `${starter} ${how}${under}.`,
+    action: force ? 'Kill' : 'Stop',
+    run: async () => {
+      try {
+        const { exited } = await api('stopProcess', entry.pid, { force, startedAtMs: entry.startedAtMs });
+        if (exited) toast('success', `Ended ${entry.name}`);
+        else toast('error', `${entry.name} is still running`, 'Some of its processes ignored the signal. Try Kill.');
+      } catch (error) {
+        toastError(`Could not end ${entry.name}`, error);
+      } finally {
+        await client.invalidateQueries({ queryKey: keys.processes });
+      }
+    }
+  });
 }
 
 export function copyText(text: string, label: string): void {

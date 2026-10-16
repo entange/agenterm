@@ -120,7 +120,8 @@ window.addEventListener('keydown', (event) => {
   for (const handler of handlers.command) handler(command);
 });
 
-// Screenshot helpers: ?theme=dark|light, ?group=project|agent|none, ?select=<id>, ?dialog=palette|settings.
+// Screenshot helpers: ?theme=dark|light, ?group=project|agent|none, ?select=<id>, ?dialog=palette|settings,
+// ?view=outside&pid=<pid>.
 const params = new URLSearchParams(location.search);
 const theme = params.get('theme');
 const group = params.get('group');
@@ -142,6 +143,9 @@ await import('../main.js');
 const { useUi } = await import('../lib/ui.js');
 const select = params.get('select');
 const dialog = params.get('dialog');
+if (params.get('view') === 'outside') useUi.getState().setView('outside');
+const pid = Number(params.get('pid'));
+if (Number.isInteger(pid) && pid > 1) useUi.getState().selectPid(pid);
 if (select !== null || dialog !== null) {
   const started = Date.now();
   const timer = setInterval(() => {

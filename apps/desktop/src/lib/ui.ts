@@ -3,6 +3,9 @@ import type { GroupBy } from './tasks.js';
 
 export type ThemePreference = 'system' | 'dark' | 'light';
 
+/** The sidebar shows agenterm's tasks, or commands running outside it. */
+export type View = 'tasks' | 'outside';
+
 /** A question asked before something that cannot be undone. */
 export interface Confirmation {
   title: string;
@@ -32,6 +35,9 @@ function load(): Persisted {
 
 interface UiState extends Persisted {
   selectedId: string | null;
+  view: View;
+  /** Selected command outside agenterm, by pid. */
+  selectedPid: number | null;
   filter: string;
   paletteOpen: boolean;
   settingsOpen: boolean;
@@ -39,6 +45,8 @@ interface UiState extends Persisted {
   wantsFocus: boolean;
   confirmation: Confirmation | null;
   select: (id: string | null, options?: { focus?: boolean }) => void;
+  setView: (view: View) => void;
+  selectPid: (pid: number | null) => void;
   setFilter: (filter: string) => void;
   setPaletteOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
@@ -63,12 +71,16 @@ export const useUi = create<UiState>((set, get) => {
   return {
     ...load(),
     selectedId: null,
+    view: 'tasks',
+    selectedPid: null,
     filter: '',
     paletteOpen: false,
     settingsOpen: false,
     wantsFocus: false,
     confirmation: null,
-    select: (selectedId, options) => set({ selectedId, wantsFocus: options?.focus === true }),
+    select: (selectedId, options) => set({ selectedId, view: 'tasks', wantsFocus: options?.focus === true }),
+    setView: (view) => set({ view }),
+    selectPid: (selectedPid) => set({ selectedPid }),
     setFilter: (filter) => set({ filter }),
     setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
     setSettingsOpen: (settingsOpen) => set({ settingsOpen }),

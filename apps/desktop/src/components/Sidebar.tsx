@@ -1,4 +1,4 @@
-import { isRunning, statusText, type TaskRecord } from '@agenterm/core';
+import { isRunning, statusText, type OutsideProcess, type TaskRecord } from '@agenterm/core';
 import { Button, cn, SignalDot } from '@agenterm/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -9,8 +9,9 @@ import { clearEnded } from '../lib/actions.js';
 import { formatAge, signalOf } from '../lib/format.js';
 import { useLive } from '../lib/live.js';
 import type { GroupBy, ListRow } from '../lib/tasks.js';
-import { useUi } from '../lib/ui.js';
+import { useUi, type View } from '../lib/ui.js';
 import { Segmented } from './controls.js';
+import { OutsideList } from './Outside.js';
 
 /** Row heights in px; fixed so the virtualizer never measures. */
 const HEIGHTS = { group: 28, task: 50 };
@@ -31,13 +32,67 @@ function useMinuteClock(): number {
   return now;
 }
 
+/** Switch between agenterm's tasks and commands running outside it. */
+function ViewTabs({ tasks, outside }: { tasks: number; outside: OutsideProcess[] }): React.JSX.Element {
+  const view = useUi((state) => state.view);
+  const setView = useUi((state) => state.setView);
+  const orphaned = outside.filter((entry) => entry.orphaned).length;
+  const tabs: Array<{ value: View; label: string; count: number; title: string }> = [
+    { value: 'tasks', label: 'Tasks', count: tasks, title: 'Commands agenterm runs' },
+    {
+      value: 'outside',
+      label: 'Outside',
+      count: outside.length,
+      title: 'Commands running in other terminals, under agents, or left behind'
+    }
+  ];
+  return (
+    <div role="tablist" aria-label="Show" className="flex rounded-md border border-line bg-sunken p-0.5">
+      {tabs.map((tab) => (
+        <button
+          key={tab.value}
+          type="button"
+          role="tab"
+          aria-selected={view === tab.value}
+          title={tab.title}
+          onClick={() => setView(tab.value)}
+          className={cn(
+            'flex h-6 flex-1 items-center justify-center gap-1.5 rounded-[5px] text-[12px] transition-colors',
+            view === tab.value ? 'bg-raised text-ink shadow-sm' : 'text-ink-faint hover:text-ink-muted'
+          )}
+        >
+          {tab.label}
+          <span className="font-mono text-[10.5px] text-ink-faint">{tab.count}</span>
+          {tab.value === 'outside' && orphaned > 0 ? (
+            <span title={`${orphaned} orphaned`} className="flex items-center">
+              <SignalDot signal="attn" className="size-1.5" />
+            </span>
+          ) : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Every task, grouped by project or by who started it. One click opens
  * the terminal with the cursor in it. Only the rows on screen are
- * mounted, so hundreds of tasks scroll smoothly.
+ * mounted, so hundreds of tasks scroll smoothly. The other tab lists
+ * commands running outside agenterm.
  */
-export function Sidebar({ rows, tasks }: { rows: ListRow[]; tasks: TaskRecord[] }): React.JSX.Element {
+export function Sidebar({
+  rows,
+  tasks,
+  outside,
+  outsideLoading
+}: {
+  rows: ListRow[];
+  tasks: TaskRecord[];
+  outside: OutsideProcess[];
+  outsideLoading: boolean;
+}): React.JSX.Element {
   const client = useQueryClient();
+  const view = useUi((state) => state.view);
   const filter = useUi((state) => state.filter);
   const setFilter = useUi((state) => state.setFilter);
   const selectedId = useUi((state) => state.selectedId);
@@ -109,6 +164,7 @@ export function Sidebar({ rows, tasks }: { rows: ListRow[]; tasks: TaskRecord[] 
   return (
     <aside className="flex h-full w-[290px] shrink-0 flex-col border-r border-line bg-panel">
       <div className="flex flex-col gap-2 px-3 pt-3 pb-2">
+        <ViewTabs tasks={tasks.length} outside={outside} />
         <label className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-ink-faint" />
           <input
@@ -121,56 +177,71 @@ export function Sidebar({ rows, tasks }: { rows: ListRow[]; tasks: TaskRecord[] 
                 event.currentTarget.blur();
               }
             }}
-            placeholder="Filter tasks"
-            aria-label="Filter tasks"
+            placeholder={view === 'tasks' ? 'Filter tasks' : 'Filter commands'}
+            aria-label={view === 'tasks' ? 'Filter tasks' : 'Filter commands'}
             className="h-7 w-full rounded-md border border-line bg-raised pr-2 pl-7 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-line-strong focus:outline-none"
           />
         </label>
-        <div className="flex items-center justify-between">
-          <span className="eyebrow text-ink-faint">Group</span>
-          <Segmented size="sm" label="Group tasks by" value={groupBy} options={GROUPINGS} onChange={setGroupBy} />
-        </div>
-      </div>
-      <div
-        ref={scrollRef}
-        role="listbox"
-        aria-label="Tasks"
-        tabIndex={0}
-        onKeyDown={onListKey}
-        className="scroll-thin min-h-0 flex-1 overflow-y-auto px-1.5 pb-2 focus:outline-none"
-      >
-        {rows.length === 0 ? (
-          <p className="px-3 py-6 text-center text-[12px] text-ink-faint">
-            {tasks.length === 0 ? 'No tasks yet.' : 'No task matches the filter.'}
-          </p>
-        ) : (
-          <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-            {virtualizer.getVirtualItems().map((item) => {
-              const row = rows[item.index];
-              if (row === undefined) return null;
-              return (
-                <div key={item.key} className="absolute inset-x-0" style={{ top: item.start, height: item.size }}>
-                  {row.kind === 'group' ? (
-                    <GroupRow row={row} onToggle={() => toggleCollapsed(row.key)} />
-                  ) : (
-                    <TaskRow
-                      task={row.task}
-                      selected={row.task.id === selectedId}
-                      now={now}
-                      onSelect={() => select(row.task.id, { focus: true })}
-                    />
-                  )}
-                </div>
-              );
-            })}
+        {view === 'tasks' ? (
+          <div className="flex items-center justify-between">
+            <span className="eyebrow text-ink-faint">Group</span>
+            <Segmented size="sm" label="Group tasks by" value={groupBy} options={GROUPINGS} onChange={setGroupBy} />
           </div>
-        )}
+        ) : null}
       </div>
+      {view === 'outside' ? (
+        <OutsideList processes={outside} loading={outsideLoading} />
+      ) : (
+        <div
+          ref={scrollRef}
+          role="listbox"
+          aria-label="Tasks"
+          tabIndex={0}
+          onKeyDown={onListKey}
+          className="scroll-thin min-h-0 flex-1 overflow-y-auto px-1.5 pb-2 focus:outline-none"
+        >
+          {rows.length === 0 ? (
+            <p className="px-3 py-6 text-center text-[12px] text-ink-faint">
+              {tasks.length === 0 ? 'No tasks yet.' : 'No task matches the filter.'}
+            </p>
+          ) : (
+            <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+              {virtualizer.getVirtualItems().map((item) => {
+                const row = rows[item.index];
+                if (row === undefined) return null;
+                return (
+                  <div key={item.key} className="absolute inset-x-0" style={{ top: item.start, height: item.size }}>
+                    {row.kind === 'group' ? (
+                      <GroupRow row={row} onToggle={() => toggleCollapsed(row.key)} />
+                    ) : (
+                      <TaskRow
+                        task={row.task}
+                        selected={row.task.id === selectedId}
+                        now={now}
+                        onSelect={() => select(row.task.id, { focus: true })}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
       <div className="flex h-9 shrink-0 items-center justify-between border-t border-line px-3 text-[11.5px] text-ink-faint">
-        <span>
-          {running} running · {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
-        </span>
-        {ended > 0 ? (
+        {view === 'outside' ? (
+          <span>
+            {outside.length} outside agenterm
+            {outside.some((entry) => entry.orphaned)
+              ? ` · ${outside.filter((entry) => entry.orphaned).length} orphaned`
+              : ''}
+          </span>
+        ) : (
+          <span>
+            {running} running · {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
+          </span>
+        )}
+        {view === 'tasks' && ended > 0 ? (
           <Button size="sm" tone="quiet" className="h-6 px-2 text-[11.5px]" onClick={() => void clearEnded(client)}>
             Clear ended
           </Button>
