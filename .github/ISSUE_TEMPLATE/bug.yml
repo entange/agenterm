@@ -1,0 +1,73 @@
+name: Bug report
+description: Something in the app, the CLI, or the MCP server does not work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. agenterm run --id web "npm run dev"
+        2. …
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - macOS app
+        - CLI
+        - MCP server
+        - Agent skill
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: agenterm version
+      description: '`agenterm --version`, or agenterm → About agenterm in the app.'
+      placeholder: 0.4.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed from
+      options:
+        - The DMG (macOS app)
+        - npm install -g
+        - npx
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: OS, version, and architecture.
+      placeholder: macOS 15.3, Apple Silicon / Ubuntu 24.04, x64
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent
+      description: The coding agent involved, if any, and its version.
+      placeholder: Claude Code 2.1, Codex 0.130
+  - type: textarea
+    id: log
+    attributes:
+      label: Daemon log
+      description: >-
+        The last lines of `~/.agenterm/daemon.log` (in the app: Help → Show Daemon Log). Check it for anything
+        private before pasting.
+      render: text

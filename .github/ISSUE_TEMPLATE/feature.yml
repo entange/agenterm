@@ -1,0 +1,21 @@
+name: Feature request
+description: Something agenterm could do for you or your agents.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The situation and what gets in the way today. Concrete examples help most.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you picture it working, in the app, the CLI, or for agents.
+  - type: input
+    id: agent
+    attributes:
+      label: Agent
+      description: The coding agent you use with agenterm, if it matters here.
