@@ -137,6 +137,28 @@ export function moveOutside(client: QueryClient, entry: OutsideProcess): void {
   });
 }
 
+/**
+ * Leave a command's program out of the outside list, or list it again.
+ * Hiding goes by name, so every `cloudflared` is hidden, now and later.
+ */
+export async function hideOutside(client: QueryClient, name: string, hide: boolean): Promise<void> {
+  const program = name.toLowerCase();
+  try {
+    const { hiddenCommands } = await api('settings');
+    const next = hide ? [...hiddenCommands, program] : hiddenCommands.filter((entry) => entry !== program);
+    client.setQueryData(keys.settings, await api('updateSettings', { hiddenCommands: next }));
+    toast(
+      'success',
+      hide ? `Hid ${program}` : `${program} is listed again`,
+      hide ? 'It keeps running. It is listed under Hidden, and Settings can show it again.' : undefined
+    );
+  } catch (error) {
+    toastError(hide ? `Could not hide ${program}` : `Could not list ${program} again`, error);
+  } finally {
+    await client.invalidateQueries({ queryKey: keys.processes });
+  }
+}
+
 export function copyText(text: string, label: string): void {
   void navigator.clipboard.writeText(text).then(
     () => toast('success', `Copied ${label}`),

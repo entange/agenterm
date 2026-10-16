@@ -13,6 +13,7 @@ function entry(pid: number, patch: Partial<OutsideProcess> = {}): OutsideProcess
     startedBy: 'iTerm',
     startedByPid: 10,
     orphaned: false,
+    hidden: false,
     tty: 'ttys001',
     ports: [5173],
     cpuPercent: 0,
@@ -28,20 +29,23 @@ describe('groupOutside', () => {
     entry(2, { startedBy: 'claude' }),
     entry(3, { startedBy: 'claude' }),
     entry(4, { startedBy: null, orphaned: true }),
-    entry(5, { startedBy: null, orphaned: true, name: 'cloudflared', ports: [] })
+    entry(5, { startedBy: null, orphaned: true, name: 'cloudflared', ports: [] }),
+    entry(6, { startedBy: 'zsh', hidden: true }),
+    entry(7, { startedBy: null, orphaned: true, hidden: true })
   ];
 
   it('puts orphans first, then the busiest starter, newest first inside', () => {
     expect(groupOutside(list, '').map((group) => [group.label, group.processes.map((p) => p.pid)])).toEqual([
       ['Orphaned', [5, 4]],
       ['claude', [3, 2]],
-      ['iTerm', [1]]
+      ['iTerm', [1]],
+      ['Hidden', [7, 6]]
     ]);
   });
 
   it('filters by name, starter, folder, or port', () => {
     expect(groupOutside(list, 'cloudflared').flatMap((group) => group.processes.map((p) => p.pid))).toEqual([5]);
-    expect(groupOutside(list, 'orphaned :5173').flatMap((group) => group.processes.map((p) => p.pid))).toEqual([4]);
+    expect(groupOutside(list, 'orphaned :5173').flatMap((group) => group.processes.map((p) => p.pid))).toEqual([4, 7]);
   });
 });
 

@@ -124,7 +124,7 @@ describe('managing tasks', () => {
     await c.run('clear');
     expect(c.out).toEqual(['removed 1: a']);
     await c.run('settings', '--stop-with-agent', 'on');
-    expect(c.out).toEqual(['stop-with-agent: on']);
+    expect(c.out).toEqual(['stop-with-agent: on', 'hidden from ps: none']);
   });
 
   it('explains unknown and ambiguous refs', async () => {
@@ -157,6 +157,33 @@ describe('commands outside agenterm', () => {
     expect(c.out.at(-1)).toMatch(/^`agenterm kill <pid>` ends one/);
     await c.run('ps', '--orphaned', '--json');
     expect((JSON.parse(c.out.join('\n')) as Array<{ pid: number }>).map((entry) => entry.pid)).toEqual([4821]);
+  });
+
+  it('hides a command by name or pid, and --all shows it again', async () => {
+    const { outside } = fakeOutside([
+      outsideProcess(),
+      outsideProcess({ pid: 900, pids: [900, 901], name: 'cloudflared', command: 'cloudflared tunnel run' })
+    ]);
+    const c = cli({ outside });
+    await c.run('ps', '--hide', '901');
+    expect(c.out).toEqual([
+      'hid cloudflared: `agenterm ps` leaves it out (it keeps running). `--unhide cloudflared` lists it again.'
+    ]);
+    await c.run('ps');
+    expect(c.out[0]).toBe('Orphaned (1): what started it has exited');
+    expect(c.out.join('\n')).not.toMatch(/cloudflared tunnel/);
+    expect(c.out).toContain('1 hidden (cloudflared): `agenterm ps --all` shows them.');
+    await c.run('ps', '--json');
+    expect((JSON.parse(c.out.join('\n')) as Array<{ pid: number }>).map((entry) => entry.pid)).toEqual([4821]);
+    await c.run('ps', '--all');
+    expect(c.out).toContain('Hidden (1): kept running on purpose');
+    expect(c.out.join('\n')).toMatch(/^900\s+.*cloudflared tunnel run/m);
+    await c.run('settings');
+    expect(c.out).toEqual(['stop-with-agent: off', 'hidden from ps: cloudflared']);
+    await c.run('ps', '--unhide', 'Cloudflared');
+    expect(c.out).toEqual(['cloudflared is listed again.']);
+    await c.run('ps', '--unhide', 'cloudflared');
+    expect(c.err).toEqual(['error: cloudflared is not hidden']);
   });
 
   it('says when nothing is running', async () => {

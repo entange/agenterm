@@ -1,8 +1,10 @@
 import type { Settings } from '@agenterm/core';
 import { Button, Dialog, DialogBody, DialogFooter } from '@agenterm/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { X } from 'lucide-react';
 import * as React from 'react';
 import type { Preferences } from '../../shared/bridge.js';
+import { hideOutside } from '../lib/actions.js';
 import { api, getBridge } from '../lib/bridge.js';
 import { useLive } from '../lib/live.js';
 import { keys, useHealth, useSettings } from '../lib/queries.js';
@@ -55,6 +57,8 @@ export function SettingsDialog(): React.JSX.Element {
       });
   };
 
+  const hidden = settings.data?.hiddenCommands ?? [];
+
   const setNotifications = (notifications: boolean): void => {
     void getBridge()
       ?.setPreferences({ notifications })
@@ -82,6 +86,36 @@ export function SettingsDialog(): React.JSX.Element {
             disabled={!online || settings.data === undefined}
             onChange={(stopWithAgent) => updateSettings({ stopWithAgent })}
           />
+        </Section>
+        <Section title="Hidden from Outside">
+          <p className="text-[12px] text-ink-muted">
+            Commands you keep running on purpose, listed under Hidden at the bottom of Outside. Use Hide on one to add
+            it.
+          </p>
+          {hidden.length === 0 ? (
+            <p className="text-[12px] text-ink-faint">None hidden.</p>
+          ) : (
+            <ul className="flex flex-wrap gap-1.5">
+              {hidden.map((name) => (
+                <li
+                  key={name}
+                  className="inline-flex h-6 items-center gap-1 rounded border border-line-strong pr-0.5 pl-2 font-mono text-[11.5px] text-ink-muted"
+                >
+                  {name}
+                  <button
+                    type="button"
+                    aria-label={`List ${name} again`}
+                    title={`List ${name} again`}
+                    disabled={!online}
+                    onClick={() => void hideOutside(client, name, false)}
+                    className="grid size-5 place-items-center rounded text-ink-faint hover:bg-sunken hover:text-ink"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </Section>
         <Section title="Notifications">
           <Switch

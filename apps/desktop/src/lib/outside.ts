@@ -30,14 +30,15 @@ function matches(entry: OutsideProcess, filter: string): boolean {
 
 /**
  * Groups for the sidebar: orphaned first, since nothing else will end
- * them, then by who started them, busiest first. Newest first inside each.
+ * them, then by who started them, busiest first, and hidden ones last.
+ * Newest first inside each.
  */
 export function groupOutside(processes: OutsideProcess[], filter: string): OutsideGroup[] {
   const groups = new Map<string, OutsideProcess[]>();
   for (const entry of processes) {
     if (!matches(entry, filter)) continue;
     const label = entry.startedBy ?? 'Orphaned';
-    const key = entry.orphaned ? 'orphaned' : `by:${label}`;
+    const key = entry.hidden ? 'hidden' : entry.orphaned ? 'orphaned' : `by:${label}`;
     const list = groups.get(key);
     if (list === undefined) groups.set(key, [entry]);
     else list.push(entry);
@@ -45,10 +46,12 @@ export function groupOutside(processes: OutsideProcess[], filter: string): Outsi
   return [...groups.entries()]
     .map(([key, list]) => ({
       key,
-      label: key === 'orphaned' ? 'Orphaned' : (list[0]?.startedBy ?? key),
+      label: key === 'hidden' ? 'Hidden' : key === 'orphaned' ? 'Orphaned' : (list[0]?.startedBy ?? key),
       processes: list.slice().sort((a, b) => b.startedAtMs - a.startedAtMs)
     }))
     .sort((a, b) => {
+      const hidden = Number(a.key === 'hidden') - Number(b.key === 'hidden');
+      if (hidden !== 0) return hidden;
       const orphaned = Number(b.key === 'orphaned') - Number(a.key === 'orphaned');
       if (orphaned !== 0) return orphaned;
       return b.processes.length - a.processes.length || a.label.localeCompare(b.label);

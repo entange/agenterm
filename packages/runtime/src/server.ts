@@ -568,7 +568,12 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
 
   app.get('/processes', async (_request, reply) => {
     try {
-      return await outside.list();
+      const listed = await outside.list();
+      const hidden = new Set(settings.hiddenCommands);
+      return {
+        ...listed,
+        processes: listed.processes.map((entry) => ({ ...entry, hidden: hidden.has(entry.name.toLowerCase()) }))
+      };
     } catch (error) {
       await fail(reply, {
         status: 500,

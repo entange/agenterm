@@ -1,9 +1,9 @@
 import type { OutsideProcess } from '@agenterm/core';
 import { Button, cn, EmptyState, SignalDot, Tooltip } from '@agenterm/ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Info, MoveRight, Skull, Square } from 'lucide-react';
+import { Eye, EyeOff, ExternalLink, Info, MoveRight, Skull, Square } from 'lucide-react';
 import * as React from 'react';
-import { moveOutside, stopOutside } from '../lib/actions.js';
+import { hideOutside, moveOutside, stopOutside } from '../lib/actions.js';
 import { getBridge } from '../lib/bridge.js';
 import { formatAge, formatDuration, shortPath } from '../lib/format.js';
 import { canMove, formatBytes, groupOutside, outsideLabel, runInstead } from '../lib/outside.js';
@@ -73,7 +73,8 @@ export function OutsideList({
             <span
               className={cn(
                 'min-w-0 flex-1 truncate text-[11.5px] font-semibold',
-                group.key === 'orphaned' && 'text-attn'
+                group.key === 'orphaned' && 'text-attn',
+                group.key === 'hidden' && 'font-medium text-ink-faint'
               )}
             >
               {group.label}
@@ -116,11 +117,12 @@ function OutsideRow({
       title={`pid ${entry.pid} — ${entry.command}`}
       className={cn(
         'flex h-[46px] w-full flex-col justify-center gap-0.5 rounded-md px-2 text-left transition-colors',
-        selected ? 'bg-accent-soft' : 'hover:bg-sunken/70'
+        selected ? 'bg-accent-soft' : 'hover:bg-sunken/70',
+        entry.hidden && !selected && 'opacity-60'
       )}
     >
       <span className="flex w-full items-center gap-2">
-        <SignalDot signal={entry.orphaned ? 'attn' : 'idle'} />
+        <SignalDot signal={entry.orphaned && !entry.hidden ? 'attn' : 'idle'} />
         <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{outsideLabel(entry)}</span>
         {entry.ports.length > 0 ? (
           <span className="shrink-0 font-mono text-[10.5px] text-ink-muted">:{entry.ports[0]}</span>
@@ -195,6 +197,18 @@ export function OutsideView({ entry }: { entry: OutsideProcess }): React.JSX.Ele
             </Tooltip>
           ))}
           <div className="ml-auto flex shrink-0 items-center gap-1">
+            <Tooltip
+              content={
+                entry.hidden
+                  ? `List every ${entry.name} with the rest again`
+                  : `Move every ${entry.name} to the Hidden group at the bottom, for commands you keep running on purpose. It keeps running.`
+              }
+            >
+              <Button size="sm" tone="quiet" onClick={() => void hideOutside(client, entry.name, !entry.hidden)}>
+                {entry.hidden ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
+                {entry.hidden ? 'Unhide' : 'Hide'}
+              </Button>
+            </Tooltip>
             <Tooltip
               content={
                 canMove(entry)

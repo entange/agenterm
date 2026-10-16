@@ -48,6 +48,7 @@ export function outsideProcess(overrides: Partial<OutsideProcess> = {}): Outside
     startedBy: null,
     startedByPid: null,
     orphaned: true,
+    hidden: false,
     tty: null,
     ports: [4000],
     cpuPercent: 1.4,

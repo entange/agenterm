@@ -171,6 +171,8 @@ export interface OutsideProcess {
   /** Resident memory of all its processes. */
   memoryBytes: number;
   startedAtMs: number;
+  /** Its name is in the hiddenCommands setting. Lists leave it out unless asked for everything. */
+  hidden: boolean;
 }
 
 /** GET /processes. Orphaned first, then newest first. */
@@ -216,6 +218,11 @@ export interface ActivityResponse {
 export interface Settings {
   /** Stop a task when the program that started it exits. Default false: tasks keep running. */
   stopWithAgent: boolean;
+  /**
+   * Program names left out of the list of commands outside agenterm, like
+   * cloudflared: things kept running on purpose. Lowercase. They keep running.
+   */
+  hiddenCommands: string[];
 }
 
 /** Live events on the socket. Terminal output only reaches clients subscribed to that task. */

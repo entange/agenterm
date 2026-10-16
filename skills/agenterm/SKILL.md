@@ -93,4 +93,5 @@ CLI. They do the same things.
 - Don't remove tasks you did not start; the user may still want their output.
 - Don't `kill` a command from `processes` unless it is orphaned, you started it yourself, or the user asked. The
   rest belong to the user or another agent. When a port is taken, `processes` shows what holds it: say so instead of
-  killing it.
+  killing it. Commands the user hid are left out of `processes`; pass `all` when a port is held and nothing listed
+  holds it.

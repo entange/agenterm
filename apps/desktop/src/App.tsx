@@ -112,7 +112,8 @@ export function App(): React.JSX.Element {
   // Outside agenterm: keep something picked, the first orphan when there is one.
   React.useEffect(() => {
     if (view !== 'outside' || picked !== null) return;
-    const first = outside.find((entry) => entry.orphaned) ?? outside[0];
+    const first =
+      outside.find((entry) => entry.orphaned && !entry.hidden) ?? outside.find((entry) => !entry.hidden) ?? outside[0];
     if (first !== undefined) useUi.getState().selectPid(first.pid);
   }, [view, picked, outside]);
 

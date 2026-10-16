@@ -32,17 +32,30 @@ function useMinuteClock(): number {
   return now;
 }
 
+/** Footer for the outside list: "4 outside agenterm · 1 orphaned · 2 hidden". */
+function outsideSummary(outside: OutsideProcess[]): string {
+  const listed = outside.filter((entry) => !entry.hidden);
+  const orphaned = listed.filter((entry) => entry.orphaned).length;
+  const hidden = outside.length - listed.length;
+  return [
+    `${listed.length} outside agenterm`,
+    ...(orphaned > 0 ? [`${orphaned} orphaned`] : []),
+    ...(hidden > 0 ? [`${hidden} hidden`] : [])
+  ].join(' · ');
+}
+
 /** Switch between agenterm's tasks and commands running outside it. */
 function ViewTabs({ tasks, outside }: { tasks: number; outside: OutsideProcess[] }): React.JSX.Element {
   const view = useUi((state) => state.view);
   const setView = useUi((state) => state.setView);
-  const orphaned = outside.filter((entry) => entry.orphaned).length;
+  const listed = outside.filter((entry) => !entry.hidden);
+  const orphaned = listed.filter((entry) => entry.orphaned).length;
   const tabs: Array<{ value: View; label: string; count: number; title: string }> = [
     { value: 'tasks', label: 'Tasks', count: tasks, title: 'Commands agenterm runs' },
     {
       value: 'outside',
       label: 'Outside',
-      count: outside.length,
+      count: listed.length,
       title: 'Commands running in other terminals, under agents, or left behind'
     }
   ];
@@ -230,12 +243,7 @@ export function Sidebar({
       )}
       <div className="flex h-9 shrink-0 items-center justify-between border-t border-line px-3 text-[11.5px] text-ink-faint">
         {view === 'outside' ? (
-          <span>
-            {outside.length} outside agenterm
-            {outside.some((entry) => entry.orphaned)
-              ? ` · ${outside.filter((entry) => entry.orphaned).length} orphaned`
-              : ''}
-          </span>
+          <span>{outsideSummary(outside)}</span>
         ) : (
           <span>
             {running} running · {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}

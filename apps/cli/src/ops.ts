@@ -158,21 +158,36 @@ export function processTable(processes: OutsideProcess[], nowMs = Date.now()): s
 /**
  * What `ps` prints: orphans and commands whose terminal or agent is still
  * open, in separate sections so the ones nothing else will end stand out.
+ * Hidden commands (kept running on purpose) get their own section with
+ * `all`, and otherwise only a line saying how to see them.
  */
-export function processSections(processes: OutsideProcess[], nowMs = Date.now()): string[] {
-  const orphaned = processes.filter((entry) => entry.orphaned);
-  const live = processes.filter((entry) => !entry.orphaned);
+export function processSections(
+  processes: OutsideProcess[],
+  options: { all?: boolean; empty?: string; showAll?: string; nowMs?: number } = {}
+): string[] {
+  const nowMs = options.nowMs ?? Date.now();
+  const hidden = processes.filter((entry) => entry.hidden);
+  const orphaned = processes.filter((entry) => !entry.hidden && entry.orphaned);
+  const live = processes.filter((entry) => !entry.hidden && !entry.orphaned);
+  const sections: Array<[string, OutsideProcess[]]> = [
+    [`Orphaned (${orphaned.length}): what started ${orphaned.length === 1 ? 'it' : 'them'} has exited`, orphaned],
+    [`In other terminals and agents (${live.length})`, live],
+    [`Hidden (${hidden.length}): kept running on purpose`, options.all === true ? hidden : []]
+  ];
   const lines: string[] = [];
-  if (orphaned.length > 0) {
-    lines.push(`Orphaned (${orphaned.length}): what started ${orphaned.length === 1 ? 'it' : 'them'} has exited`);
-    lines.push(...processTable(orphaned, nowMs));
-  }
-  if (live.length > 0) {
+  for (const [title, entries] of sections) {
+    if (entries.length === 0) continue;
     if (lines.length > 0) lines.push('');
-    lines.push(`In other terminals and agents (${live.length})`);
-    lines.push(...processTable(live, nowMs));
+    lines.push(title, ...processTable(entries, nowMs));
   }
-  lines.push('', '`agenterm kill <pid>` ends one and everything under it.');
+  if (lines.length === 0) lines.push(options.empty ?? 'nothing is running outside agenterm.');
+  if (hidden.length > 0 && options.all !== true) {
+    const names = [...new Set(hidden.map((entry) => entry.name))].join(', ');
+    lines.push('', `${hidden.length} hidden (${names}): ${options.showAll ?? '`agenterm ps --all` shows them'}.`);
+  }
+  if (orphaned.length + live.length > 0 || options.all === true) {
+    lines.push('', '`agenterm kill <pid>` ends one and everything under it.');
+  }
   return lines;
 }
 

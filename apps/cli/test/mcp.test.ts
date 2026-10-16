@@ -102,6 +102,11 @@ describe('MCP tools', () => {
     expect(listed.text).toMatch(/^Orphaned \(1\)/);
     expect(listed.text).toMatch(/4821\s+2h\s+:4000/);
     expect(listed.text).not.toMatch(/claude/);
+    await m.client.updateSettings({ hiddenCommands: ['node'] });
+    expect((await m.call('processes', {})).text).toBe(
+      'nothing is running outside agenterm.\n\n2 hidden (node): all: true shows them.'
+    );
+    expect((await m.call('processes', { all: true })).text).toMatch(/^Hidden \(2\): kept running on purpose/);
     expect(await m.call('kill', { pid: 4821 })).toEqual({
       text: 'ended 4821 (node server.js --port 4000, 2 processes)',
       isError: false

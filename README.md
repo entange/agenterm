@@ -35,7 +35,8 @@ Agents start dev servers and then lose track of them: they start a second copy, 
   away.
 - **Nothing hides outside it.** `agenterm ps` (or the app's Outside tab) lists commands agenterm did not start: ones
   typed in other terminals, ones agents ran in their own shells, and orphans whose terminal or agent has exited, with
-  ports or without. `agenterm kill <pid>` ends one and everything under it.
+  ports or without. `agenterm kill <pid>` ends one and everything under it. `agenterm ps --hide cloudflared` leaves
+  out what you keep running on purpose.
 
 ## Install
 
@@ -95,7 +96,8 @@ See [For agents (MCP)](#for-agents-mcp) below, or **Settings → Connect an agen
 | `stop <task...> [--force]`            | Ctrl+C, then end the process tree; `--force` kills right away        |
 | `rm <task...>`                        | Remove tasks and their output, stopping them first                   |
 | `clear`                               | Remove every task that is no longer running                          |
-| `ps [--orphaned] [--json]`            | Commands running outside agenterm: in terminals, under agents, orphaned |
+| `ps [--orphaned] [--all] [--json]`    | Commands running outside agenterm: orphaned, in terminals, under agents |
+| `ps --hide <name\|pid>`, `--unhide`   | Leave a program out of `ps` (it keeps running); `--all` shows it      |
 | `kill <pid...> [--force]`             | End a command from `ps` and everything under it                      |
 | `settings`                            | Show or change settings, e.g. `--stop-with-agent on`                 |
 | `daemon start\|stop\|restart\|status` | Manage the background daemon                                         |
@@ -153,7 +155,8 @@ right. Click a task and the cursor is in its terminal, ready to type. The header
 - A notification tells you when a task fails while the app is in the background.
 - The **Outside** tab lists commands agenterm did not start, orphans first (amber), grouped by the terminal or agent
   that started them, with their ports, folder, CPU, and memory, and Stop and Kill. agenterm cannot show their output,
-  so each one offers the `agenterm run` line that would run it as a task instead.
+  so Move to agenterm restarts one as a task. Hide moves a program you keep running on purpose to a Hidden group at
+  the bottom; Settings lists what is hidden.
 
 The app does not start tasks. That stays with the CLI and MCP, so there is one way to do it.
 

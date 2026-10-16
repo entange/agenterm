@@ -47,7 +47,8 @@ The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, `remove`, `proc
 | `stop <task...> [--force]`           | Ctrl+C, then end the process tree; `--force` kills right away         |
 | `rm <task...>`                       | Remove tasks and their output, stopping them first                    |
 | `clear`                              | Remove every task that is no longer running                           |
-| `ps [--orphaned] [--json]`           | Commands running outside agenterm: in terminals, under agents, orphaned |
+| `ps [--orphaned] [--all] [--json]`   | Commands running outside agenterm: orphaned, in terminals, under agents |
+| `ps --hide <name\|pid>`, `--unhide`  | Leave a program out of `ps` (it keeps running); `--all` shows it       |
 | `kill <pid...> [--force]`            | End a command from `ps` and everything under it                       |
 | `settings`                           | Show or change settings, e.g. `--stop-with-agent on`                  |
 | `daemon start\|stop\|restart\|status` | Manage the background daemon                                          |

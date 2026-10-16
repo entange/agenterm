@@ -225,15 +225,20 @@ export const TOOLS: Tool[] = [
       'Shows pid, who started it, ports, CPU, memory, folder, and command. Use it to find what holds a port or what was left behind.',
     inputSchema: {
       type: 'object',
-      properties: { orphaned: { type: 'boolean', description: 'Only orphaned commands.' } },
+      properties: {
+        orphaned: { type: 'boolean', description: 'Only orphaned commands.' },
+        all: {
+          type: 'boolean',
+          description: 'Include commands the user hid because they keep them running on purpose.'
+        }
+      },
       additionalProperties: false
     },
     run: async (context, args) => {
       await context.ensureDaemon();
       const { processes } = await context.client().listProcesses();
       const shown = flag(args, 'orphaned', false) ? processes.filter((entry) => entry.orphaned) : processes;
-      if (shown.length === 0) return 'nothing is running outside agenterm';
-      return processSections(shown).join('\n');
+      return processSections(shown, { all: flag(args, 'all', false), showAll: 'all: true shows them' }).join('\n');
     }
   },
   {

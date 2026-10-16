@@ -191,5 +191,20 @@ export function parseSettingsPatch(body: unknown): ValidationResult<Partial<Sett
     }
     out.stopWithAgent = body['stopWithAgent'];
   }
+  const hidden = body['hiddenCommands'];
+  if (hidden !== undefined) {
+    if (
+      !Array.isArray(hidden) ||
+      hidden.length > 200 ||
+      !hidden.every((name) => typeof name === 'string' && name.trim().length > 0 && name.length <= 200)
+    ) {
+      return {
+        ok: false,
+        code: 'invalid_hiddenCommands',
+        message: 'hiddenCommands must be a list of up to 200 program names'
+      };
+    }
+    out.hiddenCommands = [...new Set((hidden as string[]).map((name) => name.trim().toLowerCase()))].sort();
+  }
   return { ok: true, value: out };
 }

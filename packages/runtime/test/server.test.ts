@@ -310,6 +310,18 @@ describe('processes outside agenterm', () => {
     expect((unknown.json() as { error: { code: string } }).error.code).toBe('unknown_process');
     const bad = await app.inject({ method: 'POST', url: '/processes/abc/stop', headers, payload: {} });
     expect(bad.statusCode).toBe(400);
+    expect(list.processes[0]?.['hidden']).toBe(false);
+    const hide = await app.inject({
+      method: 'PATCH',
+      url: '/settings',
+      headers,
+      payload: { hiddenCommands: [' Left-Behind '] }
+    });
+    expect(hide.json()).toMatchObject({ hiddenCommands: ['left-behind'] });
+    const again = (await app.inject({ method: 'GET', url: '/processes', headers })).json() as typeof list;
+    expect(again.processes[0]?.['hidden']).toBe(true);
+    const wrong = await app.inject({ method: 'PATCH', url: '/settings', headers, payload: { hiddenCommands: 'node' } });
+    expect(wrong.statusCode).toBe(400);
     expect((await app.inject({ method: 'GET', url: '/processes' })).statusCode).toBe(401);
     await app.close();
   });
@@ -318,15 +330,21 @@ describe('processes outside agenterm', () => {
 describe('settings', () => {
   it('keeps tasks running by default and persists the setting', async () => {
     const r = rig();
-    expect((await r.app.inject({ method: 'GET', url: '/settings', headers })).json()).toEqual({ stopWithAgent: false });
+    expect((await r.app.inject({ method: 'GET', url: '/settings', headers })).json()).toEqual({
+      stopWithAgent: false,
+      hiddenCommands: []
+    });
     const patched = await r.app.inject({
       method: 'PATCH',
       url: '/settings',
       headers,
       payload: { stopWithAgent: true }
     });
-    expect(patched.json()).toEqual({ stopWithAgent: true });
-    expect(JSON.parse(fs.readFileSync(path.join(r.dataDir, 'settings.json'), 'utf8'))).toEqual({ stopWithAgent: true });
+    expect(patched.json()).toEqual({ stopWithAgent: true, hiddenCommands: [] });
+    expect(JSON.parse(fs.readFileSync(path.join(r.dataDir, 'settings.json'), 'utf8'))).toEqual({
+      stopWithAgent: true,
+      hiddenCommands: []
+    });
     const bad = await r.app.inject({ method: 'PATCH', url: '/settings', headers, payload: { stopWithAgent: 'yes' } });
     expect(bad.statusCode).toBe(400);
   });

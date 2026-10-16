@@ -117,7 +117,7 @@ export interface FindOutsideOptions {
 }
 
 /** A command before its folder is known. */
-export type OutsideFound = Omit<OutsideProcess, 'cwd' | 'project'>;
+export type OutsideFound = Omit<OutsideProcess, 'cwd' | 'project' | 'hidden'>;
 
 /**
  * Pick out the commands from a process table. Pure, so the rules can be
@@ -410,7 +410,7 @@ export class OutsideScanner {
     const processes = await Promise.all(
       found.map(async (entry): Promise<OutsideProcess> => {
         const cwd = folders.get(entry.pid) ?? null;
-        return { ...entry, cwd, project: cwd === null ? null : await this.project(cwd, nowMs) };
+        return { ...entry, cwd, project: cwd === null ? null : await this.project(cwd, nowMs), hidden: false };
       })
     );
     return { processes, scannedAtMs: nowMs };

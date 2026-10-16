@@ -453,21 +453,51 @@ the running task instead of starting a second one. Add --restart to replace it.`
     .command('ps')
     .description('List commands running outside agenterm: in terminals, under agents, or orphaned')
     .option('--orphaned', 'only commands whose terminal or agent is gone')
+    .option('--all', 'include hidden commands')
+    .option('--hide <name|pid>', 'leave a command out of the list from now on (it keeps running)')
+    .option('--unhide <name>', 'list a hidden command again')
     .option('--json', 'print JSON')
     .action(
-      run(async (opts: { orphaned?: boolean; json?: boolean }) => {
+      run(async (opts: { orphaned?: boolean; all?: boolean; hide?: string; unhide?: string; json?: boolean }) => {
         await ensureDaemon();
-        const { processes } = await deps.client().listProcesses();
-        const shown = opts.orphaned === true ? processes.filter((entry) => entry.orphaned) : processes;
+        const client = deps.client();
+        if (opts.hide !== undefined || opts.unhide !== undefined) {
+          const { hiddenCommands } = await client.settings();
+          let name = (opts.hide ?? opts.unhide ?? '').trim().toLowerCase();
+          if (opts.hide !== undefined && /^\d+$/.test(name)) {
+            const pid = Number(name);
+            const found = (await client.listProcesses()).processes.find(
+              (entry) => entry.pid === pid || entry.pids.includes(pid)
+            );
+            if (found === undefined) throw new CliError(`pid ${pid} is not listed by \`agenterm ps\``);
+            name = found.name.toLowerCase();
+          }
+          if (opts.hide !== undefined) {
+            await client.updateSettings({ hiddenCommands: [...hiddenCommands, name] });
+            deps.out(
+              `hid ${name}: \`agenterm ps\` leaves it out (it keeps running). \`--unhide ${name}\` lists it again.`
+            );
+          } else {
+            if (!hiddenCommands.includes(name)) throw new CliError(`${name} is not hidden`);
+            await client.updateSettings({ hiddenCommands: hiddenCommands.filter((entry) => entry !== name) });
+            deps.out(`${name} is listed again.`);
+          }
+          return;
+        }
+        const { processes } = await client.listProcesses();
+        const shown = processes.filter((entry) => opts.orphaned !== true || entry.orphaned);
         if (opts.json === true) {
-          deps.out(JSON.stringify(shown, null, 2));
+          deps.out(
+            JSON.stringify(
+              shown.filter((entry) => opts.all === true || !entry.hidden),
+              null,
+              2
+            )
+          );
           return;
         }
-        if (shown.length === 0) {
-          deps.out(opts.orphaned === true ? 'nothing orphaned.' : 'nothing is running outside agenterm.');
-          return;
-        }
-        for (const line of processSections(shown)) deps.out(line);
+        const empty = opts.orphaned === true ? 'nothing orphaned.' : 'nothing is running outside agenterm.';
+        for (const line of processSections(shown, { all: opts.all === true, empty })) deps.out(line);
       })
     );
 
@@ -506,6 +536,7 @@ the running task instead of starting a second one. Add --restart to replace it.`
             ? await client.settings()
             : await client.updateSettings({ stopWithAgent: opts.stopWithAgent === 'on' });
         deps.out(`stop-with-agent: ${settings.stopWithAgent ? 'on' : 'off'}`);
+        deps.out(`hidden from ps: ${settings.hiddenCommands.length > 0 ? settings.hiddenCommands.join(', ') : 'none'}`);
       })
     );
 
