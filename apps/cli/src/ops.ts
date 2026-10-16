@@ -4,6 +4,7 @@ import {
   plainText,
   statusText,
   type AgentermClient,
+  type OutsideProcess,
   type RunTaskResponse,
   type TaskRecord
 } from '@agenterm/core';
@@ -125,6 +126,30 @@ export function taskTable(tasks: TaskRecord[], nowMs = Date.now()): string[] {
       task.ports.length > 0 ? ports(task) : '-',
       truncate(shortPath(task.cwd), 40),
       truncate(task.command, 60)
+    ])
+  ]);
+}
+
+/** Memory like 512KB, 48MB, 1.2GB. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))}MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
+}
+
+/** Table for `ps`: commands running outside agenterm. */
+export function processTable(processes: OutsideProcess[], nowMs = Date.now()): string[] {
+  return table([
+    ['PID', 'AGE', 'BY', 'PORTS', 'CPU', 'MEM', 'FOLDER', 'COMMAND'],
+    ...processes.map((entry) => [
+      String(entry.pid),
+      formatAge(entry.startedAtMs, nowMs),
+      entry.startedBy ?? 'orphaned',
+      entry.ports.length > 0 ? entry.ports.map((port) => `:${port}`).join(' ') : '-',
+      `${Math.round(entry.cpuPercent)}%`,
+      formatBytes(entry.memoryBytes),
+      entry.cwd === null ? '-' : truncate(shortPath(entry.cwd), 40),
+      truncate(entry.command, 60)
     ])
   ]);
 }

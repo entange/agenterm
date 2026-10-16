@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { detectCaller, processName, scriptName, type ProcInfo } from '../src/caller.js';
+import { processName, scriptName } from '@agenterm/core';
+import { detectCaller, type ProcInfo } from '../src/caller.js';
 
 function tree(entries: Record<number, ProcInfo>) {
   return (pid: number) => entries[pid] ?? null;
@@ -37,12 +38,11 @@ describe('detectCaller', () => {
   it('names macOS apps by their outer bundle', () => {
     expect(
       processName({
-        ppid: 1,
         comm: '/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper (Plugin).app/Contents/MacOS/Code Helper (Plugin)',
         args: ''
       })
     ).toBe('Visual Studio Code');
-    expect(processName({ ppid: 1, comm: '/Applications/iTerm.app/Contents/MacOS/iTerm2', args: '' })).toBe('iTerm');
+    expect(processName({ comm: '/Applications/iTerm.app/Contents/MacOS/iTerm2', args: '' })).toBe('iTerm');
   });
 
   it('gives up at system roots and unreadable processes', () => {

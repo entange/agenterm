@@ -23,6 +23,7 @@ import {
 import { runMcpStdio } from './mcp.js';
 import {
   cleanEnv,
+  processTable,
   resolveTask,
   runSummary,
   settle,
@@ -121,6 +122,8 @@ Examples:
   agenterm logs web                         recent output
   agenterm stop web                         Ctrl+C, then end it
   agenterm rm web                           stop and forget it
+  agenterm ps                               what is running outside agenterm
+  agenterm kill 4821                        end one of those and what it started
 
 Running the same id, or the same command in the same folder, again returns
 the running task instead of starting a second one. Add --restart to replace it.`
@@ -442,6 +445,53 @@ the running task instead of starting a second one. Add --restart to replace it.`
       run(async () => {
         const { removed } = await deps.client().clearEnded();
         deps.out(removed.length === 0 ? 'nothing to clear.' : `removed ${removed.length}: ${removed.join(', ')}`);
+      })
+    );
+
+  program
+    .command('ps')
+    .description('List commands running outside agenterm: in terminals, under agents, or orphaned')
+    .option('--orphaned', 'only commands whose terminal or agent is gone')
+    .option('--json', 'print JSON')
+    .action(
+      run(async (opts: { orphaned?: boolean; json?: boolean }) => {
+        await ensureDaemon();
+        const { processes } = await deps.client().listProcesses();
+        const shown = opts.orphaned === true ? processes.filter((entry) => entry.orphaned) : processes;
+        if (opts.json === true) {
+          deps.out(JSON.stringify(shown, null, 2));
+          return;
+        }
+        if (shown.length === 0) {
+          deps.out(opts.orphaned === true ? 'nothing orphaned.' : 'nothing is running outside agenterm.');
+          return;
+        }
+        for (const line of processTable(shown)) deps.out(line);
+        const orphaned = shown.filter((entry) => entry.orphaned).length;
+        if (orphaned > 0) {
+          deps.out('');
+          deps.out(
+            `${orphaned} orphaned: what started ${orphaned === 1 ? 'it' : 'them'} has exited. \`agenterm kill <pid>\` ends one and everything under it.`
+          );
+        }
+      })
+    );
+
+  program
+    .command('kill <pid...>')
+    .description('End commands listed by `agenterm ps`: SIGTERM, then SIGKILL; --force kills right away')
+    .option('--force', 'SIGKILL immediately')
+    .action(
+      run(async (pids: string[], opts: { force?: boolean }) => {
+        const client = deps.client();
+        for (const text of pids) {
+          const pid = positiveInt(text, 'pid');
+          const { process: ended, exited } = await client.stopProcess(pid, { force: opts.force === true });
+          const count = ended.pids.length;
+          const what = `${pid} (${ended.command.slice(0, 60)}${count > 1 ? `, ${count} processes` : ''})`;
+          deps.out(exited ? `ended ${what}` : `signaled ${what}, but some of it is still running`);
+          if (!exited) process.exitCode = 1;
+        }
       })
     );
 

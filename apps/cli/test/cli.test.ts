@@ -2,7 +2,7 @@ import os from 'node:os';
 import { AgentermApiError, API_VERSION, VERSION, type AgentermClient } from '@agenterm/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildProgram, shellQuote } from '../src/program.js';
-import { daemonRig } from './kit.js';
+import { daemonRig, fakeOutside, outsideProcess } from './kit.js';
 
 afterEach(() => {
   process.exitCode = 0;
@@ -135,6 +135,40 @@ describe('managing tasks', () => {
     expect(c.err).toEqual(['error: "web" matches 2 tasks: web-1, web-2']);
     await c.run('logs', 'nope');
     expect(c.err).toEqual(['error: no task matches "nope"']);
+    expect(process.exitCode).toBe(1);
+  });
+});
+
+describe('commands outside agenterm', () => {
+  it('lists them with who started each, and marks orphans', async () => {
+    const { outside } = fakeOutside([
+      outsideProcess(),
+      outsideProcess({ pid: 900, pids: [900], command: 'cargo watch', startedBy: 'codex', orphaned: false, ports: [] })
+    ]);
+    const c = cli({ outside });
+    await c.run('ps');
+    expect(c.out[0]).toMatch(/^PID\s+AGE\s+BY\s+PORTS\s+CPU\s+MEM\s+FOLDER\s+COMMAND/);
+    expect(c.out[1]).toMatch(/^4821\s+2h\s+orphaned\s+:4000\s+1%\s+52MB\s+\/work\/api\s+node server\.js --port 4000/);
+    expect(c.out[2]).toMatch(/^900\s+2h\s+codex\s+-\s+/);
+    expect(c.out.at(-1)).toMatch(/^1 orphaned: what started it has exited/);
+    await c.run('ps', '--orphaned', '--json');
+    expect((JSON.parse(c.out.join('\n')) as Array<{ pid: number }>).map((entry) => entry.pid)).toEqual([4821]);
+  });
+
+  it('says when nothing is running', async () => {
+    const c = cli({ outside: fakeOutside([]).outside });
+    await c.run('ps');
+    expect(c.out).toEqual(['nothing is running outside agenterm.']);
+  });
+
+  it('kills a listed command and refuses others', async () => {
+    const { outside, stopped } = fakeOutside([outsideProcess()]);
+    const c = cli({ outside });
+    await c.run('kill', '4821', '--force');
+    expect(c.out).toEqual(['ended 4821 (node server.js --port 4000, 2 processes)']);
+    expect(stopped).toEqual([{ pid: 4821, force: true }]);
+    await c.run('kill', '77');
+    expect(c.err[0]).toMatch(/pid 77 is not listed/);
     expect(process.exitCode).toBe(1);
   });
 });

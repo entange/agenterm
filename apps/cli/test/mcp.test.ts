@@ -1,10 +1,10 @@
 import os from 'node:os';
 import { describe, expect, it } from 'vitest';
 import { handleMcpMessage, TOOLS, type McpContext } from '../src/mcp.js';
-import { daemonRig } from './kit.js';
+import { daemonRig, fakeOutside, outsideProcess } from './kit.js';
 
-function mcp() {
-  const daemon = daemonRig();
+function mcp(options: Parameters<typeof daemonRig>[0] = {}) {
+  const daemon = daemonRig(options);
   const context: McpContext = {
     client: () => daemon.client,
     version: '0.1.0',
@@ -33,12 +33,21 @@ function mcp() {
 }
 
 describe('MCP protocol', () => {
-  it('initializes, lists the six tools, and ignores notifications', async () => {
+  it('initializes, lists the tools, and ignores notifications', async () => {
     const m = mcp();
     const init = await m.send('initialize', { protocolVersion: '2025-06-18' });
     expect(init.result?.['protocolVersion']).toBe('2025-06-18');
     const list = await m.send('tools/list');
-    expect(list.result?.tools?.map((tool) => tool.name)).toEqual(['run', 'list', 'logs', 'input', 'stop', 'remove']);
+    expect(list.result?.tools?.map((tool) => tool.name)).toEqual([
+      'run',
+      'list',
+      'logs',
+      'input',
+      'stop',
+      'remove',
+      'processes',
+      'kill'
+    ]);
     expect(
       await handleMcpMessage(m.context, JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }))
     ).toBe(null);
@@ -81,6 +90,27 @@ describe('MCP tools', () => {
     });
     expect(await m.call('stop', { id: 'ghost' })).toEqual({ text: 'no task matches "ghost"', isError: true });
     expect((await m.call('run', { command: 'ls', id: 'bad id', wait_seconds: 0 })).isError).toBe(true);
+  });
+
+  it('lists commands outside agenterm and kills one by pid', async () => {
+    const { outside, stopped } = fakeOutside([
+      outsideProcess(),
+      outsideProcess({ pid: 900, pids: [900], startedBy: 'claude', orphaned: false })
+    ]);
+    const m = mcp({ outside });
+    const listed = await m.call('processes', { orphaned: true });
+    expect(listed.text.split('\n')).toHaveLength(2);
+    expect(listed.text).toMatch(/4821\s+2h\s+orphaned\s+:4000/);
+    expect(await m.call('kill', { pid: 4821 })).toEqual({
+      text: 'ended 4821 (node server.js --port 4000, 2 processes)',
+      isError: false
+    });
+    expect(stopped).toEqual([{ pid: 4821, force: false }]);
+    expect((await m.call('kill', { pid: '4821' })).isError).toBe(true);
+    expect(await m.call('kill', { pid: 5 })).toMatchObject({
+      isError: true,
+      text: expect.stringMatching(/not listed/)
+    });
   });
 
   it('describes every tool with a schema', () => {

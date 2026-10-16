@@ -2,11 +2,21 @@ import readline from 'node:readline';
 import path from 'node:path';
 import { AgentermApiError, isRunning, statusText, type AgentermClient } from '@agenterm/core';
 import type { Caller } from './caller.js';
-import { cleanEnv, resolveTask, runSummary, settle, settledReport, startTask, tailLines, taskTable } from './ops.js';
+import {
+  cleanEnv,
+  processTable,
+  resolveTask,
+  runSummary,
+  settle,
+  settledReport,
+  startTask,
+  tailLines,
+  taskTable
+} from './ops.js';
 
 /**
  * MCP stdio server with the same abilities as the CLI: run, list, logs,
- * input, stop, remove. Results are the same text the CLI prints, with
+ * input, stop, remove, processes, kill. Results are the same text the CLI prints, with
  * escape codes stripped and secrets redacted. Speaks newline-delimited
  * JSON-RPC 2.0 as the MCP stdio transport defines.
  */
@@ -207,6 +217,50 @@ export const TOOLS: Tool[] = [
       const result = await client.remove(task.id);
       return `removed ${task.id}${result.stopped ? ' (stopped it first)' : ''}`;
     }
+  },
+  {
+    name: 'processes',
+    description:
+      'List commands running outside agenterm: typed in terminals, run by agents (you included), or orphaned because what started them has exited. ' +
+      'Shows pid, who started it, ports, CPU, memory, folder, and command. Use it to find what holds a port or what was left behind.',
+    inputSchema: {
+      type: 'object',
+      properties: { orphaned: { type: 'boolean', description: 'Only orphaned commands.' } },
+      additionalProperties: false
+    },
+    run: async (context, args) => {
+      await context.ensureDaemon();
+      const { processes } = await context.client().listProcesses();
+      const shown = flag(args, 'orphaned', false) ? processes.filter((entry) => entry.orphaned) : processes;
+      if (shown.length === 0) return 'nothing is running outside agenterm';
+      return processTable(shown).join('\n');
+    }
+  },
+  {
+    name: 'kill',
+    description:
+      'End a command listed by processes, with everything under it: SIGTERM, then SIGKILL; force kills right away. ' +
+      'Only kill orphaned commands, ones you started yourself, or ones the user asked you to: the rest belong to the user or other agents. ' +
+      'Tasks agenterm started are ended with stop.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pid: { type: 'number', description: 'Pid from processes.' },
+        force: { type: 'boolean', description: 'SIGKILL immediately.' }
+      },
+      required: ['pid'],
+      additionalProperties: false
+    },
+    run: async (context, args) => {
+      const pid = args['pid'];
+      if (typeof pid !== 'number' || !Number.isInteger(pid) || pid < 2) {
+        throw new ToolInputError('pid must be a process id from processes');
+      }
+      const { process: ended, exited } = await context.client().stopProcess(pid, { force: flag(args, 'force', false) });
+      const count = ended.pids.length;
+      const what = `${pid} (${ended.command.slice(0, 60)}${count > 1 ? `, ${count} processes` : ''})`;
+      return exited ? `ended ${what}` : `signaled ${what}, but some of it is still running`;
+    }
   }
 ];
 
@@ -261,7 +315,7 @@ export async function handleMcpMessage(context: McpContext, line: string): Promi
         serverInfo: { name: 'agenterm', version: context.version },
         instructions:
           'agenterm runs long-lived commands (dev servers, watchers, builds) in terminals the user can watch in the agenterm app. ' +
-          'Use run to start one and keep its id; run with the same id never starts a duplicate. Use logs to check on it and stop when done.'
+          'Use run to start one and keep its id; run with the same id never starts a duplicate. Use logs to check on it and stop when done. processes lists what runs outside agenterm, including orphans left behind.'
       });
     }
     case 'ping':

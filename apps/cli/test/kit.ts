@@ -1,4 +1,4 @@
-import { AgentermClient } from '@agenterm/core';
+import { AgentermClient, type OutsideProcess } from '@agenterm/core';
 import { rig, type FakePty } from '../../../packages/runtime/test/helpers.js';
 import type { TaskStore } from '../../../packages/runtime/src/taskStore.js';
 
@@ -34,4 +34,42 @@ export function daemonRig(options: Parameters<typeof rig>[0] = {}): DaemonRig {
     fetchImpl
   });
   return { client, store: r.store, fakes: r.fakes, last: r.last };
+}
+
+/** A command outside agenterm, as the daemon lists it. */
+export function outsideProcess(overrides: Partial<OutsideProcess> = {}): OutsideProcess {
+  return {
+    pid: 4821,
+    pids: [4821, 4822],
+    name: 'node',
+    command: 'node server.js --port 4000',
+    cwd: '/work/api',
+    project: 'api',
+    startedBy: null,
+    startedByPid: null,
+    orphaned: true,
+    tty: null,
+    ports: [4000],
+    cpuPercent: 1.4,
+    memoryBytes: 52 * 1024 * 1024,
+    startedAtMs: Date.now() - 2 * 3600_000,
+    ...overrides
+  };
+}
+
+/** Stands in for the daemon's process scanner: lists these, records what was stopped. */
+export function fakeOutside(processes: OutsideProcess[]) {
+  const stopped: Array<{ pid: number; force: boolean }> = [];
+  const outside = {
+    list: async () => ({ processes, scannedAtMs: Date.now() }),
+    stop: async (pid: number, options: { force?: boolean } = {}) => {
+      const found = processes.find((entry) => entry.pid === pid);
+      if (found === undefined) {
+        return { ok: false as const, status: 404, code: 'unknown_process', message: `pid ${pid} is not listed` };
+      }
+      stopped.push({ pid, force: options.force === true });
+      return { ok: true as const, process: found, exited: true };
+    }
+  };
+  return { outside, stopped };
 }
