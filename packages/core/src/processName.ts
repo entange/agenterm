@@ -84,6 +84,19 @@ function basename(file: string): string {
   return file.split('/').pop() ?? file;
 }
 
+/**
+ * Whether an executable is a language runtime: node, python3.12, or
+ * Homebrew's Python.app. Runtimes run people's programs wherever they
+ * are installed, bundles and /Library included.
+ */
+export function isInterpreter(file: string): boolean {
+  return INTERPRETERS.has(
+    basename(file)
+      .toLowerCase()
+      .replace(/(\d+(\.\d+)*)$/, '')
+  );
+}
+
 /** Name a script path: its file name, or its package when the file name is generic. */
 export function scriptName(file: string): string | null {
   const base = basename(file).replace(/\.(c|m)?(js|ts)$|\.py$|\.rb$/, '');
@@ -121,6 +134,9 @@ export function processName(info: { comm: string; args: string }): string {
   const retitled = app === null && !info.comm.startsWith('/') && /\s/.test(info.comm);
   let name = app?.[1] ?? (retitled ? (info.comm.split(/\s+/)[0] ?? info.comm) : basename(info.comm));
   name = name.replace(/^-/, '').replace(/ Helper( \(.*\))?$/, '');
-  if (INTERPRETERS.has(name)) return scriptOf(info.args.split(/\s+/).slice(1)) ?? name;
+  if (isInterpreter(name)) {
+    const runtime = name.toLowerCase().replace(/(\d+(\.\d+)*)$/, '');
+    return scriptOf(info.args.split(/\s+/).slice(1)) ?? runtime;
+  }
   return name;
 }

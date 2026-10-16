@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { promisify } from 'node:util';
 import {
   AGENTS,
+  isInterpreter,
   PASS_THROUGH,
   processName,
   redactText,
@@ -188,6 +189,7 @@ export function findOutside(
     // Left behind: adopted by init. Apps and services are adopted too; leave those out.
     if (system.launchdJobs?.has(proc.pid) === true || system.isService(proc.pid)) return false;
     const executable = proc.comm.startsWith('/') ? proc.comm : (proc.args.split(/\s+/)[0] ?? '');
+    if (isInterpreter(executable)) return true;
     return !SYSTEM_PATH.test(executable) && !proc.comm.startsWith('com.apple.');
   };
 

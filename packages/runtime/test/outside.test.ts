@@ -146,6 +146,27 @@ describe('findOutside', () => {
     expect(found.map((entry) => entry.pid)).toEqual([2]);
   });
 
+  it('keeps language runtimes left behind, even when installed in a bundle or /Library', () => {
+    const brew =
+      '/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python';
+    const clt = '/Library/Developer/CommandLineTools/usr/bin/python3';
+    const table = [
+      proc(1, 0, '/sbin/launchd', { uid: 0 }),
+      proc(2, 1, `${brew} -m http.server 8000`, { comm: brew, elapsedSeconds: 60 }),
+      proc(3, 1, `${clt} worker.py`, { comm: clt, elapsedSeconds: 30 })
+    ];
+    const found = findOutside(
+      table,
+      [],
+      { launchdJobs: null, isService: () => false },
+      { uid: ME, ownPids: [], nowMs: NOW }
+    );
+    expect(found.map((entry) => [entry.pid, entry.name])).toEqual([
+      [3, 'worker'],
+      [2, 'http.server']
+    ]);
+  });
+
   it('masks secrets in command lines', () => {
     const table = [proc(1, 0, '/sbin/launchd', { uid: 0 }), proc(2, 1, 'cloudflared tunnel run --token abcdef123456')];
     const [entry] = findOutside(

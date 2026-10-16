@@ -43,6 +43,10 @@ describe('detectCaller', () => {
       })
     ).toBe('Visual Studio Code');
     expect(processName({ comm: '/Applications/iTerm.app/Contents/MacOS/iTerm2', args: '' })).toBe('iTerm');
+    // Homebrew's python is an app bundle, but it is a runtime: its script names it.
+    const python = '/opt/homebrew/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python';
+    expect(processName({ comm: python, args: `${python} -m http.server 8000` })).toBe('http.server');
+    expect(processName({ comm: 'python3.12', args: 'python3.12 -c "print(1)"' })).toBe('python');
   });
 
   it('gives up at system roots and unreadable processes', () => {
