@@ -37,7 +37,7 @@ Other agents (Cursor, Claude Desktop, …) take this in their MCP config:
 Without a global install, use `"command": "npx", "args": ["-y", "agenterm", "mcp"]` (on Linux add
 `"--allow-scripts=node-pty"` before `"agenterm"`).
 
-The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, and `remove`.
+The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, `remove`, `processes`, and `kill`.
 
 ## Commands
 
@@ -51,6 +51,8 @@ The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, and `remove`.
 | `stop <task...> [--force]`           | Ctrl+C, then end the process tree; `--force` kills right away         |
 | `rm <task...>`                       | Remove tasks and their output, stopping them first                    |
 | `clear`                              | Remove every task that is no longer running                           |
+| `ps [--orphaned] [--json]`           | Commands running outside agenterm: in terminals, under agents, orphaned |
+| `kill <pid...> [--force]`            | End a command from `ps` and everything under it                       |
 | `settings`                           | Show or change settings, e.g. `--stop-with-agent on`                  |
 | `daemon start\|stop\|restart\|status` | Manage the background daemon                                          |
 | `mcp`                                | Serve the same tools over the Model Context Protocol (stdio)          |

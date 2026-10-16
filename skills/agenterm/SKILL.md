@@ -57,6 +57,8 @@ CLI. They do the same things.
 | Stop (Ctrl+C, then the tree)  | `stop` with `id`                      | `agenterm stop web`                   |
 | Replace a running task        | `run` with `restart: true`            | `agenterm run --id web --restart ...` |
 | Remove a task and its output  | `remove` with `id`                    | `agenterm rm web`                     |
+| Find what runs outside it     | `processes`                           | `agenterm ps`                         |
+| End an orphan by pid          | `kill` with `pid`                     | `agenterm kill 4821`                  |
 
 - Pass `cwd` as an absolute path to the project folder. The CLI uses the current folder; `-C <dir>` changes it.
 - `run` waits about 2 seconds and returns the first output. Raise `wait_seconds` (CLI: `--wait`) for slow starts.
@@ -65,7 +67,8 @@ CLI. They do the same things.
 ## Workflow
 
 1. Before starting something, check `list` (or `agenterm ls`) if you are not sure whether it is already running,
-   possibly started by the user or another agent.
+   possibly started by the user or another agent. If its port is taken but no task holds it, `processes` (or
+   `agenterm ps`) shows what does, including servers left behind outside agenterm.
 2. Start it with `run` and an id.
 3. Read the result. `list` shows the ports a task is listening on. Use those instead of guessing a URL.
 4. If it did not come up as expected, read `logs` before retrying. Do not start it again under a new id.
@@ -88,3 +91,6 @@ CLI. They do the same things.
 - Don't run long-lived commands in your own shell in the background; the user cannot see or stop them.
 - Don't use `stop` with `force` unless a normal stop failed.
 - Don't remove tasks you did not start; the user may still want their output.
+- Don't `kill` a command from `processes` unless it is orphaned, you started it yourself, or the user asked. The
+  rest belong to the user or another agent. When a port is taken, `processes` shows what holds it: say so instead of
+  killing it.

@@ -18,6 +18,7 @@ agenterm run --id web "npm run dev"    # start it (or get the one already runnin
 agenterm ls                            # what is running
 agenterm logs web -f                   # follow its output
 agenterm stop web                      # Ctrl+C, then end it
+agenterm ps                            # what runs outside agenterm, orphans first
 ```
 
 ## Why
@@ -32,6 +33,9 @@ Agents start dev servers and then lose track of them: they start a second copy, 
   started it.
 - **Clean stops.** `stop` sends Ctrl+C, then ends the whole process tree if it keeps running. `--force` kills right
   away.
+- **Nothing hides outside it.** `agenterm ps` (or the app's Outside tab) lists commands agenterm did not start: ones
+  typed in other terminals, ones agents ran in their own shells, and orphans whose terminal or agent has exited, with
+  ports or without. `agenterm kill <pid>` ends one and everything under it.
 
 ## Install
 
@@ -93,6 +97,8 @@ See [For agents (MCP)](#for-agents-mcp) below, or **Settings → Connect an agen
 | `stop <task...> [--force]`            | Ctrl+C, then end the process tree; `--force` kills right away        |
 | `rm <task...>`                        | Remove tasks and their output, stopping them first                   |
 | `clear`                               | Remove every task that is no longer running                          |
+| `ps [--orphaned] [--json]`            | Commands running outside agenterm: in terminals, under agents, orphaned |
+| `kill <pid...> [--force]`             | End a command from `ps` and everything under it                      |
 | `settings`                            | Show or change settings, e.g. `--stop-with-agent on`                 |
 | `daemon start\|stop\|restart\|status` | Manage the background daemon                                         |
 | `mcp`                                 | Serve the same tools over the Model Context Protocol (stdio)         |
@@ -118,7 +124,7 @@ command, otherwise whatever `which agenterm` prints) if they cannot find it. Wit
 "npx", "args": ["-y", "agenterm", "mcp"]` (on Linux, add `"--allow-scripts=node-pty"` before `"agenterm"`). The app
 shows all of this, with your own path filled in, under Settings → Connect an agent.
 
-The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, and `remove`. Output comes back as plain text with
+The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, `remove`, `processes`, and `kill`. Output comes back as plain text with
 secrets redacted.
 
 Agents can also just call the CLI. Either way, giving each command an id (`--id web`) is what keeps an agent from
@@ -147,6 +153,9 @@ right. Click a task and the cursor is in its terminal, ready to type. The header
 - `⌘K` finds a task, `⌘1`–`⌘9` jump to one, `⌘[` / `⌘]` go to the previous or next one, `/` filters the list.
 - Closing the window leaves tasks running. The tray menu lists them.
 - A notification tells you when a task fails while the app is in the background.
+- The **Outside** tab lists commands agenterm did not start, orphans first (amber), grouped by the terminal or agent
+  that started them, with their ports, folder, CPU, and memory, and Stop and Kill. agenterm cannot show their output,
+  so each one offers the `agenterm run` line that would run it as a task instead.
 
 The app does not start tasks. That stays with the CLI and MCP, so there is one way to do it.
 
