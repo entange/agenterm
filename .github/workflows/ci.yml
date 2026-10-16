@@ -73,3 +73,24 @@ jobs:
           agenterm logs smoke | grep npm-package-ok
           agenterm daemon stop
         working-directory: apps/cli
+
+  npm-linux:
+    name: npm package smoke (Linux)
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=agenterm
+      - run: npm pack
+        working-directory: apps/cli
+      # In a container, so the orphan it leaves is adopted by init rather than this runner's systemd service.
+      - run: |
+          tgz=$(ls apps/cli/agenterm-*.tgz)
+          docker run --rm --init -v "$PWD:/repo" node:24-bookworm /repo/scripts/linux-smoke.sh "/repo/$tgz"

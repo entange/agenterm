@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
 import { promisify } from 'node:util';
 import si from 'systeminformation';
 import treeKill from 'tree-kill';
@@ -101,11 +102,84 @@ export function parseLsofListeners(stdout: string): SockEntry[] {
   return out;
 }
 
+/** IPv4 or IPv6 address from /proc/net/tcp hex, which stores each 32-bit word little-endian. */
+function procAddress(hex: string): string {
+  const words = hex.match(/.{8}/g) ?? [];
+  const bytes = words.flatMap((word) => (word.match(/../g) ?? []).reverse().map((byte) => parseInt(byte, 16)));
+  if (bytes.length === 4) return bytes.join('.');
+  if (bytes.every((byte) => byte === 0)) return '::';
+  if (bytes.slice(0, 15).every((byte) => byte === 0) && bytes[15] === 1) return '::1';
+  const groups: string[] = [];
+  for (let i = 0; i < 16; i += 2) groups.push((((bytes[i] ?? 0) << 8) | (bytes[i + 1] ?? 0)).toString(16));
+  return groups.join(':');
+}
+
+/** Listening sockets in /proc/net/tcp or tcp6, by socket inode. Exported for tests. */
+export function parseProcNetTcp(text: string): Map<string, { port: number; address: string }> {
+  const out = new Map<string, { port: number; address: string }>();
+  for (const line of text.split('\n').slice(1)) {
+    const fields = line.trim().split(/\s+/);
+    // st 0A is LISTEN.
+    if (fields.length < 10 || fields[3] !== '0A') continue;
+    const [addressHex, portHex] = (fields[1] ?? '').split(':');
+    const port = parseInt(portHex ?? '', 16);
+    const inode = fields[9] ?? '0';
+    if (!Number.isInteger(port) || port < 1 || inode === '0') continue;
+    out.set(inode, { port, address: procAddress(addressHex ?? '') });
+  }
+  return out;
+}
+
+/**
+ * Listening TCP sockets from /proc, for Linux machines without lsof or ss
+ * (slim images and many servers). Sockets map to processes through their
+ * open file descriptors, which are readable for this user's processes.
+ */
+function procListeners(): SockEntry[] {
+  const sockets = new Map<string, { port: number; address: string }>();
+  for (const file of ['/proc/net/tcp', '/proc/net/tcp6']) {
+    try {
+      for (const [inode, socket] of parseProcNetTcp(fs.readFileSync(file, 'utf8'))) sockets.set(inode, socket);
+    } catch {
+      // No IPv6, or no /proc.
+    }
+  }
+  const out: SockEntry[] = [];
+  if (sockets.size === 0) return out;
+  const seen = new Set<string>();
+  for (const name of fs.readdirSync('/proc')) {
+    if (!/^\d+$/.test(name)) continue;
+    let fds: string[];
+    try {
+      fds = fs.readdirSync(`/proc/${name}/fd`);
+    } catch {
+      continue;
+    }
+    for (const fd of fds) {
+      let target: string;
+      try {
+        target = fs.readlinkSync(`/proc/${name}/fd/${fd}`);
+      } catch {
+        continue;
+      }
+      const socket = target.startsWith('socket:[') ? sockets.get(target.slice(8, -1)) : undefined;
+      if (socket === undefined) continue;
+      const pid = Number(name);
+      const key = `${pid}:${socket.port}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ pid, ...socket });
+    }
+  }
+  return out;
+}
+
 /**
  * Listening TCP sockets. POSIX asks lsof for listeners only, which is a
  * fraction of the cost of a full connection scan.
  */
 export async function listeningSockets(): Promise<SockEntry[]> {
+  if (process.platform === 'linux') return procListeners();
   if (process.platform !== 'win32') {
     try {
       const { stdout } = await execFileAsync('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'], {

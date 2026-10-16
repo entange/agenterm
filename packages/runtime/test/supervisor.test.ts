@@ -89,6 +89,31 @@ describe('parsePsProcesses', () => {
   });
 });
 
+describe('parseProcNetTcp', () => {
+  it('reads listening sockets and their addresses, skipping connections', async () => {
+    const { parseProcNetTcp } = await import('../src/supervisor.js');
+    const tcp = [
+      '  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode',
+      '   0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 41234 1 0000000000000000 100 0 0 10 0',
+      '   1: 00000000:23A3 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 41235 1 0000000000000000 100 0 0 10 0',
+      '   2: 0100007F:1F90 0100007F:D2F0 01 00000000:00000000 00:00000000 00000000  1000        0 41236 1 0000000000000000 20 4 30 10 -1'
+    ].join('\n');
+    expect([...parseProcNetTcp(tcp)]).toEqual([
+      ['41234', { port: 8080, address: '127.0.0.1' }],
+      ['41235', { port: 9123, address: '0.0.0.0' }]
+    ]);
+    const tcp6 = [
+      '  sl  local_address                         remote_address                        st',
+      '   0: 00000000000000000000000000000000:1435 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 5001 1',
+      '   1: 00000000000000000000000001000000:1F40 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 5002 1'
+    ].join('\n');
+    expect([...parseProcNetTcp(tcp6)]).toEqual([
+      ['5001', { port: 5173, address: '::' }],
+      ['5002', { port: 8000, address: '::1' }]
+    ]);
+  });
+});
+
 describe('parseLsofListeners', () => {
   it('joins pid records with listening names and dedupes v4/v6', async () => {
     const { parseLsofListeners } = await import('../src/supervisor.js');
