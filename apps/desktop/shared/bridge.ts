@@ -12,6 +12,7 @@ export const API_METHODS = [
   'health',
   'listTasks',
   'getTask',
+  'run',
   'stop',
   'remove',
   'clearEnded',

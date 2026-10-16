@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { isRunning, type OutsideProcess, type TaskRecord } from '@agenterm/core';
 import { api } from './bridge.js';
 import { useLive } from './live.js';
+import { canMove, taskIdFor } from './outside.js';
 import { keys } from './queries.js';
 import { upsertTask } from './tasks.js';
 import { toast, toastError } from './toast.js';
@@ -93,6 +94,42 @@ export function stopOutside(client: QueryClient, entry: OutsideProcess, force: b
         else toast('error', `${entry.name} is still running`, 'Some of its processes ignored the signal. Try Kill.');
       } catch (error) {
         toastError(`Could not end ${entry.name}`, error);
+      } finally {
+        await client.invalidateQueries({ queryKey: keys.processes });
+      }
+    }
+  });
+}
+
+/**
+ * Restart a command from outside agenterm as a task, so its output shows
+ * here: stop it, then run the same command in the same folder. Asks first,
+ * since anything the command holds in memory is lost.
+ */
+export function moveOutside(client: QueryClient, entry: OutsideProcess): void {
+  if (!canMove(entry)) return;
+  const id = taskIdFor(entry);
+  useUi.getState().confirm({
+    title: `Move ${entry.name} into agenterm?`,
+    detail: `This restarts it. It is stopped now and started again as the task ${id}, with the same command in ${entry.cwd}, so you can watch its output and type into it. Anything it only keeps in memory is lost.`,
+    action: 'Restart in agenterm',
+    run: async () => {
+      try {
+        const { exited } = await api('stopProcess', entry.pid, { startedAtMs: entry.startedAtMs });
+        if (!exited) {
+          toast(
+            'error',
+            `${entry.name} is still running`,
+            'Some of its processes ignored the signal, so it was not restarted.'
+          );
+          return;
+        }
+        const { task } = await api('run', { id, command: entry.command, cwd: entry.cwd });
+        patch(client, task);
+        useUi.getState().select(task.id);
+        toast('success', `Moved ${entry.name} into agenterm as ${task.id}`);
+      } catch (error) {
+        toastError(`Could not move ${entry.name}`, error);
       } finally {
         await client.invalidateQueries({ queryKey: keys.processes });
       }

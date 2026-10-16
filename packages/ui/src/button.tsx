@@ -104,7 +104,7 @@ export function Tooltip({
         <TooltipPrimitive.Content
           side={side}
           sideOffset={6}
-          className="z-50 flex items-center gap-2 rounded-md border border-line-strong bg-raised px-2 py-1 text-[12px] text-ink shadow-lg"
+          className="z-50 flex max-w-[300px] items-center gap-2 rounded-md border border-line-strong bg-raised px-2 py-1 text-[12px] text-ink shadow-lg"
         >
           {content}
           {shortcut === undefined ? null : <Kbd>{shortcut}</Kbd>}

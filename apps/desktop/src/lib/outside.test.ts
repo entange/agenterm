@@ -1,6 +1,6 @@
 import type { OutsideProcess } from '@agenterm/core';
 import { describe, expect, it } from 'vitest';
-import { groupOutside, outsideLabel, runInstead } from './outside.js';
+import { canMove, groupOutside, outsideLabel, runInstead, taskIdFor } from './outside.js';
 
 function entry(pid: number, patch: Partial<OutsideProcess> = {}): OutsideProcess {
   return {
@@ -57,5 +57,12 @@ describe('labels and rerunning', () => {
       "agenterm run --id app-vite -C '/work/my app' 'node /app/node_modules/.bin/vite'"
     );
     expect(runInstead(entry(1, { command: 'cloudflared --token [REDACTED]' }))).toBe(null);
+  });
+
+  it('moves into agenterm only with a folder and no masked secrets', () => {
+    expect(taskIdFor(entry(1))).toBe('app-vite');
+    expect(canMove(entry(1))).toBe(true);
+    expect(canMove(entry(1, { cwd: null }))).toBe(false);
+    expect(canMove(entry(1, { command: 'cloudflared --token [REDACTED]' }))).toBe(false);
   });
 });

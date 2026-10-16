@@ -65,18 +65,31 @@ function quote(text: string): string {
   return /^[\w@%+=:,./-]+$/.test(text) ? text : `'${text.replace(/'/g, `'\\''`)}'`;
 }
 
+/** The task id a command gets when it moves into agenterm: "app · vite" becomes app-vite. */
+export function taskIdFor(entry: OutsideProcess): string {
+  const id = outsideLabel(entry)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return id || 'task';
+}
+
+/**
+ * Whether the command can run again as an agenterm task: it needs its folder,
+ * and a command line with no secrets masked out of it.
+ */
+export function canMove(entry: OutsideProcess): entry is OutsideProcess & { cwd: string } {
+  return entry.cwd !== null && !entry.command.includes('[REDACTED]');
+}
+
 /**
  * The `agenterm run` line that would run this command as a task instead,
  * or null when the command line had secrets masked and cannot be rerun as shown.
  */
 export function runInstead(entry: OutsideProcess): string | null {
   if (entry.command.includes('[REDACTED]')) return null;
-  const id = outsideLabel(entry)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
   const folder = entry.cwd === null ? '' : ` -C ${quote(entry.cwd)}`;
-  return `agenterm run --id ${id || 'task'}${folder} ${quote(entry.command)}`;
+  return `agenterm run --id ${taskIdFor(entry)}${folder} ${quote(entry.command)}`;
 }
 
 /** 52MB, 1.2GB. */

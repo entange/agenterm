@@ -1,12 +1,12 @@
 import type { OutsideProcess } from '@agenterm/core';
 import { Button, cn, EmptyState, SignalDot, Tooltip } from '@agenterm/ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Skull, Square } from 'lucide-react';
+import { ExternalLink, Info, MoveRight, Skull, Square } from 'lucide-react';
 import * as React from 'react';
-import { stopOutside } from '../lib/actions.js';
+import { moveOutside, stopOutside } from '../lib/actions.js';
 import { getBridge } from '../lib/bridge.js';
 import { formatAge, formatDuration, shortPath } from '../lib/format.js';
-import { formatBytes, groupOutside, outsideLabel, runInstead } from '../lib/outside.js';
+import { canMove, formatBytes, groupOutside, outsideLabel, runInstead } from '../lib/outside.js';
 import { useUi } from '../lib/ui.js';
 import { CopyBlock } from './controls.js';
 
@@ -195,6 +195,23 @@ export function OutsideView({ entry }: { entry: OutsideProcess }): React.JSX.Ele
             </Tooltip>
           ))}
           <div className="ml-auto flex shrink-0 items-center gap-1">
+            <Tooltip
+              content={
+                canMove(entry)
+                  ? 'Restarts it: stops it, then runs the same command in the same folder as an agenterm task, so you can watch its output and type into it.'
+                  : entry.cwd === null
+                    ? 'Its folder is unknown, so agenterm cannot start it again'
+                    : 'Its command line holds a secret agenterm cannot see, so it cannot start it again'
+              }
+            >
+              <span>
+                <Button size="sm" disabled={!canMove(entry)} onClick={() => moveOutside(client, entry)}>
+                  <MoveRight className="size-3" />
+                  Move to agenterm
+                  <Info className="size-3 text-ink-faint" />
+                </Button>
+              </span>
+            </Tooltip>
             <Tooltip content="SIGTERM, then SIGKILL if it keeps running">
               <Button size="sm" onClick={() => stopOutside(client, entry, false)}>
                 <Square className="size-3" />
@@ -231,7 +248,7 @@ export function OutsideView({ entry }: { entry: OutsideProcess }): React.JSX.Ele
               agenterm did not start this, so it cannot show what it prints or let you type into it.
               {rerun === null
                 ? ' Its command line holds a secret, so start it again yourself with agenterm run.'
-                : ' To watch it here, stop it and run it with agenterm:'}
+                : ' To watch it here, use Move to agenterm, which restarts it as a task, or run it yourself:'}
             </p>
             {rerun === null ? null : <CopyBlock text={rerun} label="command" wrap />}
           </section>
