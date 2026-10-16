@@ -16,7 +16,7 @@ import {
   daemonLogTail,
   dataDir,
   pidAlive,
-  ptyAddonMissing,
+  ptyPackageMissing,
   readLock,
   startDaemonProcess
 } from './local.js';
@@ -218,10 +218,11 @@ the running task instead of starting a second one. Add --restart to replace it.`
           'cannot find the daemon next to this CLI. Reinstall agenterm, or run `bun run build` in a checkout.'
         );
       }
-      if (ptyAddonMissing()) {
+      const pty = ptyPackageMissing();
+      if (pty !== null) {
         throw new CliError(
-          'node-pty, which agenterm runs terminals with, was installed without being built. npm 12 skips its build step unless you allow it.',
-          'reinstall with `npm install -g agenterm --allow-scripts=node-pty`, or use `npx --allow-scripts=node-pty agenterm`.'
+          `${pty}, which agenterm runs terminals with, is not installed. npm leaves it out with --omit=optional, or when node_modules came from another OS.`,
+          'reinstall with `npm install -g agenterm`.'
         );
       }
       startDaemonProcess(entry);

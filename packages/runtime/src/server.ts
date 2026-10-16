@@ -27,7 +27,6 @@ import { EventBus } from './events.js';
 import { readGitInfo, type GitInfo } from './gitInfo.js';
 import { DAEMON_VERSION, settingsPath, taskDir, terminalLogPath } from './paths.js';
 import { OutsideScanner } from './outside.js';
-import { ensureSpawnHelper } from './ptyHelper.js';
 import { projectOf } from './project.js';
 import { PtyManager } from './ptyManager.js';
 import { loadSettings, saveSettings } from './settings.js';
@@ -342,16 +341,6 @@ export function createApp(options: CreateAppOptions): FastifyInstance {
             process.platform === 'darwin'
               ? 'Remove ended tasks with `agenterm clear`, or raise the limit: sudo sysctl -w kern.tty.ptmx_max=999'
               : 'Remove ended tasks with `agenterm clear`, or raise /proc/sys/kernel/pty/max.'
-        };
-      }
-      if (/posix_spawnp/i.test(message)) {
-        const helper = ensureSpawnHelper();
-        return {
-          ok: false,
-          status: 500,
-          code: 'spawn_failed',
-          message: 'Could not start a terminal: the node-pty spawn helper is not executable.',
-          hint: helper === null ? 'Try again; agenterm just fixed its permissions.' : `Run: sudo chmod +x ${helper}`
         };
       }
       return { ok: false, status: 500, code: 'spawn_failed', message };

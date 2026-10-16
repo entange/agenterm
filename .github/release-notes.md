@@ -15,7 +15,7 @@ needed.
 **CLI only** (Linux, or a Mac without the app; Node.js 22+):
 
 ```sh
-npm install -g agenterm@{{version}} --allow-scripts=node-pty
+npm install -g agenterm@{{version}}
 ```
 
 Already running an older agenterm? Run `agenterm daemon restart` after updating.

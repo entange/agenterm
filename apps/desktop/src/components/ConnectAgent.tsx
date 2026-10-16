@@ -137,7 +137,7 @@ export function ConnectAgent(): React.JSX.Element {
             All of these need the <code className="font-mono">agenterm</code> command. If{' '}
             <code className="font-mono">which agenterm</code> prints nothing, install it with Node.js 22 or newer:
           </Note>
-          <CopyField text="npm install -g agenterm --allow-scripts=node-pty" label="install command" />
+          <CopyField text="npm install -g agenterm" label="install command" />
         </>
       ) : null}
     </div>

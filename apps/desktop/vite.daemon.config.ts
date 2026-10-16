@@ -9,7 +9,7 @@ import { defineConfig } from 'vite';
  * ships rebuilt for Electron's Node ABI inside the app, and Node builtins.
  * The app runs the result with ELECTRON_RUN_AS_NODE.
  */
-const native = ['node-pty', 'better-sqlite3'];
+const native = ['@lydell/node-pty', 'better-sqlite3'];
 
 export default defineConfig({
   build: {
@@ -28,7 +28,7 @@ export default defineConfig({
         // Packagers drop folders named node_modules from resources, so the
         // staged native modules live in ./native and are imported by path.
         paths: {
-          'node-pty': './native/node-pty/lib/index.js',
+          '@lydell/node-pty': './native/node-pty/lib/index.js',
           'better-sqlite3': './native/better-sqlite3/lib/index.js'
         }
       }

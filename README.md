@@ -67,15 +67,13 @@ The app tells you when a new version is out.
 Needs [Node.js](https://nodejs.org) 22 or newer.
 
 ```sh
-npm install -g agenterm --allow-scripts=node-pty
+npm install -g agenterm
 agenterm run --id hello "echo hello"     # starts the background daemon on first use
 ```
 
 Or run it without installing: `npx agenterm ls`.
 
-`--allow-scripts=node-pty` lets npm 12 and newer build node-pty, the native module behind the terminals. Older npm
-ignores the flag. On Linux, that build needs `python3`, `make`, and a C++ compiler (`sudo apt install
-build-essential python3`). If the build was skipped, agenterm says so and prints the command that fixes it.
+It installs prebuilt on macOS and Linux (x64 and arm64, glibc), with nothing to compile and no install scripts.
 
 On a Mac with the app, skip this: two installs can drift apart in version. If you have both, the one first on your
 PATH wins, and the app's Settings tell you which that is. The CLI and app check each other's version, and `agenterm
@@ -121,7 +119,7 @@ Cursor, Claude Desktop, and most other agents take the same server in their MCP 
 
 Apps opened from the Dock may not see your shell's PATH; use the full path (`/usr/local/bin/agenterm` for the app's
 command, otherwise whatever `which agenterm` prints) if they cannot find it. Without any install, use `"command":
-"npx", "args": ["-y", "agenterm", "mcp"]` (on Linux, add `"--allow-scripts=node-pty"` before `"agenterm"`). The app
+"npx", "args": ["-y", "agenterm", "mcp"]`. The app
 shows all of this, with your own path filled in, under Settings → Connect an agent.
 
 The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, `remove`, `processes`, and `kill`. Output comes back as plain text with

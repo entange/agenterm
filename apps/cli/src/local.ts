@@ -70,23 +70,26 @@ export function daemonEntry(): string | null {
 }
 
 /**
- * Whether node-pty, which runs every terminal, has its native addon. It ships
- * prebuilt for macOS but compiles at install time on Linux, and npm 12 skips
- * that step unless the install allows node-pty's scripts. Without it the
- * daemon cannot start. A node-pty that cannot be found at all (a bundled or
- * overridden daemon) counts as present: that daemon brings its own.
+ * The terminal module's package for this platform, when it is missing. It
+ * comes in through optionalDependencies, so `--omit=optional` or a
+ * node_modules copied from another OS leaves it out and the daemon cannot
+ * start. A bundled or overridden daemon brings its own, so that counts as
+ * present.
  */
-export function ptyAddonMissing(): boolean {
-  let root: string;
+export function ptyPackageMissing(): string | null {
+  const name = `@lydell/node-pty-${process.platform}-${process.arch}`;
+  let pty: NodeJS.Require;
   try {
-    root = path.dirname(createRequire(import.meta.url).resolve('node-pty/package.json'));
+    pty = createRequire(createRequire(import.meta.url).resolve('@lydell/node-pty'));
   } catch {
-    return false;
+    return null;
   }
-  return ![
-    path.join(root, 'prebuilds', `${process.platform}-${process.arch}`, 'pty.node'),
-    path.join(root, 'build', 'Release', 'pty.node')
-  ].some((addon) => fs.existsSync(addon));
+  try {
+    pty.resolve(name);
+    return null;
+  } catch {
+    return name;
+  }
 }
 
 /**

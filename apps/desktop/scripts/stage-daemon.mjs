@@ -50,6 +50,34 @@ function packageDir(name) {
   return path.dirname(runtimeRequire.resolve(`${name}/package.json`));
 }
 
+/**
+ * The @lydell/node-pty build for a target. Installs only carry this
+ * machine's, so another architecture's is fetched from npm into build/.
+ */
+function ptyPackage(target) {
+  // Its exports hide package.json, so find the folder from its entry.
+  const loader = path.dirname(runtimeRequire.resolve('@lydell/node-pty'));
+  const name = `@lydell/node-pty-${target}`;
+  try {
+    // Its exports point at lib/index.js.
+    return path.resolve(createRequire(path.join(loader, 'package.json')).resolve(name), '..', '..');
+  } catch {
+    const version = JSON.parse(fs.readFileSync(path.join(loader, 'package.json'), 'utf8')).optionalDependencies[name];
+    if (version === undefined) throw new Error(`@lydell/node-pty has no build for ${target}`);
+    const cache = path.join(app, 'build', 'pty', `${target}-${version}`);
+    if (!fs.existsSync(path.join(cache, 'package.json'))) {
+      fs.mkdirSync(cache, { recursive: true });
+      const tarball = execFileSync('npm', ['pack', `${name}@${version}`, '--silent'], {
+        cwd: cache,
+        encoding: 'utf8'
+      }).trim();
+      execFileSync('tar', ['-xzf', tarball, '--strip-components=1'], { cwd: cache });
+      fs.rmSync(path.join(cache, tarball));
+    }
+    return cache;
+  }
+}
+
 /** Copy without tests and source maps; the daemon never loads them. */
 function copy(from, to) {
   fs.cpSync(from, to, {
@@ -75,22 +103,14 @@ function stage(arch) {
   const modules = path.join(out, 'native');
   fs.rmSync(modules, { recursive: true, force: true });
 
-  const pty = packageDir('node-pty');
+  // @lydell/node-pty keeps each platform's build in its own package; the
+  // daemon imports that package's lib directly, so its loader is not staged.
+  const pty = ptyPackage(target);
   const ptyOut = path.join(modules, 'node-pty');
   copy(path.join(pty, 'package.json'), path.join(ptyOut, 'package.json'));
   copy(path.join(pty, 'lib'), path.join(ptyOut, 'lib'));
-  // node-pty ships prebuilds for macOS and Windows; Linux installs compile into build/Release.
-  const ptyPrebuild = path.join(pty, 'prebuilds', target);
-  const ptyCompiled = path.join(pty, 'build', 'Release');
-  const ptyBinaries = fs.existsSync(ptyPrebuild)
-    ? { from: ptyPrebuild, to: path.join(ptyOut, 'prebuilds', target) }
-    : fs.existsSync(path.join(ptyCompiled, 'pty.node'))
-      ? { from: ptyCompiled, to: path.join(ptyOut, 'build', 'Release') }
-      : null;
-  if (ptyBinaries === null) throw new Error(`node-pty has no prebuild or compiled binary for ${target}`);
-  copy(ptyBinaries.from, ptyBinaries.to);
-  const helper = path.join(ptyBinaries.to, 'spawn-helper');
-  if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
+  copy(path.join(pty, 'prebuilds', target), path.join(ptyOut, 'prebuilds', target));
+  fs.chmodSync(path.join(ptyOut, 'prebuilds', target, 'spawn-helper'), 0o755);
 
   const sqlite = packageDir('better-sqlite3');
   const sqliteOut = path.join(modules, 'better-sqlite3');

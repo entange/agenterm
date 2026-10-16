@@ -13,7 +13,6 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "node scripts/ensure-pty-helper.mjs",
     "dev": "turbo run dev",
     "dev:daemon": "turbo run dev --filter=@agenterm/runtime",
     "dev:desktop": "turbo run dev --filter=agenterm-desktop",
@@ -42,7 +41,6 @@
     "url": "git+https://github.com/entange/agenterm.git"
   },
   "trustedDependencies": [
-    "esbuild",
-    "node-pty"
+    "esbuild"
   ]
 }

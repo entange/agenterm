@@ -7,7 +7,7 @@ import { defineConfig } from 'vite';
  * package needs no workspace packages. Native modules stay external and are
  * the package's only dependencies; both ship N-API prebuilds.
  */
-const native = ['node-pty', 'better-sqlite3'];
+const native = ['@lydell/node-pty', 'better-sqlite3'];
 
 export default defineConfig({
   build: {

@@ -1,5 +1,5 @@
 import os from 'node:os';
-import * as pty from 'node-pty';
+import * as pty from '@lydell/node-pty';
 import { terminalLogPath } from './paths.js';
 import { TerminalLog } from './terminal.js';
 
