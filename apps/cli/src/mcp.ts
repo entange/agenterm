@@ -4,7 +4,7 @@ import { AgentermApiError, isRunning, statusText, type AgentermClient } from '@a
 import type { Caller } from './caller.js';
 import {
   cleanEnv,
-  processTable,
+  processSections,
   resolveTask,
   runSummary,
   settle,
@@ -233,7 +233,7 @@ export const TOOLS: Tool[] = [
       const { processes } = await context.client().listProcesses();
       const shown = flag(args, 'orphaned', false) ? processes.filter((entry) => entry.orphaned) : processes;
       if (shown.length === 0) return 'nothing is running outside agenterm';
-      return processTable(shown).join('\n');
+      return processSections(shown).join('\n');
     }
   },
   {

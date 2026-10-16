@@ -147,10 +147,14 @@ describe('commands outside agenterm', () => {
     ]);
     const c = cli({ outside });
     await c.run('ps');
-    expect(c.out[0]).toMatch(/^PID\s+AGE\s+BY\s+PORTS\s+CPU\s+MEM\s+FOLDER\s+COMMAND/);
-    expect(c.out[1]).toMatch(/^4821\s+2h\s+orphaned\s+:4000\s+1%\s+52MB\s+\/work\/api\s+node server\.js --port 4000/);
-    expect(c.out[2]).toMatch(/^900\s+2h\s+codex\s+-\s+/);
-    expect(c.out.at(-1)).toMatch(/^1 orphaned: what started it has exited/);
+    expect(c.out[0]).toBe('Orphaned (1): what started it has exited');
+    expect(c.out[1]).toMatch(/^PID\s+AGE\s+PORTS\s+CPU\s+MEM\s+FOLDER\s+COMMAND/);
+    expect(c.out[2]).toMatch(/^4821\s+2h\s+:4000\s+1%\s+52MB\s+\/work\/api\s+node server\.js --port 4000/);
+    expect(c.out[3]).toBe('');
+    expect(c.out[4]).toBe('In other terminals and agents (1)');
+    expect(c.out[5]).toMatch(/^PID\s+AGE\s+BY\s+PORTS\s+CPU\s+MEM\s+FOLDER\s+COMMAND/);
+    expect(c.out[6]).toMatch(/^900\s+2h\s+codex\s+-\s+/);
+    expect(c.out.at(-1)).toMatch(/^`agenterm kill <pid>` ends one/);
     await c.run('ps', '--orphaned', '--json');
     expect((JSON.parse(c.out.join('\n')) as Array<{ pid: number }>).map((entry) => entry.pid)).toEqual([4821]);
   });

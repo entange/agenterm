@@ -137,14 +137,15 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
 }
 
-/** Table for `ps`: commands running outside agenterm. */
+/** Table for `ps`: commands running outside agenterm. Orphans have no starter, so their table drops BY. */
 export function processTable(processes: OutsideProcess[], nowMs = Date.now()): string[] {
+  const by = processes.some((entry) => !entry.orphaned);
   return table([
-    ['PID', 'AGE', 'BY', 'PORTS', 'CPU', 'MEM', 'FOLDER', 'COMMAND'],
+    ['PID', 'AGE', ...(by ? ['BY'] : []), 'PORTS', 'CPU', 'MEM', 'FOLDER', 'COMMAND'],
     ...processes.map((entry) => [
       String(entry.pid),
       formatAge(entry.startedAtMs, nowMs),
-      entry.startedBy ?? 'orphaned',
+      ...(by ? [entry.startedBy ?? 'orphaned'] : []),
       entry.ports.length > 0 ? entry.ports.map((port) => `:${port}`).join(' ') : '-',
       `${Math.round(entry.cpuPercent)}%`,
       formatBytes(entry.memoryBytes),
@@ -152,6 +153,27 @@ export function processTable(processes: OutsideProcess[], nowMs = Date.now()): s
       truncate(entry.command, 60)
     ])
   ]);
+}
+
+/**
+ * What `ps` prints: orphans and commands whose terminal or agent is still
+ * open, in separate sections so the ones nothing else will end stand out.
+ */
+export function processSections(processes: OutsideProcess[], nowMs = Date.now()): string[] {
+  const orphaned = processes.filter((entry) => entry.orphaned);
+  const live = processes.filter((entry) => !entry.orphaned);
+  const lines: string[] = [];
+  if (orphaned.length > 0) {
+    lines.push(`Orphaned (${orphaned.length}): what started ${orphaned.length === 1 ? 'it' : 'them'} has exited`);
+    lines.push(...processTable(orphaned, nowMs));
+  }
+  if (live.length > 0) {
+    if (lines.length > 0) lines.push('');
+    lines.push(`In other terminals and agents (${live.length})`);
+    lines.push(...processTable(live, nowMs));
+  }
+  lines.push('', '`agenterm kill <pid>` ends one and everything under it.');
+  return lines;
 }
 
 export async function resolveTask(client: AgentermClient, ref: string): Promise<TaskRecord> {

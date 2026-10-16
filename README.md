@@ -18,7 +18,7 @@ agenterm run --id web "npm run dev"    # start it (or get the one already runnin
 agenterm ls                            # what is running
 agenterm logs web -f                   # follow its output
 agenterm stop web                      # Ctrl+C, then end it
-agenterm ps                            # what runs outside agenterm, orphans first
+agenterm ps                            # what runs outside agenterm: orphans, then the rest
 ```
 
 ## Why

@@ -99,8 +99,9 @@ describe('MCP tools', () => {
     ]);
     const m = mcp({ outside });
     const listed = await m.call('processes', { orphaned: true });
-    expect(listed.text.split('\n')).toHaveLength(2);
-    expect(listed.text).toMatch(/4821\s+2h\s+orphaned\s+:4000/);
+    expect(listed.text).toMatch(/^Orphaned \(1\)/);
+    expect(listed.text).toMatch(/4821\s+2h\s+:4000/);
+    expect(listed.text).not.toMatch(/claude/);
     expect(await m.call('kill', { pid: 4821 })).toEqual({
       text: 'ended 4821 (node server.js --port 4000, 2 processes)',
       isError: false

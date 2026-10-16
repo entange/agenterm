@@ -23,7 +23,7 @@ import {
 import { runMcpStdio } from './mcp.js';
 import {
   cleanEnv,
-  processTable,
+  processSections,
   resolveTask,
   runSummary,
   settle,
@@ -466,14 +466,7 @@ the running task instead of starting a second one. Add --restart to replace it.`
           deps.out(opts.orphaned === true ? 'nothing orphaned.' : 'nothing is running outside agenterm.');
           return;
         }
-        for (const line of processTable(shown)) deps.out(line);
-        const orphaned = shown.filter((entry) => entry.orphaned).length;
-        if (orphaned > 0) {
-          deps.out('');
-          deps.out(
-            `${orphaned} orphaned: what started ${orphaned === 1 ? 'it' : 'them'} has exited. \`agenterm kill <pid>\` ends one and everything under it.`
-          );
-        }
+        for (const line of processSections(shown)) deps.out(line);
       })
     );
 
