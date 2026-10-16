@@ -29,6 +29,20 @@ It returns the running task and says `already running`. That is success: the ser
 Without an id, agenterm still dedupes the exact same command in the same folder, but an id is reliable across small
 command changes and is easy to refer to later.
 
+### Worktrees and other checkouts
+
+Ids are shared by every agent and project on the machine, and an id matches whatever folder it was started in. Two
+git worktrees that both use `web` collide: the second `run` gets the first one's server, running the other branch's
+code. When you work in a worktree or a second checkout, name the id after it and pass its folder:
+
+```sh
+agenterm run --id feature-a-web -C ~/code/app-feature-a "npm run dev"
+agenterm run --id feature-b-web -C ~/code/app-feature-b "npm run dev"
+```
+
+When `run` says `already running`, check that the folder it prints is the one you are working in before you use
+that task. If it is not, pick a different id; don't `restart` a task another checkout is using.
+
 ## Tools
 
 With the agenterm MCP server connected (tools named like `mcp__agenterm__run`), use the tools. Otherwise use the

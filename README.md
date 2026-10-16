@@ -26,7 +26,8 @@ Agents start dev servers and then lose track of them: they start a second copy, 
 `node` processes behind. With agenterm every long-running command gets an id:
 
 - **No duplicates.** Running the same `--id`, or the same command in the same folder, returns the task that is
-  already running instead of starting another. `--restart` replaces it.
+  already running instead of starting another. `--restart` replaces it. Ids are global, so with several git
+  worktrees put the worktree in the id: `agenterm run --id feature-a-web -C ../app-feature-a "npm run dev"`.
 - **One place to look.** `agenterm ls` (or the app) shows every task with its status, ports, folder, and who
   started it.
 - **Clean stops.** `stop` sends Ctrl+C, then ends the whole process tree if it keeps running. `--force` kills right
