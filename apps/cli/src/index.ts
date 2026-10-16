@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { AgentermClient, daemonBaseUrl } from '@agenterm/core';
+import { AgentermClient, daemonBaseUrl, VERSION } from '@agenterm/core';
 import { detectCaller, type Caller } from './caller.js';
-import { readPort, readToken } from './local.js';
+import { dataDir, readPort, readToken } from './local.js';
 import { buildProgram } from './program.js';
+import { updateNotice, wantsUpdateCheck } from './updateNotice.js';
 
 // The desktop app's copy runs on Electron as Node. That switch is for this
 // process only: tasks would inherit it and break any Electron app they run.
@@ -29,3 +30,8 @@ const program = buildProgram({
 });
 
 await program.parseAsync(process.argv);
+
+if (wantsUpdateCheck(process.argv.slice(2), process.env, process.stderr.isTTY === true)) {
+  const notice = await updateNotice(VERSION, dataDir());
+  if (notice !== null) console.error(`\n${notice}`);
+}

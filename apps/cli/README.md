@@ -54,6 +54,12 @@ The tools match the CLI: `run`, `list`, `logs`, `input`, `stop`, `remove`, `proc
 | `daemon start\|stop\|restart\|status` | Manage the background daemon                                          |
 | `mcp`                                | Serve the same tools over the Model Context Protocol (stdio)          |
 
+## Updating
+
+`npm install -g agenterm`, then `agenterm daemon restart` if tasks are running. Once a day, in a terminal, the CLI
+asks npm whether a newer version is out and says so after the command. It never does for `mcp`, `--json`, or CI;
+`AGENTERM_NO_UPDATE_CHECK=1` turns it off.
+
 ## Requirements
 
 - macOS or Linux (x64 or arm64; on Linux, glibc rather than musl, so not Alpine), Node.js 22 or newer. Everything
