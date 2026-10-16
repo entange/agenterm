@@ -6,9 +6,12 @@ import { useLive } from '../lib/live.js';
 import { useToasts } from '../lib/toast.js';
 import { useUi } from '../lib/ui.js';
 import { shortcut } from '../lib/shortcuts.js';
+import { useUpdateWiring } from '../lib/update.js';
+import { UpdateButton } from './Update.js';
 
-/** Inset title bar: drag region, task finder, settings. */
+/** Inset title bar: drag region, task finder, updates, settings. */
 export function TitleBar(): React.JSX.Element {
+  useUpdateWiring();
   const setPaletteOpen = useUi((state) => state.setPaletteOpen);
   const setSettingsOpen = useUi((state) => state.setSettingsOpen);
   const mac = getBridge()?.platform === 'darwin';
@@ -29,7 +32,8 @@ export function TitleBar(): React.JSX.Element {
         Find a task
         <Kbd className="ml-auto">{shortcut('K')}</Kbd>
       </button>
-      <div className="no-drag">
+      <div className="no-drag flex items-center">
+        <UpdateButton />
         <IconButton label="Settings" onClick={() => setSettingsOpen(true)}>
           <Settings className="size-4" />
         </IconButton>

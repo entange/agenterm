@@ -10,5 +10,6 @@ export {
 } from './button.js';
 export { Dialog, DialogBody, DialogFooter } from './dialog.js';
 export { EmptyState, SignalDot, Spinner } from './feedback.js';
+export { Popover } from './popover.js';
 export { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs.js';
 export { cn, signalBg, signalText, type Signal } from './utils.js';

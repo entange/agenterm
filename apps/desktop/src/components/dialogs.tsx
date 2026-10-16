@@ -9,6 +9,7 @@ import { api, getBridge } from '../lib/bridge.js';
 import { useLive } from '../lib/live.js';
 import { keys, useHealth, useSettings } from '../lib/queries.js';
 import { toastError } from '../lib/toast.js';
+import { showUpdate, useUpdate } from '../lib/update.js';
 import { useUi, type ThemePreference } from '../lib/ui.js';
 import { ConnectAgent } from './ConnectAgent.js';
 import { Segmented, Switch } from './controls.js';
@@ -67,6 +68,7 @@ export function SettingsDialog(): React.JSX.Element {
   };
 
   const online = connection.state === 'online';
+  const update = useUpdate((store) => store.status);
 
   return (
     <Dialog open={open} onOpenChange={setOpen} title="Settings">
@@ -140,6 +142,29 @@ export function SettingsDialog(): React.JSX.Element {
             <Segmented label="Theme" value={theme} options={THEMES} onChange={setTheme} />
           </div>
         </Section>
+        {update !== null && update.enabled ? (
+          <Section title="Updates">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[12.5px] text-ink-muted">
+                agenterm {update.current}
+                {'update' in update.state && update.state.update !== null
+                  ? ` · ${update.state.update.version} is available`
+                  : update.state.kind === 'idle' && update.state.checkedAtMs !== null
+                    ? ' · up to date'
+                    : ''}
+              </span>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setOpen(false);
+                  showUpdate();
+                }}
+              >
+                {'update' in update.state && update.state.update !== null ? 'See what changed' : 'Check for updates'}
+              </Button>
+            </div>
+          </Section>
+        ) : null}
         <Section title="Daemon">
           <div className="flex items-center justify-between gap-3">
             <span className="text-[12.5px] text-ink-muted">

@@ -7,6 +7,8 @@ import type {
   ConnectionInfo,
   Preferences
 } from '../../shared/bridge.js';
+import { entriesBetween, parseChangelog, type UpdateInfo, type UpdateStatus } from '../../shared/update.js';
+import changelogText from '../../../../CHANGELOG.md?raw';
 
 /**
  * Browser stand-in for the Electron preload, used only by the Vite web
@@ -97,8 +99,77 @@ const bridge: AgentermBridge = {
   installCli: async () => {
     cli = { state: 'installed', path: '/usr/local/bin/agenterm' };
     return cli;
+  },
+  updateStatus: async () => updateStatus,
+  onUpdate: (handler) => {
+    updateHandlers.add(handler);
+    return () => updateHandlers.delete(handler);
+  },
+  checkForUpdates: async () => {
+    setUpdate({ kind: 'checking' });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    setUpdate(
+      previewUpdate === null ? { kind: 'idle', checkedAtMs: Date.now() } : { kind: 'available', update: previewUpdate }
+    );
+    return updateStatus;
+  },
+  downloadUpdate: async () => {
+    if (previewUpdate === null) return updateStatus;
+    const update = previewUpdate;
+    const totalBytes = 129 * 1024 * 1024;
+    for (let receivedBytes = 0; receivedBytes < totalBytes; receivedBytes += totalBytes / 25) {
+      setUpdate({ kind: 'downloading', update, receivedBytes, totalBytes });
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+    setUpdate({ kind: 'ready', update });
+    return updateStatus;
+  },
+  installUpdate: async () => {
+    location.reload();
   }
 };
+
+// ?update=available|manual|downloading|ready|idle previews the updater with this repo's CHANGELOG.md,
+// as if the newest version there were out and the app were on the oldest.
+const updateHandlers = new Set<(status: UpdateStatus) => void>();
+const previewParam = new URLSearchParams(location.search).get('update');
+const changelog = parseChangelog(changelogText);
+const oldest = changelog.at(-1)?.version ?? '0.0.0';
+const previewUpdate: UpdateInfo | null =
+  previewParam === null || previewParam === 'idle' || changelog[0] === undefined
+    ? null
+    : {
+        version: changelog[0].version,
+        url: 'https://github.com/entange/agenterm/releases',
+        entries: entriesBetween(changelog, oldest, changelog[0].version)
+      };
+let updateStatus: UpdateStatus = {
+  current: previewUpdate === null ? (changelog[0]?.version ?? '0.0.0') : oldest,
+  enabled: previewParam !== null,
+  state:
+    previewUpdate === null
+      ? { kind: 'idle', checkedAtMs: Date.now() - 120_000 }
+      : previewParam === 'manual'
+        ? {
+            kind: 'manual',
+            update: previewUpdate,
+            reason: 'agenterm is running from the disk image. Drag it into Applications first.'
+          }
+        : previewParam === 'downloading'
+          ? {
+              kind: 'downloading',
+              update: previewUpdate,
+              receivedBytes: 48 * 1024 * 1024,
+              totalBytes: 129 * 1024 * 1024
+            }
+          : previewParam === 'ready'
+            ? { kind: 'ready', update: previewUpdate }
+            : { kind: 'available', update: previewUpdate }
+};
+function setUpdate(state: UpdateStatus['state']): void {
+  updateStatus = { ...updateStatus, state };
+  for (const handler of updateHandlers) handler(updateStatus);
+}
 
 (window as unknown as { agenterm: AgentermBridge }).agenterm = bridge;
 // Keyboard stand-ins for menu accelerators the browser does not have.
@@ -143,6 +214,10 @@ await import('../main.js');
 const { useUi } = await import('../lib/ui.js');
 const select = params.get('select');
 const dialog = params.get('dialog');
+if (params.get('update') !== null && params.get('update') !== 'idle') {
+  const { useUpdate } = await import('../lib/update.js');
+  useUpdate.getState().setOpen(true);
+}
 if (params.get('view') === 'outside') useUi.getState().setView('outside');
 const pid = Number(params.get('pid'));
 if (Number.isInteger(pid) && pid > 1) useUi.getState().selectPid(pid);

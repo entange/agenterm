@@ -13,6 +13,7 @@ import {
   type ConnectionInfo,
   type Preferences
 } from '../../shared/bridge.js';
+import type { UpdateStatus } from '../../shared/update.js';
 
 /**
  * Preload bridge.
@@ -63,7 +64,12 @@ const bridge: AgentermBridge = {
   preferences: () => ipcRenderer.invoke(IPC.preferences) as Promise<Preferences>,
   setPreferences: (patch) => ipcRenderer.invoke(IPC.setPreferences, patch) as Promise<Preferences>,
   cliStatus: () => ipcRenderer.invoke(IPC.cliStatus) as Promise<CliStatus>,
-  installCli: () => ipcRenderer.invoke(IPC.installCli) as Promise<CliStatus>
+  installCli: () => ipcRenderer.invoke(IPC.installCli) as Promise<CliStatus>,
+  updateStatus: () => ipcRenderer.invoke(IPC.updateStatus) as Promise<UpdateStatus>,
+  onUpdate: (handler) => listen<UpdateStatus>(IPC.update, handler),
+  checkForUpdates: () => ipcRenderer.invoke(IPC.checkForUpdates) as Promise<UpdateStatus>,
+  downloadUpdate: () => ipcRenderer.invoke(IPC.downloadUpdate) as Promise<UpdateStatus>,
+  installUpdate: () => ipcRenderer.invoke(IPC.installUpdate) as Promise<void>
 };
 
 contextBridge.exposeInMainWorld('agenterm', bridge);

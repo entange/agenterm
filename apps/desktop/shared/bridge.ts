@@ -1,4 +1,5 @@
 import type { AgentermClient, AgentermEvent } from '@agenterm/core';
+import type { UpdateStatus } from './update.js';
 
 /**
  * Contract between Electron main, the preload, and the renderer.
@@ -64,7 +65,9 @@ export type AppCommand =
   | { kind: 'cycle-task'; delta: 1 | -1 }
   | { kind: 'jump-task'; index: number }
   /** Show the Outside view, with this command picked. */
-  | { kind: 'show-outside'; pid: number | null };
+  | { kind: 'show-outside'; pid: number | null }
+  /** Open what changed in the available update. */
+  | { kind: 'show-update' };
 
 export interface Preferences {
   /** Notify when a task fails. */
@@ -108,6 +111,13 @@ export interface AgentermBridge {
   cliStatus(): Promise<CliStatus>;
   /** Link /usr/local/bin/agenterm to the app's copy; macOS may ask for a password. */
   installCli(): Promise<CliStatus>;
+  updateStatus(): Promise<UpdateStatus>;
+  onUpdate(handler: (status: UpdateStatus) => void): () => void;
+  checkForUpdates(): Promise<UpdateStatus>;
+  /** Download, check, and unpack the available update. */
+  downloadUpdate(): Promise<UpdateStatus>;
+  /** Quit, swap in the downloaded version, and open it. */
+  installUpdate(): Promise<void>;
 }
 
 export const IPC = {
@@ -127,5 +137,10 @@ export const IPC = {
   preferences: 'agenterm:preferences',
   setPreferences: 'agenterm:set-preferences',
   cliStatus: 'agenterm:cli-status',
-  installCli: 'agenterm:install-cli'
+  installCli: 'agenterm:install-cli',
+  update: 'agenterm:update',
+  updateStatus: 'agenterm:update-status',
+  checkForUpdates: 'agenterm:check-for-updates',
+  downloadUpdate: 'agenterm:download-update',
+  installUpdate: 'agenterm:install-update'
 } as const;

@@ -18,6 +18,7 @@ needed.
 npm install -g agenterm@{{version}}
 ```
 
-Already running an older agenterm? Run `agenterm daemon restart` after updating.
+**Updating.** From 0.4.0 on, the app offers each new version itself: **Update** in the title bar lists what
+changed and installs it. The CLI updates with `npm install -g agenterm`; run `agenterm daemon restart` afterwards.
 
 See the [README](https://github.com/entange/agenterm#readme) to connect Claude Code, Codex, and other agents.

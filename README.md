@@ -152,6 +152,8 @@ right. Click a task and the cursor is in its terminal, ready to type. The header
 
 - `⌘K` finds a task, `⌘1`–`⌘9` jump to one, `⌘[` / `⌘]` go to the previous or next one, `/` filters the list.
 - Closing the window leaves tasks running. The tray menu lists them.
+- It updates itself: when a new version is out, **Update** in the title bar lists what changed and installs it.
+  Running tasks keep running.
 - A notification tells you when a task fails while the app is in the background, and when a command is left running
   because its terminal or agent exited. Clicking it shows the command in the Outside tab; the tray counts orphans.
 - The **Outside** tab lists commands agenterm did not start, orphans first (amber), grouped by the terminal or agent

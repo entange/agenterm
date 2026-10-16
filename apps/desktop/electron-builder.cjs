@@ -19,8 +19,6 @@ module.exports = {
   copyright: 'Copyright © 2026 Entange',
   directories: { output: 'release', buildResources: 'resources' },
   files: ['out/**/*', 'package.json'],
-  // Read by the updater: unsigned builds cannot install updates on macOS, so they only announce them.
-  extraMetadata: { agenterm: { signed } },
   extraResources: [
     { from: 'build/daemon/${platform}-${arch}', to: 'agentermd' },
     { from: 'resources/icon.png', to: 'icon.png' },
@@ -43,5 +41,6 @@ module.exports = {
     entitlementsInherit: 'resources/entitlements.mac.plist',
     ...(signed ? {} : { identity: '-' })
   },
-  publish: { provider: 'github', owner: 'entange', repo: 'agenterm' }
+  // The app updates itself from GitHub releases (electron/main/updater.ts), so no update metadata is published.
+  publish: null
 };

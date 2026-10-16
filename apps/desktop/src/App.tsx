@@ -14,6 +14,7 @@ import { useLive } from './lib/live.js';
 import { useOutside, useTasks } from './lib/queries.js';
 import { buildRows, taskOrder } from './lib/tasks.js';
 import { useUi } from './lib/ui.js';
+import { showUpdate } from './lib/update.js';
 import { useDaemonWiring } from './lib/wiring.js';
 
 /** Apply the theme preference to <html>, following the OS when set to system. */
@@ -70,6 +71,10 @@ export function App(): React.JSX.Element {
         break;
       case 'focus-task':
         ui.select(command.taskId, { focus: true });
+        break;
+      case 'show-update':
+        ui.setSettingsOpen(false);
+        showUpdate();
         break;
       case 'show-outside':
         ui.setView('outside');

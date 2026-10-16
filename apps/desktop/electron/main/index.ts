@@ -31,7 +31,7 @@ import { DaemonLink, dataDir } from './daemonLink.js';
 import { loadLoginEnv } from './loginEnv.js';
 import { TaskMonitor } from './monitor.js';
 import { OrphanWatcher } from './orphans.js';
-import { startUpdater } from './updater.js';
+import { Updater } from './updater.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const isMac = process.platform === 'darwin';
@@ -312,6 +312,12 @@ function registerIpc(): void {
     return next;
   });
   ipcMain.handle(IPC.cliStatus, () => cliStatus());
+  ipcMain.handle(IPC.updateStatus, () => updater.status());
+  ipcMain.handle(IPC.checkForUpdates, (event) => (trusted(event) ? updater.check() : updater.status()));
+  ipcMain.handle(IPC.downloadUpdate, (event) => (trusted(event) ? updater.download() : updater.status()));
+  ipcMain.handle(IPC.installUpdate, (event) => {
+    if (trusted(event)) updater.install(true);
+  });
   ipcMain.handle(IPC.installCli, async (event) => {
     if (trusted(event) && bundledCli !== null) await linkCommand(bundledCli, { askForPassword: true, replace: true });
     return cliStatus();
@@ -352,6 +358,9 @@ function buildAppMenu(): void {
             role: 'appMenu' as const,
             submenu: [
               { role: 'about' as const },
+              ...(updater.enabled
+                ? [{ label: 'Check for Updates…', click: () => sendCommand({ kind: 'show-update' }) }]
+                : []),
               { type: 'separator' as const },
               { label: 'Settings…', accelerator: 'Cmd+,', click: () => sendCommand({ kind: 'settings' }) },
               { type: 'separator' as const },
@@ -469,6 +478,12 @@ const monitor = new TaskMonitor({
   onTasks: (tasks) => buildTrayMenu(tasks)
 });
 
+const updater = new Updater({
+  onChange: (status) => broadcast(IPC.update, status),
+  hasFocus: () => BrowserWindow.getFocusedWindow() !== null,
+  onShow: () => sendCommand({ kind: 'show-update' })
+});
+
 const orphans = new OrphanWatcher({
   link,
   enabled: () => preferences.orphanNotifications,
@@ -497,6 +512,8 @@ app.on('window-all-closed', () => {
   // The daemon and the tray stay; closing the window never stops tasks.
 });
 app.on('before-quit', () => {
+  // A downloaded update goes in when the app quits, without opening it again.
+  updater.install(false);
   monitor.dispose();
   orphans.dispose();
   link.dispose();
@@ -514,5 +531,5 @@ void app.whenReady().then(() => {
   mainWindow = createWindow();
   mainWindow.once('ready-to-show', () => void offerCommand());
   void link.ensure();
-  startUpdater();
+  updater.start();
 });
